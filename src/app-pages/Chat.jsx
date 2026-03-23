@@ -1,0 +1,636 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
+import { useUser, useProfile, useAuth } from '@/lib/stores'; // adjust to your auth/store hooks
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function initials(name) {
+    if (!name) return '?';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+}
+
+function formatTime(iso) {
+    const d = new Date(iso), now = new Date();
+    if (d.toDateString() === now.toDateString())
+        return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatLastMsg(lastMsg, userId) {
+    if (!lastMsg) return 'No messages yet';
+    const prefix = lastMsg.sender_id === userId ? 'You: ' : '';
+    const text = lastMsg.content.length > 40 ? lastMsg.content.slice(0, 40) + '…' : lastMsg.content;
+    return prefix + text;
+}
+
+const RATING_LABELS = ['', 'Terrible experience', 'Poor experience', 'Average experience', 'Good experience', 'Greatest experience!'];
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export default function ChatPage() {
+    const user = useUser();
+    const profile = useProfile();
+    const { setProfile } = useAuth();
+    const navigate = useNavigate();
+    const searchParams = useSearchParams();
+
+    const [conversations, setConversations] = useState([]);
+    const [activeSwapId, setActiveSwapId] = useState(null);
+    const [messages, setMessages] = useState([]);
+    const [newMessage, setNewMessage] = useState('');
+    const [sending, setSending] = useState(false);
+    const [loadingConvos, setLoadingConvos] = useState(true);
+    const [loadingMsgs, setLoadingMsgs] = useState(false);
+    const [error, setError] = useState('');
+    const [activeTab, setActiveTab] = useState('active');
+    const [showProfileModal, setShowProfileModal] = useState(false);
+    const [modalProfile, setModalProfile] = useState(null);
+    const [showRatingModal, setShowRatingModal] = useState(false);
+    const [ratingValue, setRatingValue] = useState(0);
+    const [ratingComment, setRatingComment] = useState('');
+
+    const msgEndRef = useRef(null);
+    const inputRef = useRef(null);
+    const realtimeSub = useRef(null);
+    const swapSub = useRef(null);
+
+    // Derived
+    const activeConvo = conversations.find(c => c.swap_id === activeSwapId) ?? null;
+    const filteredConvos = conversations.filter(c =>
+        activeTab === 'completed' ? c.status === 'completed' : c.status === 'accepted'
+    );
+
+    // ── Scroll ────────────────────────────────────────────────────────────────
+
+    function scrollToBottom() {
+        setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    }
+
+    // ── Toast helper ─────────────────────────────────────────────────────────
+
+    function showToast(msg) {
+        setError(msg);
+        setTimeout(() => setError(''), 3000);
+    }
+
+    // ── Load conversations ────────────────────────────────────────────────────
+
+    const loadConversations = useCallback(async () => {
+        if (!user) return;
+        setLoadingConvos(true);
+        const { data, error: e } = await supabase
+            .from('swaps')
+            .select(`
+        id, status, teach_skill, learn_skill,
+        requester_id, receiver_id,
+        requester_completed, receiver_completed,
+        requester:profiles!requester_id(id, full_name, bio, skills_teach, skills_learn),
+        receiver:profiles!receiver_id(id, full_name, bio, skills_teach, skills_learn)
+      `)
+            .in('status', ['accepted', 'completed'])
+            .or(`requester_id.eq.${user.id},receiver_id.eq.${user.id}`)
+            .order('created_at', { ascending: false });
+
+        setLoadingConvos(false);
+        if (e) { setError(e.message); return; }
+
+        const enriched = await Promise.all((data ?? []).map(async swap => {
+            const iAmRequester = swap.requester_id === user.id;
+            const other = iAmRequester ? swap.receiver : swap.requester;
+
+            const myTeachEntry = (profile?.skills_teach ?? []).find(s => (typeof s === 'string' ? s : s.name) === swap.teach_skill);
+            const theirTeachEntry = (other?.skills_teach ?? []).find(s => (typeof s === 'string' ? s : s.name) === swap.learn_skill);
+
+            const teachStars = myTeachEntry ? (typeof myTeachEntry === 'string' ? 3 : myTeachEntry.stars ?? 3) : null;
+            const learnStars = theirTeachEntry ? (typeof theirTeachEntry === 'string' ? 3 : theirTeachEntry.stars ?? 3) : null;
+
+            const { data: lastMsgs } = await supabase
+                .from('messages').select('content, created_at, sender_id')
+                .eq('swap_id', swap.id).order('created_at', { ascending: false }).limit(1);
+
+            return {
+                swap_id: swap.id, status: swap.status, other,
+                teach_skill: swap.teach_skill, learn_skill: swap.learn_skill,
+                requester_id: swap.requester_id, receiver_id: swap.receiver_id,
+                requester_completed: swap.requester_completed,
+                receiver_completed: swap.receiver_completed,
+                teachStars, learnStars, lastMsg: lastMsgs?.[0] ?? null,
+            };
+        }));
+
+        setConversations(enriched);
+        return enriched;
+    }, [user, profile]);
+
+    // ── Messages ─────────────────────────────────────────────────────────────
+
+    async function fetchMessages(swapId) {
+        const { data, error: e } = await supabase
+            .from('messages').select('id, content, sender_id, created_at')
+            .eq('swap_id', swapId).order('created_at', { ascending: true });
+        if (e) { setError(e.message); return; }
+        setMessages(data ?? []);
+    }
+
+    function subscribeToMessages(swapId) {
+        realtimeSub.current = supabase
+            .channel(`messages:swap_id=eq.${swapId}`)
+            .on('postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'messages', filter: `swap_id=eq.${swapId}` },
+                async (payload) => {
+                    setMessages(prev => prev.find(m => m.id === payload.new.id) ? prev : [...prev, payload.new]);
+                    scrollToBottom();
+                    setConversations(prev => prev.map(c => c.swap_id === swapId ? { ...c, lastMsg: payload.new } : c));
+                }
+            ).subscribe();
+    }
+
+    function subscribeToSwapUpdates(swapId) {
+        swapSub.current = supabase
+            .channel(`swap:id=eq.${swapId}`)
+            .on('postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'swaps', filter: `id=eq.${swapId}` },
+                async (payload) => {
+                    setConversations(prev => prev.map(c =>
+                        c.swap_id === swapId
+                            ? { ...c, requester_completed: payload.new.requester_completed, receiver_completed: payload.new.receiver_completed, status: payload.new.status }
+                            : c
+                    ));
+                    if (payload.new.status === 'completed' && payload.old.status !== 'completed') {
+                        const { data: updatedProfile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+                        if (updatedProfile) setProfile(updatedProfile);
+                    }
+                }
+            ).subscribe();
+    }
+
+    async function selectConversation(swapId) {
+        if (activeSwapId === swapId) return;
+        setActiveSwapId(swapId);
+        setMessages([]);
+        setLoadingMsgs(true);
+        realtimeSub.current?.unsubscribe();
+        swapSub.current?.unsubscribe();
+        await fetchMessages(swapId);
+        subscribeToMessages(swapId);
+        subscribeToSwapUpdates(swapId);
+        setLoadingMsgs(false);
+        scrollToBottom();
+        inputRef.current?.focus();
+    }
+
+    // ── Send message ──────────────────────────────────────────────────────────
+
+    async function sendMessage() {
+        const content = newMessage.trim();
+        if (!content || sending || !activeSwapId) return;
+        setSending(true);
+        setNewMessage('');
+        const tempId = crypto.randomUUID();
+        setMessages(prev => [...prev, { id: tempId, content, sender_id: user.id, created_at: new Date().toISOString() }]);
+        scrollToBottom();
+        const { data, error: e } = await supabase
+            .from('messages').insert({ swap_id: activeSwapId, sender_id: user.id, content }).select().single();
+        setSending(false);
+        if (e) {
+            setMessages(prev => prev.filter(m => m.id !== tempId));
+            setError(e.message);
+            setNewMessage(content);
+            return;
+        }
+        setMessages(prev => prev.map(m => m.id === tempId ? data : m));
+        setConversations(prev => prev.map(c => c.swap_id === activeSwapId ? { ...c, lastMsg: data } : c));
+    }
+
+    function handleKeydown(e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    }
+
+    // ── Complete swap ─────────────────────────────────────────────────────────
+
+    async function markSwapComplete(swapId) {
+        if (!activeConvo) return;
+        const isRequester = activeConvo.requester_id === user.id;
+        const fieldToUpdate = isRequester ? 'requester_completed' : 'receiver_completed';
+        const otherFieldCompleted = isRequester ? activeConvo.receiver_completed : activeConvo.requester_completed;
+        const updates = { [fieldToUpdate]: true };
+
+        if (otherFieldCompleted) {
+            updates.status = 'completed';
+            const requesterStars = activeConvo.teachStars ?? 3;
+            const requesterPoints = 50;
+            const receiverPoints = 30 + (requesterStars * 10);
+            await Promise.all([
+                supabase.rpc('increment_points', { user_id: activeConvo.requester_id, points: requesterPoints }),
+                supabase.rpc('increment_points', { user_id: activeConvo.receiver_id, points: receiverPoints }),
+            ]);
+            const { data: updatedProfile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+            if (updatedProfile) setProfile(updatedProfile);
+        }
+
+        const { error: e } = await supabase.from('swaps').update(updates).eq('id', swapId);
+        if (e) { setError(e.message); return; }
+        await loadConversations();
+        setShowProfileModal(false);
+        setModalProfile(null);
+
+        if (otherFieldCompleted) {
+            showToast('Swap completed! Points awarded. 🎉');
+            await checkAndShowRatingModal(swapId);
+        } else {
+            showToast('Marked as complete. Waiting for other party. (1/2)');
+        }
+    }
+
+    async function unmarkSwapComplete(swapId) {
+        if (!activeConvo) return;
+        const isRequester = activeConvo.requester_id === user.id;
+        const fieldToUpdate = isRequester ? 'requester_completed' : 'receiver_completed';
+        const updates = { [fieldToUpdate]: false };
+        if (activeConvo.status === 'completed') updates.status = 'accepted';
+
+        const { error: e } = await supabase.from('swaps').update(updates).eq('id', swapId);
+        if (e) { setError(e.message); return; }
+        await loadConversations();
+        showToast('Vote removed.');
+    }
+
+    async function checkAndShowRatingModal(swapId) {
+        const { data: existingRating, error: ratingError } = await supabase
+            .from('ratings').select('id')
+            .eq('swap_id', swapId).eq('rater_id', user.id).maybeSingle();
+        if (!existingRating && !ratingError) setShowRatingModal(true);
+    }
+
+    async function submitRating() {
+        if (!activeConvo || ratingValue === 0) { showToast('Please select a rating'); return; }
+        const otherUserId = activeConvo.requester_id === user.id ? activeConvo.receiver_id : activeConvo.requester_id;
+        const { error: e } = await supabase.from('ratings').insert({
+            swap_id: activeSwapId, rater_id: user.id, rated_id: otherUserId,
+            rating: ratingValue, comment: ratingComment,
+        });
+        if (e) { showToast(e.message); return; }
+        setShowRatingModal(false);
+        setRatingValue(0);
+        setRatingComment('');
+        showToast('Thank you for your rating!');
+    }
+
+    function closeRatingModal() { setShowRatingModal(false); setRatingValue(0); setRatingComment(''); }
+
+    // ── Mount ─────────────────────────────────────────────────────────────────
+
+    useEffect(() => {
+        if (!user) { navigate('/login'); return; }
+        (async () => {
+            const convos = await loadConversations();
+            const swapParam = searchParams.get('swap');
+            if (swapParam) {
+                const found = convos?.find(c => c.swap_id === swapParam);
+                if (found) await selectConversation(found.swap_id);
+            } else if (convos?.length > 0) {
+                await selectConversation(convos[0].swap_id);
+            }
+        })();
+        return () => { realtimeSub.current?.unsubscribe(); swapSub.current?.unsubscribe(); };
+    }, [user]);
+
+    // ── Render ────────────────────────────────────────────────────────────────
+
+    return (
+        <>
+            <title>Chat — SkillJoy</title>
+
+            <div className="chat-shell">
+                {/* ── Sidebar ── */}
+                <aside className="sidebar">
+                    <div className="sidebar-header">
+                        <h2 className="sidebar-title">Chats</h2>
+                        <div className="chat-tabs">
+                            {['active', 'completed'].map(tab => (
+                                <button
+                                    key={tab}
+                                    className={`chat-tab${activeTab === tab ? ' active' : ''}`}
+                                    onClick={() => setActiveTab(tab)}
+                                >
+                                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {loadingConvos ? (
+                        <div className="sidebar-loading">
+                            <div className="spinner" style={{ width: 24, height: 24, borderWidth: 2 }} />
+                        </div>
+                    ) : filteredConvos.length === 0 ? (
+                        <div className="sidebar-empty">
+                            <span style={{ fontSize: 32 }}>💬</span>
+                            <p>No {activeTab} chats.</p>
+                            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                                {activeTab === 'active' ? 'Accept a swap to unlock chat.' : 'Complete swaps will appear here.'}
+                            </p>
+                            {activeTab === 'active' && (
+                                <a href="/swaps" className="btn btn-secondary btn-sm" style={{ marginTop: 16 }}>View swaps</a>
+                            )}
+                        </div>
+                    ) : (
+                        <ul className="convo-list">
+                            {filteredConvos.map(convo => (
+                                <li key={convo.swap_id}>
+                                    <button
+                                        className={`convo-item${activeSwapId === convo.swap_id ? ' active' : ''}`}
+                                        onClick={() => selectConversation(convo.swap_id)}
+                                    >
+                                        <div className="avatar avatar-sm">{initials(convo.other?.full_name)}</div>
+                                        <div className="convo-info">
+                                            <p className="convo-name">{convo.other?.full_name ?? 'Unknown'}</p>
+                                            <p className="convo-preview">{formatLastMsg(convo.lastMsg, user?.id)}</p>
+                                        </div>
+                                        {convo.lastMsg && (
+                                            <span className="convo-time">{formatTime(convo.lastMsg.created_at)}</span>
+                                        )}
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </aside>
+
+                {/* ── Main ── */}
+                <main className="chat-main">
+                    {!activeConvo ? (
+                        <div className="chat-empty">
+                            <span style={{ fontSize: 48 }}>💬</span>
+                            <h3>Select a conversation</h3>
+                            <p>Choose a chat from the sidebar to get started.</p>
+                        </div>
+                    ) : (
+                        <>
+                            <header className="chat-header">
+                                <div className="avatar">{initials(activeConvo.other?.full_name)}</div>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                        <button className="chat-name-btn" onClick={() => { setModalProfile(activeConvo.other); setShowProfileModal(true); }}>
+                                            {activeConvo.other?.full_name}
+                                        </button>
+                                        {(() => {
+                                            const completionCount = (activeConvo.requester_completed ? 1 : 0) + (activeConvo.receiver_completed ? 1 : 0);
+                                            return <span className="completion-badge-chat">Complete {completionCount}/2</span>;
+                                        })()}
+                                    </div>
+                                    <p className="chat-header-sub">
+                                        You teach <span className="skill-tag skill-learn" style={{ fontSize: 11, padding: '2px 8px' }}>{activeConvo.teach_skill}</span>
+                                        {' · '}You learn <span className="skill-tag skill-teach" style={{ fontSize: 11, padding: '2px 8px' }}>{activeConvo.learn_skill}</span>
+                                    </p>
+                                </div>
+                            </header>
+
+                            <div className="messages-area">
+                                {loadingMsgs ? (
+                                    <div className="msgs-loading"><div className="spinner" style={{ width: 28, height: 28, borderWidth: 2 }} /></div>
+                                ) : messages.length === 0 ? (
+                                    <div className="msgs-empty"><p>No messages yet — say hello!</p></div>
+                                ) : (
+                                    messages.map((msg, i) => {
+                                        const isMine = msg.sender_id === user?.id;
+                                        const prevMsg = messages[i - 1];
+                                        const showTime = !prevMsg || (new Date(msg.created_at) - new Date(prevMsg.created_at)) > 5 * 60 * 1000;
+                                        return (
+                                            <div key={msg.id}>
+                                                {showTime && <div className="time-divider">{formatTime(msg.created_at)}</div>}
+                                                <div className={`msg-row ${isMine ? 'mine' : 'theirs'}`}>
+                                                    {!isMine && <div className="avatar avatar-xs">{initials(activeConvo.other?.full_name)}</div>}
+                                                    <div className={`bubble ${isMine ? 'bubble-mine' : 'bubble-theirs'}`}>{msg.content}</div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                                <div ref={msgEndRef} />
+                            </div>
+
+                            <div className="composer">
+                                <textarea
+                                    ref={inputRef}
+                                    value={newMessage}
+                                    onChange={e => setNewMessage(e.target.value)}
+                                    onKeyDown={handleKeydown}
+                                    placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
+                                    rows={1}
+                                    className="composer-input"
+                                />
+                                <button
+                                    className="btn btn-primary composer-send"
+                                    onClick={sendMessage}
+                                    disabled={sending || !newMessage.trim()}
+                                >
+                                    {sending ? (
+                                        <span className="spinner" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white', width: 14, height: 14 }} />
+                                    ) : (
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+                                        </svg>
+                                    )}
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </main>
+            </div>
+
+            {error && <div className="toast error">{error}</div>}
+
+            {/* ── Profile Modal ── */}
+            {showProfileModal && modalProfile && (
+                <div className="modal-backdrop" onClick={() => { setShowProfileModal(false); setModalProfile(null); }}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <button className="modal-close" onClick={() => { setShowProfileModal(false); setModalProfile(null); }}>✕</button>
+
+                        <div className="modal-header">
+                            <div className="avatar avatar-lg">{initials(modalProfile.full_name)}</div>
+                            <div><h2>{modalProfile.full_name}</h2></div>
+                        </div>
+
+                        <div className="complete-swap">
+                            <div className="complete-swap-header">
+                                <h3>Complete Swap</h3>
+                                {activeConvo && (() => {
+                                    const completionCount = (activeConvo.requester_completed ? 1 : 0) + (activeConvo.receiver_completed ? 1 : 0);
+                                    return <span className="completion-badge-large">Complete {completionCount}/2</span>;
+                                })()}
+                            </div>
+                            {activeConvo && (() => {
+                                const isRequester = activeConvo.requester_id === user?.id;
+                                const hasVoted = isRequester ? activeConvo.requester_completed : activeConvo.receiver_completed;
+                                return hasVoted ? (
+                                    <button className="btn-unvote-swap" onClick={() => unmarkSwapComplete(activeConvo.swap_id)}>Remove Vote</button>
+                                ) : (
+                                    <button className="btn-complete-swap" onClick={() => markSwapComplete(activeConvo.swap_id)}>Vote to Complete Swap</button>
+                                );
+                            })()}
+                        </div>
+
+                        {modalProfile.bio && (
+                            <div className="modal-section">
+                                <h3>About {modalProfile.full_name}:</h3>
+                                <p className="bio">{modalProfile.bio}</p>
+                            </div>
+                        )}
+                        <div className="modal-section">
+                            <h3>Can teach</h3>
+                            <div className="skill-tags">
+                                {(modalProfile.skills_teach ?? []).map((s, i) => (
+                                    <span key={i} className="skill-tag skill-teach">{typeof s === 'string' ? s : s.name}</span>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="modal-section">
+                            <h3>Wants to learn</h3>
+                            <div className="skill-tags">
+                                {(modalProfile.skills_learn ?? []).map((s, i) => (
+                                    <span key={i} className="skill-tag skill-learn">{typeof s === 'string' ? s : s.name}</span>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Rating Modal ── */}
+            {showRatingModal && activeConvo && (
+                <div className="modal-backdrop" onClick={closeRatingModal}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <button className="modal-close" onClick={closeRatingModal}>✕</button>
+                        <div className="modal-header">
+                            <div>
+                                <h2>Rate Your Experience</h2>
+                                <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 8 }}>
+                                    How was your swap with {activeConvo.other?.full_name}?
+                                </p>
+                            </div>
+                        </div>
+                        <div className="rating-section">
+                            <h3>Your Rating</h3>
+                            <div className="star-rating">
+                                {[1, 2, 3, 4, 5].map(star => (
+                                    <button key={star} className={`star-btn${ratingValue >= star ? ' active' : ''}`} onClick={() => setRatingValue(star)}>★</button>
+                                ))}
+                            </div>
+                            <p className="rating-description">{RATING_LABELS[ratingValue]}</p>
+                        </div>
+                        <div className="modal-section">
+                            <h3>Comment (Optional)</h3>
+                            <textarea
+                                value={ratingComment}
+                                onChange={e => setRatingComment(e.target.value)}
+                                placeholder="Share your experience..."
+                                className="rating-comment"
+                                rows={4}
+                            />
+                        </div>
+                        <div className="modal-actions">
+                            <button className="btn btn-secondary" onClick={closeRatingModal}>Skip for Now</button>
+                            <button className="btn btn-primary" onClick={submitRating} disabled={ratingValue === 0}>Submit Rating</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <style>{`
+        .chat-shell { display: flex; height: calc(100vh - 57px); overflow: hidden; background: var(--bg); }
+
+        /* Sidebar */
+        .sidebar { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--surface); overflow: hidden; }
+        .sidebar-header { padding: 20px 20px 16px; border-bottom: 1px solid var(--border); }
+        .sidebar-title { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+        .chat-tabs { display: flex; gap: 8px; margin-top: 12px; }
+        .chat-tab { flex: 1; padding: 8px 12px; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--r); font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; }
+        .chat-tab:hover { background: var(--surface); border-color: var(--border-strong); }
+        .chat-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .sidebar-loading, .sidebar-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 20px; color: var(--text-secondary); font-size: 13px; text-align: center; gap: 4px; }
+        .convo-list { list-style: none; overflow-y: auto; flex: 1; padding: 8px; }
+        .convo-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border-radius: var(--r); border: none; background: transparent; cursor: pointer; text-align: left; transition: background 0.15s; font-family: var(--font-body); }
+        .convo-item:hover { background: var(--surface-alt); }
+        .convo-item.active { background: var(--primary-light); }
+        .convo-info { flex: 1; min-width: 0; }
+        .convo-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .convo-preview { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+        .convo-time { font-size: 11px; color: var(--text-muted); flex-shrink: 0; align-self: flex-start; margin-top: 2px; }
+        .avatar-xs { width: 26px !important; height: 26px !important; font-size: 10px !important; flex-shrink: 0; }
+        .avatar-sm { width: 34px !important; height: 34px !important; font-size: 12px !important; flex-shrink: 0; }
+
+        /* Main */
+        .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+        .chat-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-secondary); }
+        .chat-empty h3 { font-size: 20px; color: var(--text); }
+        .chat-empty p { font-size: 14px; }
+        .chat-header { display: flex; align-items: flex-start; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+        .chat-header-sub { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+        .chat-name-btn { background: none; border: none; font-size: 15px; font-weight: 600; color: var(--primary); cursor: pointer; padding: 0; text-decoration: underline; text-decoration-color: transparent; transition: text-decoration-color 0.2s; text-align: left; }
+        .chat-name-btn:hover { text-decoration-color: var(--primary); }
+        .completion-badge-chat { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 12px; background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary-mid); white-space: nowrap; }
+
+        /* Messages */
+        .messages-area { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+        .msgs-loading, .msgs-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 14px; }
+        .time-divider { text-align: center; font-size: 11px; color: var(--text-muted); margin: 12px 0 8px; }
+        .msg-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 2px; }
+        .msg-row.mine { justify-content: flex-end; }
+        .msg-row.theirs { justify-content: flex-start; }
+        .bubble { max-width: 68%; padding: 10px 14px; border-radius: 18px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+        .bubble-mine { background: var(--primary); color: white; border-bottom-right-radius: 4px; }
+        .bubble-theirs { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 4px; }
+
+        /* Composer */
+        .composer { display: flex; align-items: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; position: sticky; bottom: 0; z-index: 10; }
+        .composer-input { flex: 1; resize: none; border: 1px solid var(--border); border-radius: var(--r-lg); padding: 10px 16px; font-size: 14px; font-family: var(--font-body); color: var(--text); background: var(--bg); outline: none; max-height: 120px; overflow-y: auto; line-height: 1.5; transition: border-color 0.15s; }
+        .composer-input:focus { border-color: var(--primary); }
+        .composer-send { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: var(--r-full); flex-shrink: 0; }
+        .composer-send:disabled { opacity: 0.45; }
+
+        /* Modals */
+        .modal-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
+        .modal-header h2 { margin: 0; font-size: 24px; }
+        .modal-section { margin-bottom: 24px; }
+        .modal-section h3 { font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+        .modal-section .bio { color: var(--text-secondary); line-height: 1.6; }
+        .modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary); }
+        .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+        .skill-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+
+        /* Complete swap */
+        .complete-swap { margin: 20px 0; }
+        .complete-swap-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .complete-swap-header h3 { margin: 0; font-size: 16px; font-weight: 600; }
+        .completion-badge-large { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 12px; background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary-mid); white-space: nowrap; }
+        .btn-complete-swap { width: 100%; padding: 14px 24px; background: #10b981; color: white; border: none; border-radius: var(--r-lg); font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(16,185,129,0.3); }
+        .btn-complete-swap:hover { background: #059669; box-shadow: 0 4px 12px rgba(16,185,129,0.4); transform: translateY(-1px); }
+        .btn-complete-swap:active { transform: translateY(0); }
+        .btn-unvote-swap { width: 100%; padding: 14px 24px; background: #ef4444; color: white; border: none; border-radius: var(--r-lg); font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(239,68,68,0.3); }
+        .btn-unvote-swap:hover { background: #dc2626; box-shadow: 0 4px 12px rgba(239,68,68,0.4); transform: translateY(-1px); }
+        .btn-unvote-swap:active { transform: translateY(0); }
+
+        /* Rating */
+        .rating-section { margin: 24px 0; text-align: center; }
+        .rating-section h3 { font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px; }
+        .star-rating { display: flex; justify-content: center; gap: 8px; margin-bottom: 12px; }
+        .star-btn { background: none; border: none; font-size: 48px; color: #ddd; cursor: pointer; transition: all 0.2s; padding: 0; line-height: 1; }
+        .star-btn:hover { transform: scale(1.1); }
+        .star-btn.active { color: #fbbf24; }
+        .rating-description { font-size: 14px; color: var(--text-secondary); font-weight: 500; min-height: 20px; }
+        .rating-comment { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: var(--r); font-family: var(--font-body); font-size: 14px; resize: vertical; outline: none; transition: border-color 0.2s; box-sizing: border-box; }
+        .rating-comment:focus { border-color: var(--primary); }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+          .sidebar { width: 72px; }
+          .convo-info, .convo-time { display: none; }
+          .sidebar-title { font-size: 14px; }
+          .convo-item { justify-content: center; padding: 10px; }
+        }
+      `}</style>
+        </>
+    );
+}
