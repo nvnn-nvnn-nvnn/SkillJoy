@@ -1,4 +1,7 @@
+import { useState, useEffect } from 'react';
 import SkillStars from '@/components/Skillstars';
+import { getSkillName } from '@/lib/stores';
+import { supabase } from '@/lib/supabase';
 
 function initials(name) {
     if (!name) return '?';
@@ -13,6 +16,24 @@ const BADGE_STYLES = {
 };
 
 export default function UserCard({ user, match, onViewProfile }) {
+    const [avgRating, setAvgRating] = useState(null);
+    const [ratingCount, setRatingCount] = useState(0);
+
+    useEffect(() => {
+        if (!user?.id) return;
+        (async () => {
+            const { data } = await supabase
+                .from('ratings')
+                .select('rating')
+                .eq('rated_id', user.id);
+            if (data && data.length > 0) {
+                const avg = data.reduce((sum, r) => sum + r.rating, 0) / data.length;
+                setAvgRating(avg);
+                setRatingCount(data.length);
+            }
+        })();
+    }, [user?.id]);
+
     return (
         <>
             <div className="user-card">
@@ -20,7 +41,19 @@ export default function UserCard({ user, match, onViewProfile }) {
                     <div className="avatar avatar-lg">{initials(user.full_name)}</div>
                     <div className="user-info">
                         <h3>{user.full_name}</h3>
+                        {(user.service_type === 'gigs' || user.service_type === 'both') && (
+                            <span className="gig-badge">Available for hire</span>
+                        )}
+                        {user.service_type === 'both' && (
+                            <span className="swap-badge">Open to swap</span>
+                        )}
                         {user.bio && <p className="bio">{user.bio}</p>}
+                        {avgRating !== null && (
+                            <div className="user-rating">
+                                <span className="user-rating-stars">{'★'.repeat(Math.round(avgRating))}{'☆'.repeat(5 - Math.round(avgRating))}</span>
+                                <span className="user-rating-text">{avgRating.toFixed(1)} ({ratingCount})</span>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -33,8 +66,8 @@ export default function UserCard({ user, match, onViewProfile }) {
                         <p className="section-label">Can teach</p>
                         <div className="rated-tag-list">
                             {(user.skills_teach ?? []).slice(0, 3).map((s, i) => {
-                                const name = typeof s === 'string' ? s : s.name;
-                                const stars = typeof s === 'string' ? 3 : (s.stars ?? 3);
+                                const name = getSkillName(s);
+                                const stars = (typeof s === 'object' && s.stars) ? s.stars : 3;
                                 return (
                                     <div key={i} className="rated-tag-row">
                                         <span className="skill-tag skill-teach">{name}</span>
@@ -49,7 +82,7 @@ export default function UserCard({ user, match, onViewProfile }) {
                         <p className="section-label">Wants to learn</p>
                         <div className="skill-chips">
                             {(user.skills_learn ?? []).slice(0, 3).map((skill, i) => (
-                                <span key={i} className="skill-tag skill-learn">{skill}</span>
+                                <span key={i} className="skill-tag skill-learn">{getSkillName(skill)}</span>
                             ))}
                         </div>
                     </div>
@@ -84,10 +117,31 @@ export default function UserCard({ user, match, onViewProfile }) {
           font-size: 12px;
           font-weight: 500;
         }
+        .gig-badge, .swap-badge {
+          display: inline-block;
+          padding: 2px 8px;
+          border-radius: var(--r-full);
+          font-size: 11px;
+          font-weight: 500;
+          margin-right: 4px;
+        }
+        .gig-badge {
+          background: #FFF7ED;
+          color: #C2410C;
+          border: 1px solid #FDBA74;
+        }
+        .swap-badge {
+          background: #F0FDF4;
+          color: #15803D;
+          border: 1px solid #86EFAC;
+        }
         .skills-section { display: flex; flex-direction: column; gap: 12px; }
         .skill-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
         .rated-tag-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
         .rated-tag-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .user-rating { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+        .user-rating-stars { color: #FBBF24; font-size: 14px; letter-spacing: 1px; }
+        .user-rating-text { font-size: 12px; color: var(--text-muted); font-weight: 500; }
       `}</style>
         </>
     );

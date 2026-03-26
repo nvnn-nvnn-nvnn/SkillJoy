@@ -1,14 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useUser, useProfile } from '@/lib/stores'; // adjust to your hooks
+import { useUser, useProfile, getSkillName } from '@/lib/stores';
 import MatchCard from '@/components/Matchcard';
 import SwapModal from '@/components/Swapmodal';
 
 // ── Pure scoring helpers ──────────────────────────────────────────────────────
 
 function skillName(s) {
-    return typeof s === 'string' ? s : s.name;
+    return getSkillName(s);
 }
 
 function skillStars(s) {
@@ -16,10 +16,9 @@ function skillStars(s) {
 }
 
 function overlapScore(listA, listB) {
-    // listA = rated skill objects, listB = plain strings
-    const namesB = (listB ?? []).map(s => s.toLowerCase());
+    const namesB = (listB ?? []).map(s => getSkillName(s).toLowerCase());
     return (listA ?? []).reduce((sum, s) => {
-        const name = skillName(s).toLowerCase();
+        const name = getSkillName(s).toLowerCase();
         const stars = skillStars(s);
         return namesB.includes(name) ? sum + stars : sum;
     }, 0);
@@ -40,13 +39,16 @@ function buildMatches(allUsers, me) {
             const iTeachScore = overlapScore(myTeachRated, theirLearn);
             const score = theyTeachScore + iTeachScore;
 
+            const myLearnLower = myLearn.map(s => getSkillName(s).toLowerCase());
+            const theirLearnLower = theirLearn.map(s => getSkillName(s).toLowerCase());
+
             const theyCanTeach = theirTeachRated
-                .filter(s => myLearn.includes(skillName(s)))
-                .map(s => ({ name: skillName(s), stars: skillStars(s) }));
+                .filter(s => myLearnLower.includes(getSkillName(s).toLowerCase()))
+                .map(s => ({ name: getSkillName(s), stars: skillStars(s) }));
 
             const iCanTeach = myTeachRated
-                .filter(s => theirLearn.includes(skillName(s)))
-                .map(s => ({ name: skillName(s), stars: skillStars(s) }));
+                .filter(s => theirLearnLower.includes(getSkillName(s).toLowerCase()))
+                .map(s => ({ name: getSkillName(s), stars: skillStars(s) }));
 
             return { ...p, score, theyCanTeach, iCanTeach };
         })

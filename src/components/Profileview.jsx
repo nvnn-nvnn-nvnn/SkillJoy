@@ -1,5 +1,7 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import SkillStars from '@/components/Skillstars';
+import { getSkillName } from '@/lib/stores';
+import { supabase } from '@/lib/supabase';
 
 function initials(name) {
     if (!name) return '?';
@@ -7,12 +9,22 @@ function initials(name) {
 }
 
 export default function ProfileView({ profile, acceptedSwapsCount, onEdit }) {
+    const navigate = useNavigate();
+
+    async function handleSignOut() {
+        await supabase.auth.signOut();
+        navigate('/');
+    }
+
     return (
         <>
             <div className="profile-view-container">
                 <div className="view-header">
                     <h1 className="page-title">My Profile</h1>
-                    <button className="btn btn-secondary" onClick={onEdit}>✏️ Edit Profile</button>
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <button className="btn btn-secondary" onClick={onEdit}>✏️ Edit Profile</button>
+                        <button className="btn btn-ghost" onClick={handleSignOut} style={{ border: '2px solid var(--border)', color: '#fff' }}>Sign Out</button>
+                    </div>
                 </div>
 
                 <div className="profile-card">
@@ -52,8 +64,8 @@ export default function ProfileView({ profile, acceptedSwapsCount, onEdit }) {
                             {profile.skills_teach?.length ? (
                                 <div className="rated-skill-list">
                                     {profile.skills_teach.map((s, i) => {
-                                        const name = typeof s === 'string' ? s : s.name;
-                                        const stars = typeof s === 'string' ? 3 : (s.stars ?? 3);
+                                        const name = getSkillName(s);
+                                        const stars = (typeof s === 'object' && s.stars) ? s.stars : 3;
                                         return (
                                             <div key={i} className="rated-skill-row">
                                                 <span className="skill-tag skill-teach">{name}</span>
@@ -75,7 +87,7 @@ export default function ProfileView({ profile, acceptedSwapsCount, onEdit }) {
                             {profile.skills_learn?.length ? (
                                 <div className="skill-chips">
                                     {profile.skills_learn.map((skill, i) => (
-                                        <span key={i} className="skill-tag skill-learn">{skill}</span>
+                                        <span key={i} className="skill-tag skill-learn">{getSkillName(skill)}</span>
                                     ))}
                                 </div>
                             ) : (
