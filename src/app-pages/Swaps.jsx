@@ -111,8 +111,8 @@ export default function Swaps() {
             <title>Swaps — SkillJoy</title>
 
             <div className="page">
-                <div style={{ display: 'flex', alignItems: 'flex-start', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
-                    <div style={{ textAlign: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start',  flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+                    <div style={{ }}>
                         <h1 className="page-title" style={{ textAlign: 'left' }}>Discover Swaps</h1>
                         {profile?.skills_learn?.length > 0 && (
                             <p className="page-subtitle" style={{ color: "#fff" }}>
