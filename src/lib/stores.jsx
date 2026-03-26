@@ -42,6 +42,40 @@ export const AVAILABILITY_OPTIONS = [
 
 // ── Helper functions ────────────────────────────────────────────────────────
 
+/** Robustly extract a skill name from any format: plain string, {name,stars} object, or stringified JSON */
+export function getSkillName(s) {
+  if (!s) return ''
+  if (typeof s === 'object' && s.name) return s.name
+  if (typeof s === 'string') {
+    if (s.startsWith('{')) {
+      try { return JSON.parse(s).name || s } catch { return s }
+    }
+    return s
+  }
+  return String(s)
+}
+
+/** Normalize skills array - convert stringified JSON to proper objects and deduplicate */
+export function normalizeSkills(skills) {
+  if (!skills || !Array.isArray(skills)) return []
+
+  const normalized = skills.map(s => {
+    if (typeof s === 'string' && s.startsWith('{')) {
+      try { return JSON.parse(s) } catch { return s }
+    }
+    return s
+  })
+
+  // Deduplicate by skill name
+  const seen = new Set()
+  return normalized.filter(s => {
+    const name = typeof s === 'string' ? s : s.name
+    if (seen.has(name)) return false
+    seen.add(name)
+    return true
+  })
+}
+
 export function initials(name) {
   if (!name) return '?'
   return name
@@ -147,6 +181,13 @@ export function AuthProvider({ children }) {
         .single()
 
       if (error) throw error
+
+      // Normalize skills arrays to handle stringified JSON
+      if (data) {
+        data.skills_teach = normalizeSkills(data.skills_teach)
+        data.skills_learn = normalizeSkills(data.skills_learn)
+      }
+
       setProfile(data)
     } catch (error) {
       console.error('Error loading profile:', error)

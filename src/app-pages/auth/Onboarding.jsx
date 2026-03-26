@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useUser, useProfile, useAuth, SKILL_CATEGORIES, AVAILABILITY_OPTIONS, hasSkill, setSkillStars, removeSkill } from '@/lib/stores';
+import { useUser, useProfile, useAuth, SKILL_CATEGORIES, AVAILABILITY_OPTIONS, hasSkill, setSkillStars, removeSkill, getSkillName, normalizeSkills } from '@/lib/stores';
 import ProfileView from '@/components/Profileview';
 import SkillEditor from '@/components/Skillededitor';
 
@@ -22,6 +22,7 @@ export default function OnboardingPage() {
     const [availability, setAvailability] = useState([]);
     const [customTeach, setCustomTeach] = useState('');
     const [customLearn, setCustomLearn] = useState('');
+    const [serviceType, setServiceType] = useState('swap');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [step, setStep] = useState(1);
@@ -34,9 +35,10 @@ export default function OnboardingPage() {
         if (profile) {
             setFullName(profile.full_name ?? '');
             setBio(profile.bio ?? '');
-            setSkillsTeach(profile.skills_teach ?? []);
-            setSkillsLearn(profile.skills_learn ?? []);
+            setSkillsTeach(normalizeSkills(profile.skills_teach ?? []));
+            setSkillsLearn(normalizeSkills(profile.skills_learn ?? []).map(s => getSkillName(s)));
             setAvailability(profile.availability ?? []);
+            setServiceType(profile.service_type ?? 'swap');
             if (profile.full_name) setViewMode(true);
         }
     }, [user, profile]);
@@ -102,10 +104,11 @@ export default function OnboardingPage() {
             skills_teach: skillsTeach,
             skills_learn: skillsLearn,
             availability,
+            service_type: serviceType,
         });
         setBusy(false);
         if (e) { setError(e.message); return; }
-        setProfile({ ...profile, full_name: fullName, bio, skills_teach: skillsTeach, skills_learn: skillsLearn, availability });
+        setProfile({ ...profile, full_name: fullName, bio, skills_teach: skillsTeach, skills_learn: skillsLearn, availability, service_type: serviceType });
         navigate('/matches');
     }
 
@@ -249,6 +252,40 @@ export default function OnboardingPage() {
                                                 {opt}
                                             </button>
                                         ))}
+                                    </div>
+
+                                    <div style={{ marginTop: 32 }}>
+                                        <p className="section-label" style={{ marginBottom: 12 }}>What are you open to?</p>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                            {[
+                                                { value: 'swap', label: 'Skill Swap', desc: 'Exchange skills with others for free' },
+                                                { value: 'gigs', label: 'Paid Services', desc: 'Offer your skills for money (gig work)' },
+                                                { value: 'both', label: 'Both', desc: 'Open to swapping and paid gigs' },
+                                            ].map(opt => (
+                                                <label
+                                                    key={opt.value}
+                                                    style={{
+                                                        display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
+                                                        padding: '14px 16px', background: serviceType === opt.value ? 'var(--surface-alt)' : 'transparent',
+                                                        borderRadius: 'var(--r)', border: `1px solid ${serviceType === opt.value ? 'var(--primary)' : 'var(--border)'}`,
+                                                        transition: 'all 0.15s ease',
+                                                    }}
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        name="serviceType"
+                                                        value={opt.value}
+                                                        checked={serviceType === opt.value}
+                                                        onChange={e => setServiceType(e.target.value)}
+                                                        style={{ width: 18, height: 18, accentColor: 'var(--primary)' }}
+                                                    />
+                                                    <div>
+                                                        <p style={{ fontWeight: 600, fontSize: 15 }}>{opt.label}</p>
+                                                        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{opt.desc}</p>
+                                                    </div>
+                                                </label>
+                                            ))}
+                                        </div>
                                     </div>
                                 </>
                             )}

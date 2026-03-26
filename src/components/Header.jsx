@@ -24,15 +24,15 @@ export default function Header() {
       </Link>
       <div className="nav-links">
         <Link to="/matches" className={`nav-link${currentPath === '/matches' ? ' active' : ''}`}>Matches</Link>
-        <Link to="/main-search" className={`nav-link${currentPath === '/main-search' ? ' active' : ''}`}>Search</Link>
         <Link to="/swaps" className={`nav-link${currentPath === '/swaps' ? ' active' : ''}`}>Swaps</Link>
-        <Link to="/rewards" className={`nav-link${currentPath === '/rewards' ? ' active' : ''}`}>Rewards</Link>
+        <Link to="/gigs" className={`nav-link${currentPath === '/gigs' ? ' active' : ''}`}>Gigs</Link>
         <Link to="/chat" className={`nav-link${currentPath === '/chat' ? ' active' : ''}`}>Chat</Link>
-        <Link to="/onboarding" className={`nav-link${currentPath === '/onboarding' ? ' active' : ''}`}>Profile</Link>
+        <Link to="/rewards" className={`nav-link${currentPath === '/rewards' ? ' active' : ''}`}>Rewards</Link>
+        <div style={{ flex: 1 }} />
         <div className="points-badge">
           🏆 {profile?.points || 0}
         </div>
-        <button className="btn btn-ghost" onClick={signOut} style={{ marginLeft: 4 }}>Sign out</button>
+        <Link to="/onboarding" className={`nav-link${currentPath === '/onboarding' ? ' active' : ''}`}>Profile</Link>
       </div>
     </nav>
   );

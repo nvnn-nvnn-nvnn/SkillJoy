@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useUser, useProfile, useAuth } from '@/lib/stores'; // adjust to your auth/store hooks
+import { useUser, useProfile, useAuth, getSkillName } from '@/lib/stores';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -26,6 +26,9 @@ function formatLastMsg(lastMsg, userId) {
 
 const RATING_LABELS = ['', 'Terrible experience', 'Poor experience', 'Average experience', 'Good experience', 'Greatest experience!'];
 
+function isGigCompleted(c) { return c.requester_completed && c.provider_completed; }
+function isSwapCompleted(c) { return c.requester_completed && c.receiver_completed; }
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ChatPage() {
@@ -35,8 +38,11 @@ export default function ChatPage() {
     const navigate = useNavigate();
     const searchParams = useSearchParams();
 
+    const [chatMode, setChatMode] = useState('swaps');
     const [conversations, setConversations] = useState([]);
+    const [gigConversations, setGigConversations] = useState([]);
     const [activeSwapId, setActiveSwapId] = useState(null);
+    const [activeGigReqId, setActiveGigReqId] = useState(null);
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');
     const [sending, setSending] = useState(false);
@@ -44,6 +50,7 @@ export default function ChatPage() {
     const [loadingMsgs, setLoadingMsgs] = useState(false);
     const [error, setError] = useState('');
     const [activeTab, setActiveTab] = useState('active');
+    const [gigRoleTab, setGigRoleTab] = useState('all');
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [modalProfile, setModalProfile] = useState(null);
     const [showRatingModal, setShowRatingModal] = useState(false);
@@ -56,10 +63,19 @@ export default function ChatPage() {
     const swapSub = useRef(null);
 
     // Derived
-    const activeConvo = conversations.find(c => c.swap_id === activeSwapId) ?? null;
-    const filteredConvos = conversations.filter(c =>
-        activeTab === 'completed' ? c.status === 'completed' : c.status === 'accepted'
-    );
+    const activeConvo = chatMode === 'swaps'
+        ? (conversations.find(c => c.swap_id === activeSwapId) ?? null)
+        : (gigConversations.find(c => c.gig_request_id === activeGigReqId) ?? null);
+    const filteredConvos = chatMode === 'swaps'
+        ? conversations.filter(c => activeTab === 'completed' ? isSwapCompleted(c) : !isSwapCompleted(c))
+        : gigConversations.filter(c => {
+            const done = isGigCompleted(c);
+            const statusMatch = activeTab === 'completed' ? done : !done;
+            if (!statusMatch) return false;
+            if (gigRoleTab === 'hiring') return !c.isProvider;
+            if (gigRoleTab === 'providing') return c.isProvider;
+            return true;
+        });
 
     // ── Scroll ────────────────────────────────────────────────────────────────
 
@@ -123,25 +139,79 @@ export default function ChatPage() {
         return enriched;
     }, [user, profile]);
 
+    // ── Load gig conversations ─────────────────────────────────────────────────
+
+    const loadGigConversations = useCallback(async () => {
+        if (!user) return;
+        setLoadingConvos(true);
+        const { data, error: e } = await supabase
+            .from('gig_requests')
+            .select(`
+                id, status,
+                gig:gigs!gig_id(id, title, price, category),
+                requester:profiles!requester_id(id, full_name, bio),
+                provider:profiles!provider_id(id, full_name, bio),
+                requester_id, provider_id,
+                requester_completed, provider_completed,
+                payment_status, confirmation_deadline
+            `)
+            .in('status', ['accepted', 'completed'])
+            .or(`requester_id.eq.${user.id},provider_id.eq.${user.id}`)
+            .order('created_at', { ascending: false });
+
+        setLoadingConvos(false);
+        if (e) { setError(e.message); return; }
+
+        const enriched = await Promise.all((data ?? []).map(async req => {
+            const isProvider = req.provider_id === user.id;
+            const other = isProvider ? req.requester : req.provider;
+
+            const { data: lastMsgs } = await supabase
+                .from('messages').select('content, created_at, sender_id')
+                .eq('gig_request_id', req.id).order('created_at', { ascending: false }).limit(1);
+
+            return {
+                gig_request_id: req.id, status: req.status, other,
+                gig: req.gig,
+                requester_id: req.requester_id, provider_id: req.provider_id,
+                requester_completed: req.requester_completed,
+                provider_completed: req.provider_completed,
+                payment_status: req.payment_status,
+                confirmation_deadline: req.confirmation_deadline,
+                isProvider,
+                lastMsg: lastMsgs?.[0] ?? null,
+            };
+        }));
+
+        setGigConversations(enriched);
+        return enriched;
+    }, [user]);
+
     // ── Messages ─────────────────────────────────────────────────────────────
 
-    async function fetchMessages(swapId) {
+    async function fetchMessages(id, mode) {
+        const col = mode === 'gigs' ? 'gig_request_id' : 'swap_id';
         const { data, error: e } = await supabase
             .from('messages').select('id, content, sender_id, created_at')
-            .eq('swap_id', swapId).order('created_at', { ascending: true });
+            .eq(col, id).order('created_at', { ascending: true });
         if (e) { setError(e.message); return; }
         setMessages(data ?? []);
     }
 
-    function subscribeToMessages(swapId) {
+    function subscribeToMessages(id, mode) {
+        const col = mode === 'gigs' ? 'gig_request_id' : 'swap_id';
         realtimeSub.current = supabase
-            .channel(`messages:swap_id=eq.${swapId}`)
+            .channel(`messages:${col}=eq.${id}`)
             .on('postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'messages', filter: `swap_id=eq.${swapId}` },
+                { event: 'INSERT', schema: 'public', table: 'messages', filter: `${col}=eq.${id}` },
                 async (payload) => {
                     setMessages(prev => prev.find(m => m.id === payload.new.id) ? prev : [...prev, payload.new]);
                     scrollToBottom();
-                    setConversations(prev => prev.map(c => c.swap_id === swapId ? { ...c, lastMsg: payload.new } : c));
+                    if (mode === 'gigs') {
+                        setGigConversations(prev => prev.map(c => c.gig_request_id === id ? { ...c, lastMsg: payload.new } : c));
+                    } else {
+                        setConversations(prev => prev.map(c => c.swap_id === id ? { ...c, lastMsg: payload.new } : c));
+                    }
                 }
             ).subscribe();
     }
@@ -165,16 +235,37 @@ export default function ChatPage() {
             ).subscribe();
     }
 
-    async function selectConversation(swapId) {
-        if (activeSwapId === swapId) return;
-        setActiveSwapId(swapId);
+    function subscribeToGigUpdates(gigReqId) {
+        swapSub.current = supabase
+            .channel(`gig_request:id=eq.${gigReqId}`)
+            .on('postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'gig_requests', filter: `id=eq.${gigReqId}` },
+                async (payload) => {
+                    setGigConversations(prev => prev.map(c =>
+                        c.gig_request_id === gigReqId
+                            ? { ...c, requester_completed: payload.new.requester_completed, provider_completed: payload.new.provider_completed, status: payload.new.status, payment_status: payload.new.payment_status }
+                            : c
+                    ));
+                }
+            ).subscribe();
+    }
+
+    async function selectConversation(id, mode) {
+        const m = mode ?? chatMode;
+        if (m === 'swaps' && activeSwapId === id) return;
+        if (m === 'gigs' && activeGigReqId === id) return;
+
+        if (m === 'swaps') { setActiveSwapId(id); setActiveGigReqId(null); }
+        else { setActiveGigReqId(id); setActiveSwapId(null); }
+
         setMessages([]);
         setLoadingMsgs(true);
         realtimeSub.current?.unsubscribe();
         swapSub.current?.unsubscribe();
-        await fetchMessages(swapId);
-        subscribeToMessages(swapId);
-        subscribeToSwapUpdates(swapId);
+        await fetchMessages(id, m);
+        subscribeToMessages(id, m);
+        if (m === 'swaps') subscribeToSwapUpdates(id);
+        else subscribeToGigUpdates(id);
         setLoadingMsgs(false);
         scrollToBottom();
         inputRef.current?.focus();
@@ -184,14 +275,20 @@ export default function ChatPage() {
 
     async function sendMessage() {
         const content = newMessage.trim();
-        if (!content || sending || !activeSwapId) return;
+        const activeId = chatMode === 'swaps' ? activeSwapId : activeGigReqId;
+        if (!content || sending || !activeId) return;
         setSending(true);
         setNewMessage('');
         const tempId = crypto.randomUUID();
         setMessages(prev => [...prev, { id: tempId, content, sender_id: user.id, created_at: new Date().toISOString() }]);
         scrollToBottom();
+
+        const insertPayload = { sender_id: user.id, content };
+        if (chatMode === 'gigs') insertPayload.gig_request_id = activeGigReqId;
+        else insertPayload.swap_id = activeSwapId;
+
         const { data, error: e } = await supabase
-            .from('messages').insert({ swap_id: activeSwapId, sender_id: user.id, content }).select().single();
+            .from('messages').insert(insertPayload).select().single();
         setSending(false);
         if (e) {
             setMessages(prev => prev.filter(m => m.id !== tempId));
@@ -200,7 +297,11 @@ export default function ChatPage() {
             return;
         }
         setMessages(prev => prev.map(m => m.id === tempId ? data : m));
-        setConversations(prev => prev.map(c => c.swap_id === activeSwapId ? { ...c, lastMsg: data } : c));
+        if (chatMode === 'gigs') {
+            setGigConversations(prev => prev.map(c => c.gig_request_id === activeGigReqId ? { ...c, lastMsg: data } : c));
+        } else {
+            setConversations(prev => prev.map(c => c.swap_id === activeSwapId ? { ...c, lastMsg: data } : c));
+        }
     }
 
     function handleKeydown(e) {
@@ -213,11 +314,33 @@ export default function ChatPage() {
         if (!activeConvo) return;
         const isRequester = activeConvo.requester_id === user.id;
         const fieldToUpdate = isRequester ? 'requester_completed' : 'receiver_completed';
-        const otherFieldCompleted = isRequester ? activeConvo.receiver_completed : activeConvo.requester_completed;
-        const updates = { [fieldToUpdate]: true };
 
-        if (otherFieldCompleted) {
-            updates.status = 'completed';
+        // Update our completed field
+        const { error: e } = await supabase.from('swaps').update({ [fieldToUpdate]: true }).eq('id', swapId);
+        if (e) { setError(e.message); return; }
+
+        // Re-fetch and verify the update actually persisted (RLS may silently block it)
+        let { data: row } = await supabase.from('swaps').select('requester_completed, receiver_completed').eq('id', swapId).single();
+        if (!row?.[fieldToUpdate]) {
+            // RLS blocked the update — try via RPC as fallback
+            const { error: rpcErr } = await supabase.rpc('mark_swap_completed', {
+                swap_req_id: swapId,
+                field_name: fieldToUpdate
+            });
+            if (rpcErr) {
+                setError('Could not save your vote. Please check database permissions.');
+                return;
+            }
+            const { data: row2 } = await supabase.from('swaps').select('requester_completed, receiver_completed').eq('id', swapId).single();
+            if (!row2?.[fieldToUpdate]) {
+                setError('Could not save your vote. Please check database permissions.');
+                return;
+            }
+            row = row2;
+        }
+        const bothDone = row?.requester_completed && row?.receiver_completed;
+
+        if (bothDone) {
             const requesterStars = activeConvo.teachStars ?? 3;
             const requesterPoints = 50;
             const receiverPoints = 30 + (requesterStars * 10);
@@ -229,14 +352,18 @@ export default function ChatPage() {
             if (updatedProfile) setProfile(updatedProfile);
         }
 
-        const { error: e } = await supabase.from('swaps').update(updates).eq('id', swapId);
-        if (e) { setError(e.message); return; }
-        await loadConversations();
+        // Update local state immediately
+        setConversations(prev => prev.map(c =>
+            c.swap_id === swapId
+                ? { ...c, [fieldToUpdate]: true }
+                : c
+        ));
         setShowProfileModal(false);
         setModalProfile(null);
 
-        if (otherFieldCompleted) {
-            showToast('Swap completed! Points awarded. 🎉');
+        if (bothDone) {
+            setActiveTab('completed');
+            showToast('Swap completed! Points awarded!');
             await checkAndShowRatingModal(swapId);
         } else {
             showToast('Marked as complete. Waiting for other party. (1/2)');
@@ -248,7 +375,6 @@ export default function ChatPage() {
         const isRequester = activeConvo.requester_id === user.id;
         const fieldToUpdate = isRequester ? 'requester_completed' : 'receiver_completed';
         const updates = { [fieldToUpdate]: false };
-        if (activeConvo.status === 'completed') updates.status = 'accepted';
 
         const { error: e } = await supabase.from('swaps').update(updates).eq('id', swapId);
         if (e) { setError(e.message); return; }
@@ -265,11 +391,13 @@ export default function ChatPage() {
 
     async function submitRating() {
         if (!activeConvo || ratingValue === 0) { showToast('Please select a rating'); return; }
-        const otherUserId = activeConvo.requester_id === user.id ? activeConvo.receiver_id : activeConvo.requester_id;
-        const { error: e } = await supabase.from('ratings').insert({
-            swap_id: activeSwapId, rater_id: user.id, rated_id: otherUserId,
-            rating: ratingValue, comment: ratingComment,
-        });
+        const otherUserId = chatMode === 'swaps'
+            ? (activeConvo.requester_id === user.id ? activeConvo.receiver_id : activeConvo.requester_id)
+            : (activeConvo.requester_id === user.id ? activeConvo.provider_id : activeConvo.requester_id);
+        const payload = { rater_id: user.id, rated_id: otherUserId, rating: ratingValue, comment: ratingComment };
+        if (chatMode === 'swaps') payload.swap_id = activeSwapId;
+        else payload.gig_request_id = activeGigReqId;
+        const { error: e } = await supabase.from('ratings').insert(payload);
         if (e) { showToast(e.message); return; }
         setShowRatingModal(false);
         setRatingValue(0);
@@ -279,22 +407,143 @@ export default function ChatPage() {
 
     function closeRatingModal() { setShowRatingModal(false); setRatingValue(0); setRatingComment(''); }
 
+    // ── Complete gig ──────────────────────────────────────────────────────────
+
+    async function markGigComplete(gigReqId) {
+        if (!activeConvo) return;
+        const isRequester = activeConvo.requester_id === user.id;
+        const fieldToUpdate = isRequester ? 'requester_completed' : 'provider_completed';
+
+        // Update our completed field
+        const { error: e } = await supabase.from('gig_requests').update({ [fieldToUpdate]: true }).eq('id', gigReqId);
+        if (e) { setError(e.message); return; }
+
+        // Verify the update actually persisted (RLS may silently block it)
+        const { data: row } = await supabase.from('gig_requests').select('requester_completed, provider_completed').eq('id', gigReqId).single();
+        const myFieldActuallyUpdated = row?.[fieldToUpdate] === true;
+
+        if (!myFieldActuallyUpdated) {
+            // RLS blocked the update — try via RPC as fallback
+            const { error: rpcErr } = await supabase.rpc('mark_gig_completed', {
+                gig_req_id: gigReqId,
+                field_name: fieldToUpdate
+            });
+            if (rpcErr) {
+                setError('Could not save your vote. Please check database permissions for gig_requests updates.');
+                return;
+            }
+            // Re-fetch after RPC
+            const { data: row2 } = await supabase.from('gig_requests').select('requester_completed, provider_completed').eq('id', gigReqId).single();
+            if (!row2?.[fieldToUpdate]) {
+                setError('Could not save your vote. Please check database permissions for gig_requests updates.');
+                return;
+            }
+            Object.assign(row, row2);
+        }
+
+        const bothDone = row?.requester_completed && row?.provider_completed;
+
+        // Update local state immediately
+        setGigConversations(prev => prev.map(c =>
+            c.gig_request_id === gigReqId
+                ? { ...c, requester_completed: row.requester_completed, provider_completed: row.provider_completed }
+                : c
+        ));
+        setShowProfileModal(false);
+        setModalProfile(null);
+
+        if (bothDone) {
+            setActiveTab('completed');
+            showToast('Gig completed!');
+            await checkAndShowGigRatingModal(gigReqId);
+        } else {
+            showToast('Marked as complete. Waiting for other party. (1/2)');
+        }
+    }
+
+    async function unmarkGigComplete(gigReqId) {
+        if (!activeConvo) return;
+        const isReq = activeConvo.requester_id === user.id;
+        const field = isReq ? 'requester_completed' : 'provider_completed';
+        const upd = { [field]: false };
+        if (activeConvo.status === 'completed') upd.status = 'accepted';
+
+        const { error: err } = await supabase.from('gig_requests').update(upd).eq('id', gigReqId);
+        if (err) { setError(err.message); return; }
+        await loadGigConversations();
+        showToast('Vote removed.');
+    }
+
+    async function checkAndShowGigRatingModal(gigReqId) {
+        const { data: existing, error: err } = await supabase
+            .from('ratings').select('id')
+            .eq('gig_request_id', gigReqId).eq('rater_id', user.id).maybeSingle();
+        if (!existing && !err) setShowRatingModal(true);
+    }
+
+    // ── Payment escrow actions (placeholder) ────────────────────────────────
+
+    async function confirmPayment(gigReqId) {
+        const { error: e } = await supabase.from('gig_requests').update({
+            payment_status: 'captured',
+        }).eq('id', gigReqId);
+        if (e) { setError(e.message); return; }
+        await loadGigConversations();
+        showToast('Payment released to provider!');
+    }
+
+    async function disputePayment(gigReqId) {
+        const { error: e } = await supabase.from('gig_requests').update({
+            payment_status: 'disputed',
+        }).eq('id', gigReqId);
+        if (e) { setError(e.message); return; }
+        await loadGigConversations();
+        showToast('Dispute filed. Payment is on hold for review.');
+    }
+
     // ── Mount ─────────────────────────────────────────────────────────────────
+
+    function handleSwitchMode(mode) {
+        if (mode === chatMode) return;
+        realtimeSub.current?.unsubscribe();
+        swapSub.current?.unsubscribe();
+        setChatMode(mode);
+        setActiveSwapId(null);
+        setActiveGigReqId(null);
+        setMessages([]);
+        setActiveTab('active');
+    }
 
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
         (async () => {
             const convos = await loadConversations();
+            await loadGigConversations();
             const swapParam = searchParams.get('swap');
             if (swapParam) {
                 const found = convos?.find(c => c.swap_id === swapParam);
-                if (found) await selectConversation(found.swap_id);
+                if (found) await selectConversation(found.swap_id, 'swaps');
             } else if (convos?.length > 0) {
-                await selectConversation(convos[0].swap_id);
+                await selectConversation(convos[0].swap_id, 'swaps');
             }
         })();
         return () => { realtimeSub.current?.unsubscribe(); swapSub.current?.unsubscribe(); };
     }, [user]);
+
+    useEffect(() => {
+        if (!user) return;
+        (async () => {
+            if (chatMode === 'swaps') {
+                const convos = await loadConversations();
+                if (convos?.length > 0 && !activeSwapId) await selectConversation(convos[0].swap_id, 'swaps');
+            } else {
+                const convos = await loadGigConversations();
+                if (convos?.length > 0 && !activeGigReqId) await selectConversation(convos[0].gig_request_id, 'gigs');
+            }
+        })();
+    }, [chatMode]);
+
+
 
     // ── Render ────────────────────────────────────────────────────────────────
 
@@ -307,6 +556,10 @@ export default function ChatPage() {
                 <aside className="sidebar">
                     <div className="sidebar-header">
                         <h2 className="sidebar-title">Chats</h2>
+                        <div className="chat-mode-toggle">
+                            <button className={`mode-btn${chatMode === 'swaps' ? ' active' : ''}`} onClick={() => handleSwitchMode('swaps')}>Swaps</button>
+                            <button className={`mode-btn${chatMode === 'gigs' ? ' active' : ''}`} onClick={() => handleSwitchMode('gigs')}>Gigs</button>
+                        </div>
                         <div className="chat-tabs">
                             {['active', 'completed'].map(tab => (
                                 <button
@@ -318,6 +571,19 @@ export default function ChatPage() {
                                 </button>
                             ))}
                         </div>
+                        {chatMode === 'gigs' && (
+                            <div className="chat-role-tabs">
+                                {['all', 'hiring', 'providing'].map(rt => (
+                                    <button
+                                        key={rt}
+                                        className={`role-tab${gigRoleTab === rt ? ' active' : ''}`}
+                                        onClick={() => setGigRoleTab(rt)}
+                                    >
+                                        {rt.charAt(0).toUpperCase() + rt.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {loadingConvos ? (
@@ -326,31 +592,55 @@ export default function ChatPage() {
                         </div>
                     ) : filteredConvos.length === 0 ? (
                         <div className="sidebar-empty">
-                            <span style={{ fontSize: 32 }}>💬</span>
-                            <p>No {activeTab} chats.</p>
+                            <span style={{ fontSize: 32 }}>{chatMode === 'swaps' ? '💬' : '💼'}</span>
+                            <p>No {activeTab} {chatMode} chats.</p>
                             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                                {activeTab === 'active' ? 'Accept a swap to unlock chat.' : 'Complete swaps will appear here.'}
+                                {chatMode === 'swaps'
+                                    ? (activeTab === 'active' ? 'Accept a swap to unlock chat.' : 'Completed swaps will appear here.')
+                                    : (activeTab === 'active' ? 'Accept a gig request to unlock chat.' : 'Completed gigs will appear here.')}
                             </p>
                             {activeTab === 'active' && (
-                                <a href="/swaps" className="btn btn-secondary btn-sm" style={{ marginTop: 16 }}>View swaps</a>
+                                <a href={chatMode === 'swaps' ? '/swaps' : '/gigs'} className="btn btn-secondary btn-sm" style={{ marginTop: 16 }}>
+                                    {chatMode === 'swaps' ? 'View swaps' : 'Browse gigs'}
+                                </a>
                             )}
                         </div>
+                    ) : chatMode === 'swaps' ? (
+                        <ul className="convo-list">
+                            {filteredConvos.map(convo => {
+                                const key = convo.swap_id;
+                                const isActive = activeSwapId === key;
+                                return (
+                                    <li key={key}>
+                                        <button className={`convo-item${isActive ? ' active' : ''}`} onClick={() => selectConversation(key, 'swaps')}>
+                                            <div className="avatar avatar-sm">{initials(convo.other?.full_name)}</div>
+                                            <div className="convo-info">
+                                                <p className="convo-name">{convo.other?.full_name ?? 'Unknown'}</p>
+                                                <p className="convo-preview">{formatLastMsg(convo.lastMsg, user?.id)}</p>
+                                            </div>
+                                            {convo.lastMsg && <span className="convo-time">{formatTime(convo.lastMsg.created_at)}</span>}
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
                     ) : (
                         <ul className="convo-list">
                             {filteredConvos.map(convo => (
-                                <li key={convo.swap_id}>
-                                    <button
-                                        className={`convo-item${activeSwapId === convo.swap_id ? ' active' : ''}`}
-                                        onClick={() => selectConversation(convo.swap_id)}
-                                    >
+                                <li key={convo.gig_request_id}>
+                                    <button className={`convo-item${activeGigReqId === convo.gig_request_id ? ' active' : ''}`} onClick={() => selectConversation(convo.gig_request_id, 'gigs')}>
                                         <div className="avatar avatar-sm">{initials(convo.other?.full_name)}</div>
                                         <div className="convo-info">
-                                            <p className="convo-name">{convo.other?.full_name ?? 'Unknown'}</p>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <p className="convo-name">{convo.other?.full_name ?? 'Unknown'}</p>
+                                                <span className={`convo-role-badge ${convo.isProvider ? 'role-providing' : 'role-hiring'}`}>
+                                                    {convo.isProvider ? 'Providing' : 'Hiring'}
+                                                </span>
+                                            </div>
+                                            {convo.gig && <p className="convo-gig-label">{convo.gig.title}</p>}
                                             <p className="convo-preview">{formatLastMsg(convo.lastMsg, user?.id)}</p>
                                         </div>
-                                        {convo.lastMsg && (
-                                            <span className="convo-time">{formatTime(convo.lastMsg.created_at)}</span>
-                                        )}
+                                        {convo.lastMsg && <span className="convo-time">{formatTime(convo.lastMsg.created_at)}</span>}
                                     </button>
                                 </li>
                             ))}
@@ -362,7 +652,7 @@ export default function ChatPage() {
                 <main className="chat-main">
                     {!activeConvo ? (
                         <div className="chat-empty">
-                            <span style={{ fontSize: 48 }}>💬</span>
+                            <span style={{ fontSize: 48 }}>{chatMode === 'swaps' ? '💬' : '💼'}</span>
                             <h3>Select a conversation</h3>
                             <p>Choose a chat from the sidebar to get started.</p>
                         </div>
@@ -371,19 +661,41 @@ export default function ChatPage() {
                             <header className="chat-header">
                                 <div className="avatar">{initials(activeConvo.other?.full_name)}</div>
                                 <div style={{ flex: 1 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                                        <button className="chat-name-btn" onClick={() => { setModalProfile(activeConvo.other); setShowProfileModal(true); }}>
-                                            {activeConvo.other?.full_name}
-                                        </button>
-                                        {(() => {
-                                            const completionCount = (activeConvo.requester_completed ? 1 : 0) + (activeConvo.receiver_completed ? 1 : 0);
-                                            return <span className="completion-badge-chat">Complete {completionCount}/2</span>;
-                                        })()}
-                                    </div>
-                                    <p className="chat-header-sub">
-                                        You teach <span className="skill-tag skill-learn" style={{ fontSize: 11, padding: '2px 8px' }}>{activeConvo.teach_skill}</span>
-                                        {' · '}You learn <span className="skill-tag skill-teach" style={{ fontSize: 11, padding: '2px 8px' }}>{activeConvo.learn_skill}</span>
-                                    </p>
+                                    {chatMode === 'swaps' ? (
+                                        <>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                                <button className="chat-name-btn" onClick={() => { setModalProfile(activeConvo.other); setShowProfileModal(true); }}>
+                                                    {activeConvo.other?.full_name}
+                                                </button>
+                                                {(() => {
+                                                    const completionCount = (activeConvo.requester_completed ? 1 : 0) + (activeConvo.receiver_completed ? 1 : 0);
+                                                    return <span className="completion-badge-chat">Complete {completionCount}/2</span>;
+                                                })()}
+                                            </div>
+                                            <p className="chat-header-sub">
+                                                You teach <span className="skill-tag skill-learn" style={{ fontSize: 11, padding: '2px 8px' }}>{activeConvo.teach_skill}</span>
+                                                {' · '}You learn <span className="skill-tag skill-teach" style={{ fontSize: 11, padding: '2px 8px' }}>{activeConvo.learn_skill}</span>
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                                <button className="chat-name-btn" onClick={() => { setModalProfile(activeConvo.other); setShowProfileModal(true); }}>
+                                                    {activeConvo.other?.full_name}
+                                                </button>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <span className="gig-chat-badge">{activeConvo.isProvider ? 'Client' : 'Provider'}</span>
+                                                    {(() => {
+                                                        const completionCount = (activeConvo.requester_completed ? 1 : 0) + (activeConvo.provider_completed ? 1 : 0);
+                                                        return <span className="completion-badge-chat">Complete {completionCount}/2</span>;
+                                                    })()}
+                                                </div>
+                                            </div>
+                                            <p className="chat-header-sub">
+                                                {activeConvo.gig?.title} · <strong>${activeConvo.gig?.price?.toFixed(2)}</strong>
+                                            </p>
+                                        </>
+                                    )}
                                 </div>
                             </header>
 
@@ -410,6 +722,37 @@ export default function ChatPage() {
                                 )}
                                 <div ref={msgEndRef} />
                             </div>
+
+                            {chatMode === 'gigs' && activeConvo && activeConvo.provider_completed && !activeConvo.isProvider && activeConvo.payment_status === 'authorized' && (
+                                <div className="escrow-banner">
+                                    <div className="escrow-banner-icon">🔒</div>
+                                    <div className="escrow-banner-info">
+                                        <p className="escrow-banner-title">Provider marked this gig as done</p>
+                                        <p className="escrow-banner-sub">Review the work and confirm to release payment, or file a dispute.</p>
+                                        {activeConvo.confirmation_deadline && (
+                                            <p className="escrow-banner-timer">Auto-releases {new Date(activeConvo.confirmation_deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
+                                        )}
+                                    </div>
+                                    <div className="escrow-banner-actions">
+                                        <button className="btn btn-accept btn-sm" onClick={() => confirmPayment(activeConvo.gig_request_id)}>Confirm & Pay</button>
+                                        <button className="btn btn-decline btn-sm" onClick={() => disputePayment(activeConvo.gig_request_id)}>Dispute</button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {chatMode === 'gigs' && activeConvo && activeConvo.payment_status === 'captured' && (
+                                <div className="escrow-banner escrow-captured">
+                                    <span style={{ fontSize: 18 }}>✅</span>
+                                    <p style={{ flex: 1, margin: 0, fontWeight: 600, fontSize: 13 }}>Payment released — ${activeConvo.gig?.price?.toFixed(2)} paid to provider</p>
+                                </div>
+                            )}
+
+                            {chatMode === 'gigs' && activeConvo && activeConvo.payment_status === 'disputed' && (
+                                <div className="escrow-banner escrow-disputed">
+                                    <span style={{ fontSize: 18 }}>⚠️</span>
+                                    <p style={{ flex: 1, margin: 0, fontWeight: 600, fontSize: 13 }}>Payment disputed — under review</p>
+                                </div>
+                            )}
 
                             <div className="composer">
                                 <textarea
@@ -453,24 +796,36 @@ export default function ChatPage() {
                             <div><h2>{modalProfile.full_name}</h2></div>
                         </div>
 
-                        <div className="complete-swap">
-                            <div className="complete-swap-header">
-                                <h3>Complete Swap</h3>
+                        {(chatMode === 'swaps' || chatMode === 'gigs') && (
+                            <div className="complete-swap">
+                                <div className="complete-swap-header">
+                                    <h3>{chatMode === 'swaps' ? 'Complete Swap' : 'Complete Gig'}</h3>
+                                    {activeConvo && (() => {
+                                        const completionCount = chatMode === 'swaps' ? (activeConvo.requester_completed ? 1 : 0) + (activeConvo.receiver_completed ? 1 : 0) : (activeConvo.requester_completed ? 1 : 0) + (activeConvo.provider_completed ? 1 : 0);
+                                        return <span className="completion-badge-large">Complete {completionCount}/2</span>;
+                                    })()}
+                                </div>
                                 {activeConvo && (() => {
-                                    const completionCount = (activeConvo.requester_completed ? 1 : 0) + (activeConvo.receiver_completed ? 1 : 0);
-                                    return <span className="completion-badge-large">Complete {completionCount}/2</span>;
+                                    const isRequester = chatMode === 'swaps' ? activeConvo.requester_id === user?.id : activeConvo.requester_id === user?.id;
+                                    const hasVoted = chatMode === 'swaps' ? (isRequester ? activeConvo.requester_completed : activeConvo.receiver_completed) : (isRequester ? activeConvo.requester_completed : activeConvo.provider_completed);
+                                    return hasVoted ? (
+                                        <button className="btn-unvote-swap" onClick={() => chatMode === 'swaps' ? unmarkSwapComplete(activeConvo.swap_id) : unmarkGigComplete(activeConvo.gig_request_id)}>Remove Vote</button>
+                                    ) : (
+                                        <button className="btn-complete-swap" onClick={() => chatMode === 'swaps' ? markSwapComplete(activeConvo.swap_id) : markGigComplete(activeConvo.gig_request_id)}>{chatMode === 'swaps' ? 'Vote to Complete Swap' : 'Vote to Complete Gig'}</button>
+                                    );
                                 })()}
                             </div>
-                            {activeConvo && (() => {
-                                const isRequester = activeConvo.requester_id === user?.id;
-                                const hasVoted = isRequester ? activeConvo.requester_completed : activeConvo.receiver_completed;
-                                return hasVoted ? (
-                                    <button className="btn-unvote-swap" onClick={() => unmarkSwapComplete(activeConvo.swap_id)}>Remove Vote</button>
-                                ) : (
-                                    <button className="btn-complete-swap" onClick={() => markSwapComplete(activeConvo.swap_id)}>Vote to Complete Swap</button>
-                                );
-                            })()}
-                        </div>
+                        )}
+
+                        {chatMode === 'gigs' && activeConvo?.gig && (
+                            <div className="modal-section">
+                                <h3>Gig Details</h3>
+                                <p style={{ fontWeight: 600, fontSize: 16 }}>{activeConvo.gig.title}</p>
+                                <p style={{ color: 'var(--text-secondary)', marginTop: 4 }}>
+                                    ${activeConvo.gig.price?.toFixed(2)} · {activeConvo.gig.category ?? 'No category'}
+                                </p>
+                            </div>
+                        )}
 
                         {modalProfile.bio && (
                             <div className="modal-section">
@@ -478,22 +833,38 @@ export default function ChatPage() {
                                 <p className="bio">{modalProfile.bio}</p>
                             </div>
                         )}
-                        <div className="modal-section">
-                            <h3>Can teach</h3>
-                            <div className="skill-tags">
-                                {(modalProfile.skills_teach ?? []).map((s, i) => (
-                                    <span key={i} className="skill-tag skill-teach">{typeof s === 'string' ? s : s.name}</span>
-                                ))}
+                        {chatMode === 'swaps' && (
+                            <>
+                                <div className="modal-section">
+                                    <h3>Can teach</h3>
+                                    <div className="skill-tags">
+                                        {(modalProfile.skills_teach ?? []).map((s, i) => (
+                                            <span key={i} className="skill-tag skill-teach">{getSkillName(s)}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="modal-section">
+                                    <h3>Wants to learn</h3>
+                                    <div className="skill-tags">
+                                        {(modalProfile.skills_learn ?? []).map((s, i) => (
+                                            <span key={i} className="skill-tag skill-learn">{getSkillName(s)}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {activeConvo && (chatMode === 'gigs' ? isGigCompleted(activeConvo) : isSwapCompleted(activeConvo)) && (
+                            <div className="modal-section">
+                                <button className="btn-rate-user" onClick={() => {
+                                    setShowProfileModal(false);
+                                    setModalProfile(null);
+                                    setShowRatingModal(true);
+                                }}>
+                                    ⭐ Rate {modalProfile.full_name}
+                                </button>
                             </div>
-                        </div>
-                        <div className="modal-section">
-                            <h3>Wants to learn</h3>
-                            <div className="skill-tags">
-                                {(modalProfile.skills_learn ?? []).map((s, i) => (
-                                    <span key={i} className="skill-tag skill-learn">{typeof s === 'string' ? s : s.name}</span>
-                                ))}
-                            </div>
-                        </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -507,7 +878,7 @@ export default function ChatPage() {
                             <div>
                                 <h2>Rate Your Experience</h2>
                                 <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 8 }}>
-                                    How was your swap with {activeConvo.other?.full_name}?
+                                    How was your {chatMode === 'swaps' ? 'swap' : 'experience'} with {activeConvo.other?.full_name}?
                                 </p>
                             </div>
                         </div>
@@ -539,98 +910,126 @@ export default function ChatPage() {
             )}
 
             <style>{`
-        .chat-shell { display: flex; height: calc(100vh - 57px); overflow: hidden; background: var(--bg); }
+            .chat-shell { display: flex; height: calc(100vh - 57px); overflow: hidden; background: var(--bg); }
 
-        /* Sidebar */
-        .sidebar { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--surface); overflow: hidden; }
-        .sidebar-header { padding: 20px 20px 16px; border-bottom: 1px solid var(--border); }
-        .sidebar-title { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
-        .chat-tabs { display: flex; gap: 8px; margin-top: 12px; }
-        .chat-tab { flex: 1; padding: 8px 12px; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--r); font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; }
-        .chat-tab:hover { background: var(--surface); border-color: var(--border-strong); }
-        .chat-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
-        .sidebar-loading, .sidebar-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 20px; color: var(--text-secondary); font-size: 13px; text-align: center; gap: 4px; }
-        .convo-list { list-style: none; overflow-y: auto; flex: 1; padding: 8px; }
-        .convo-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border-radius: var(--r); border: none; background: transparent; cursor: pointer; text-align: left; transition: background 0.15s; font-family: var(--font-body); }
-        .convo-item:hover { background: var(--surface-alt); }
-        .convo-item.active { background: var(--primary-light); }
-        .convo-info { flex: 1; min-width: 0; }
-        .convo-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .convo-preview { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-        .convo-time { font-size: 11px; color: var(--text-muted); flex-shrink: 0; align-self: flex-start; margin-top: 2px; }
-        .avatar-xs { width: 26px !important; height: 26px !important; font-size: 10px !important; flex-shrink: 0; }
-        .avatar-sm { width: 34px !important; height: 34px !important; font-size: 12px !important; flex-shrink: 0; }
+            /* Sidebar */
+            .sidebar { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--surface); overflow: hidden; }
+            .sidebar-header { padding: 20px 20px 16px; border-bottom: 1px solid var(--border); }
+            .sidebar-title { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+            .chat-mode-toggle { display: flex; gap: 0; background: var(--surface-alt); border-radius: var(--r); padding: 3px; border: 1px solid var(--border); }
+            .mode-btn { flex: 1; padding: 7px 12px; border: none; border-radius: calc(var(--r) - 2px); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; background: transparent; color: var(--text-secondary); }
+            .mode-btn:hover { color: var(--text); }
+            .mode-btn.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+            .chat-tabs { display: flex; gap: 8px; margin-top: 12px; }
+            .chat-tab { flex: 1; padding: 8px 12px; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--r); font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; }
+            .chat-tab:hover { background: var(--surface); border-color: var(--border-strong); }
+            .chat-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+            .sidebar-loading, .sidebar-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 20px; color: var(--text-secondary); font-size: 13px; text-align: center; gap: 4px; }
+            .convo-list { list-style: none; overflow-y: auto; flex: 1; padding: 8px; }
+            .convo-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border-radius: var(--r); border: none; background: transparent; cursor: pointer; text-align: left; transition: background 0.15s; font-family: var(--font-body); }
+            .convo-item:hover { background: var(--surface-alt); }
+            .convo-item.active { background: var(--primary-light); }
+            .convo-info { flex: 1; min-width: 0; }
+            .convo-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .convo-preview { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+            .convo-time { font-size: 11px; color: var(--text-muted); flex-shrink: 0; align-self: flex-start; margin-top: 2px; }
+            .avatar-xs { width: 26px !important; height: 26px !important; font-size: 10px !important; flex-shrink: 0; }
+            .avatar-sm { width: 34px !important; height: 34px !important; font-size: 12px !important; flex-shrink: 0; }
 
-        /* Main */
-        .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
-        .chat-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-secondary); }
-        .chat-empty h3 { font-size: 20px; color: var(--text); }
-        .chat-empty p { font-size: 14px; }
-        .chat-header { display: flex; align-items: flex-start; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
-        .chat-header-sub { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
-        .chat-name-btn { background: none; border: none; font-size: 15px; font-weight: 600; color: var(--primary); cursor: pointer; padding: 0; text-decoration: underline; text-decoration-color: transparent; transition: text-decoration-color 0.2s; text-align: left; }
-        .chat-name-btn:hover { text-decoration-color: var(--primary); }
-        .completion-badge-chat { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 12px; background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary-mid); white-space: nowrap; }
+            /* Main */
+            .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+            .chat-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-secondary); }
+            .chat-empty h3 { font-size: 20px; color: var(--text); }
+            .chat-empty p { font-size: 14px; }
+            .chat-header { display: flex; align-items: flex-start; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+            .chat-header-sub { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+            .chat-name-btn { background: none; border: none; font-size: 15px; font-weight: 600; color: var(--primary); cursor: pointer; padding: 0; text-decoration: underline; text-decoration-color: transparent; transition: text-decoration-color 0.2s; text-align: left; }
+            .chat-name-btn:hover { text-decoration-color: var(--primary); }
+            .completion-badge-chat { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 12px; background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary-mid); white-space: nowrap; }
+            .gig-chat-badge { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 12px; background: #FFF7ED; color: #C2410C; border: 1px solid #FDBA74; white-space: nowrap; }
+            .convo-gig-label { font-size: 11px; color: #C2410C; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+            .chat-role-tabs { display: flex; gap: 0; margin-top: 8px; background: var(--surface-alt); border-radius: calc(var(--r) - 2px); padding: 2px; border: 1px solid var(--border); }
+            .role-tab { flex: 1; padding: 5px 8px; border: none; border-radius: calc(var(--r) - 3px); font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s; background: transparent; color: var(--text-muted); }
+            .role-tab:hover { color: var(--text); }
+            .role-tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+            .convo-role-badge { font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 8px; white-space: nowrap; flex-shrink: 0; }
+            .role-hiring { background: #DBEAFE; color: #1D4ED8; border: 1px solid #93C5FD; }
+            .role-providing { background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; }
 
-        /* Messages */
-        .messages-area { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 4px; min-height: 0; }
-        .msgs-loading, .msgs-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 14px; }
-        .time-divider { text-align: center; font-size: 11px; color: var(--text-muted); margin: 12px 0 8px; }
-        .msg-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 2px; }
-        .msg-row.mine { justify-content: flex-end; }
-        .msg-row.theirs { justify-content: flex-start; }
-        .bubble { max-width: 68%; padding: 10px 14px; border-radius: 18px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-        .bubble-mine { background: var(--primary); color: white; border-bottom-right-radius: 4px; }
-        .bubble-theirs { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 4px; }
+            /* Messages */
+            .messages-area { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+            .msgs-loading, .msgs-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 14px; }
+            .time-divider { text-align: center; font-size: 11px; color: var(--text-muted); margin: 12px 0 8px; }
+            .msg-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 2px; }
+            .msg-row.mine { justify-content: flex-end; }
+            .msg-row.theirs { justify-content: flex-start; }
+            .bubble { max-width: 68%; padding: 10px 14px; border-radius: 18px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+            .bubble-mine { background: var(--primary); color: white; border-bottom-right-radius: 4px; }
+            .bubble-theirs { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 4px; }
 
-        /* Composer */
-        .composer { display: flex; align-items: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; position: sticky; bottom: 0; z-index: 10; }
-        .composer-input { flex: 1; resize: none; border: 1px solid var(--border); border-radius: var(--r-lg); padding: 10px 16px; font-size: 14px; font-family: var(--font-body); color: var(--text); background: var(--bg); outline: none; max-height: 120px; overflow-y: auto; line-height: 1.5; transition: border-color 0.15s; }
-        .composer-input:focus { border-color: var(--primary); }
-        .composer-send { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: var(--r-full); flex-shrink: 0; }
-        .composer-send:disabled { opacity: 0.45; }
+            /* Composer */
+            .composer { display: flex; align-items: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); background: #a06840; flex-shrink: 0; position: sticky; bottom: 0; z-index: 10; }
+            .composer-input { flex: 1; resize: none; border: 1px solid var(--border); border-radius: var(--r-lg); padding: 10px 16px; font-size: 14px; font-family: var(--font-body); color: var(--text); background: white; outline: none; max-height: 120px; overflow-y: auto; line-height: 1.5; transition: border-color 0.15s; }
+            .composer-input:focus { border-color: var(--primary); }
+            .composer-send { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: var(--r-full); flex-shrink: 0; }
+            .composer-send:disabled { opacity: 0.45; }
 
-        /* Modals */
-        .modal-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
-        .modal-header h2 { margin: 0; font-size: 24px; }
-        .modal-section { margin-bottom: 24px; }
-        .modal-section h3 { font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
-        .modal-section .bio { color: var(--text-secondary); line-height: 1.6; }
-        .modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary); }
-        .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
-        .skill-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+            /* Escrow Banner */
+            .escrow-banner { display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: #FFF7ED; border-top: 1px solid #FDBA74; flex-shrink: 0; }
+            .escrow-banner-icon { font-size: 24px; flex-shrink: 0; }
+            .escrow-banner-info { flex: 1; min-width: 0; }
+            .escrow-banner-title { font-size: 13px; font-weight: 700; color: #92400E; margin: 0; }
+            .escrow-banner-sub { font-size: 12px; color: #B45309; margin: 2px 0 0; }
+            .escrow-banner-timer { font-size: 11px; color: #D97706; margin: 4px 0 0; font-weight: 500; }
+            .escrow-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
+            .escrow-captured { background: #F0FDF4; border-top: 1px solid #86EFAC; }
+            .escrow-disputed { background: #FEF2F2; border-top: 1px solid #FCA5A5; }
 
-        /* Complete swap */
-        .complete-swap { margin: 20px 0; }
-        .complete-swap-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .complete-swap-header h3 { margin: 0; font-size: 16px; font-weight: 600; }
-        .completion-badge-large { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 12px; background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary-mid); white-space: nowrap; }
-        .btn-complete-swap { width: 100%; padding: 14px 24px; background: #10b981; color: white; border: none; border-radius: var(--r-lg); font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(16,185,129,0.3); }
-        .btn-complete-swap:hover { background: #059669; box-shadow: 0 4px 12px rgba(16,185,129,0.4); transform: translateY(-1px); }
-        .btn-complete-swap:active { transform: translateY(0); }
-        .btn-unvote-swap { width: 100%; padding: 14px 24px; background: #ef4444; color: white; border: none; border-radius: var(--r-lg); font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(239,68,68,0.3); }
-        .btn-unvote-swap:hover { background: #dc2626; box-shadow: 0 4px 12px rgba(239,68,68,0.4); transform: translateY(-1px); }
-        .btn-unvote-swap:active { transform: translateY(0); }
+            /* Modals */
+            .modal-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
+            .modal-header h2 { margin: 0; font-size: 24px; }
+            .modal-section { margin-bottom: 24px;  }
+            .modal-section h3 { font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+            .modal-section .bio { color: var(--text-secondary); line-height: 1.6; }
+            .modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary); }
+            .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+            .skill-tags { display: flex; flex-wrap: wrap; gap: 8px; }
 
-        /* Rating */
-        .rating-section { margin: 24px 0; text-align: center; }
-        .rating-section h3 { font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px; }
-        .star-rating { display: flex; justify-content: center; gap: 8px; margin-bottom: 12px; }
-        .star-btn { background: none; border: none; font-size: 48px; color: #ddd; cursor: pointer; transition: all 0.2s; padding: 0; line-height: 1; }
-        .star-btn:hover { transform: scale(1.1); }
-        .star-btn.active { color: #fbbf24; }
-        .rating-description { font-size: 14px; color: var(--text-secondary); font-weight: 500; min-height: 20px; }
-        .rating-comment { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: var(--r); font-family: var(--font-body); font-size: 14px; resize: vertical; outline: none; transition: border-color 0.2s; box-sizing: border-box; }
-        .rating-comment:focus { border-color: var(--primary); }
+            /* Complete swap */
+            .complete-swap { margin: 20px 0; }
+            .complete-swap-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+            .complete-swap-header h3 { margin: 0; font-size: 16px; font-weight: 600; }
+            .completion-badge-large { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 12px; background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary-mid); white-space: nowrap; }
+            .btn-complete-swap { width: 100%; padding: 14px 24px; background: #10b981; color: white; border: none; border-radius: var(--r-lg); font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(16,185,129,0.3); }
+            .btn-complete-swap:hover { background: #059669; box-shadow: 0 4px 12px rgba(16,185,129,0.4); transform: translateY(-1px); }
+            .btn-complete-swap:active { transform: translateY(0); }
+            .btn-unvote-swap { width: 100%; padding: 14px 24px; background: #ef4444; color: white; border: none; border-radius: var(--r-lg); font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(239,68,68,0.3); }
+            .btn-unvote-swap:hover { background: #dc2626; box-shadow: 0 4px 12px rgba(239,68,68,0.4); transform: translateY(-1px); }
+            .btn-unvote-swap:active { transform: translateY(0); }
 
-        /* Responsive */
-        @media (max-width: 600px) {
-          .sidebar { width: 72px; }
-          .convo-info, .convo-time { display: none; }
-          .sidebar-title { font-size: 14px; }
-          .convo-item { justify-content: center; padding: 10px; }
-        }
-      `}</style>
+            /* Rate User */
+            .btn-rate-user { width: 100%; padding: 12px 24px; background: #FBBF24; color: #78350F; border: none; border-radius: var(--r-lg); font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(251,191,36,0.3); }
+            .btn-rate-user:hover { background: #F59E0B; box-shadow: 0 4px 12px rgba(251,191,36,0.4); transform: translateY(-1px); }
+
+            /* Rating */
+            .rating-section { margin: 24px 0; text-align: center; }
+            .rating-section h3 { font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px; }
+            .star-rating { display: flex; justify-content: center; gap: 8px; margin-bottom: 12px; }
+            .star-btn { background: none; border: none; font-size: 48px; color: #ddd; cursor: pointer; transition: all 0.2s; padding: 0; line-height: 1; }
+            .star-btn:hover { transform: scale(1.1); }
+            .star-btn.active { color: #fbbf24; }
+            .rating-description { font-size: 14px; color: var(--text-secondary); font-weight: 500; min-height: 20px; }
+            .rating-comment { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: var(--r); font-family: var(--font-body); font-size: 14px; resize: vertical; outline: none; transition: border-color 0.2s; box-sizing: border-box; }
+            .rating-comment:focus { border-color: var(--primary); }
+
+            /* Responsive */
+            @media (max-width: 600px) {
+              .sidebar { width: 72px; }
+              .convo-info, .convo-time { display: none; }
+              .sidebar-title { font-size: 14px; }
+              .convo-item { justify-content: center; padding: 10px; }
+            }
+          `}</style>
         </>
     );
 }
