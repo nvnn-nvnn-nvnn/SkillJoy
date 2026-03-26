@@ -36,7 +36,7 @@ export default function ChatPage() {
     const profile = useProfile();
     const { setProfile } = useAuth();
     const navigate = useNavigate();
-    const searchParams = useSearchParams();
+    const [searchParams] = useSearchParams();
 
     const [chatMode, setChatMode] = useState('swaps');
     const [conversations, setConversations] = useState([]);
@@ -528,7 +528,7 @@ export default function ChatPage() {
             }
         })();
         return () => { realtimeSub.current?.unsubscribe(); swapSub.current?.unsubscribe(); };
-    }, [user]);
+    }, [user, profile]);
 
     useEffect(() => {
         if (!user) return;
@@ -541,12 +541,9 @@ export default function ChatPage() {
                 if (convos?.length > 0 && !activeGigReqId) await selectConversation(convos[0].gig_request_id, 'gigs');
             }
         })();
-    }, [chatMode]);
+    }, [chatMode, profile]);
 
-
-
-    // ── Render ────────────────────────────────────────────────────────────────
-
+// ...
     return (
         <>
             <title>Chat — SkillJoy</title>
