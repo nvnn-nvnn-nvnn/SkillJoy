@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile } from '@/lib/stores';
+import FAQSection from '@/components/FAQsection';
+import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 
 const GIG_CATEGORIES = [
     'Errands & Delivery',
@@ -49,8 +51,11 @@ export default function MyListingsPage() {
     const [commitments, setCommitments] = useState('');
     const [requirements, setRequirements] = useState('');
     const [imageUrls, setImageUrls] = useState('');
+    const [faqs, setFaqs] = useState([]); // ← Change from string to array
     const [submitting, setSubmitting] = useState(false);
     const [gigDetailModal, setGigDetailModal] = useState(null);
+    // Faqs
+
 
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
@@ -106,6 +111,7 @@ export default function MyListingsPage() {
 
         setSubmitting(true);
         const images = imageUrls.trim() ? imageUrls.split(',').map(url => url.trim()).filter(Boolean) : [];
+        const validFaqs = faqs.filter(faq => faq.question.trim() && faq.answer.trim());
         const { error } = await supabase.from('gigs').insert({
             user_id: user.id,
             title: title.trim(),
@@ -115,12 +121,13 @@ export default function MyListingsPage() {
             commitments: commitments.trim() || null,
             requirements: requirements.trim() || null,
             images: images.length > 0 ? images : null,
+            faqs: validFaqs.length > 0 ? validFaqs : null,
         });
         setSubmitting(false);
 
         if (error) { showToast(error.message, 'error'); return; }
 
-        setTitle(''); setDescription(''); setPrice(''); setCategory(''); setCommitments(''); setRequirements(''); setImageUrls('');
+        setTitle(''); setDescription(''); setPrice(''); setCategory(''); setCommitments(''); setRequirements(''); setImageUrls(''); setFaqs([]);
         showToast('Gig listed!', 'success');
         loadData();
         setTab('listings');
@@ -483,6 +490,107 @@ export default function MyListingsPage() {
                                     </small>
                                 </div>
 
+
+                                <div className="field">
+                                    <label>FAQs <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+
+                                    {/* FAQ List */}
+                                    <div style={{ marginBottom: '12px' }}>
+                                        {faqs.map((faq, index) => (
+                                            <div key={index} style={{
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '8px',
+                                                marginBottom: '12px',
+                                                padding: '12px',
+                                                border: '1px solid var(--border)',
+                                                borderRadius: '8px',
+                                                background: 'var(--surface-alt)'
+                                            }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>
+                                                        FAQ {index + 1}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFaqs(faqs.filter((_, i) => i !== index))}
+                                                        style={{
+                                                            background: 'none',
+                                                            border: 'none',
+                                                            color: 'var(--color-error)',
+                                                            cursor: 'pointer',
+                                                            padding: '4px'
+                                                        }}
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Question"
+                                                    value={faq.question}
+                                                    onChange={e => {
+                                                        const newFaqs = [...faqs];
+                                                        newFaqs[index].question = e.target.value;
+                                                        setFaqs(newFaqs);
+                                                    }}
+                                                    style={{
+                                                        padding: '8px',
+                                                        border: '1px solid var(--border)',
+                                                        borderRadius: '4px',
+                                                        fontSize: '14px'
+                                                    }}
+                                                />
+                                                <textarea
+                                                    placeholder="Answer"
+                                                    value={faq.answer}
+                                                    onChange={e => {
+                                                        const newFaqs = [...faqs];
+                                                        newFaqs[index].answer = e.target.value;
+                                                        setFaqs(newFaqs);
+                                                    }}
+                                                    rows={3}
+                                                    style={{
+                                                        padding: '8px',
+                                                        border: '1px solid var(--border)',
+                                                        borderRadius: '4px',
+                                                        fontSize: '14px',
+                                                        resize: 'vertical'
+                                                    }}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Add FAQ Button */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setFaqs([...faqs, { question: '', answer: '' }])}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            padding: '8px 12px',
+                                            border: '1px dashed var(--border)',
+                                            borderRadius: '6px',
+                                            background: 'transparent',
+                                            color: 'var(--text-secondary)',
+                                            fontSize: '13px',
+                                            cursor: 'pointer',
+                                            transition: 'border-color 0.14s'
+                                        }}
+                                        onMouseOver={(e) => e.target.style.borderColor = 'var(--text-secondary)'}
+                                        onMouseOut={(e) => e.target.style.borderColor = 'var(--border)'}
+                                    >
+                                        <Plus size={14} />
+                                        Add FAQ
+                                    </button>
+
+                                    <small style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '8px', display: 'block' }}>
+                                        Add frequently asked questions about your gig
+                                    </small>
+                                </div>
+
                                 <button className="btn btn-primary" type="submit" disabled={submitting || !title.trim() || !price}>
                                     {submitting ? 'Listing...' : 'List Gig'}
                                 </button>
@@ -490,56 +598,58 @@ export default function MyListingsPage() {
                         )}
                     </>
                 )}
-            </div>
+            </div >
 
             {/* ── Gig Detail Modal ── */}
-            {gigDetailModal && (
-                <div className="modal-backdrop" onClick={() => setGigDetailModal(null)}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
-                        <button className="modal-close" onClick={() => setGigDetailModal(null)}>✕</button>
-                        <h2 style={{ marginBottom: 16, fontSize: 22 }}>{gigDetailModal.title}</h2>
-                        {gigDetailModal.category && (
-                            <span className="gig-category" style={{ marginBottom: 12, display: 'inline-block' }}>{gigDetailModal.category}</span>
-                        )}
-                        {gigDetailModal.images && gigDetailModal.images.length > 0 && (
-                            <div className="modal-section">
-                                <h3>Portfolio</h3>
-                                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '8px' }}>
-                                    {gigDetailModal.images.map((url, i) => (
-                                        <img key={i} src={url} alt={`Portfolio ${i + 1}`} style={{ width: '150px', height: '150px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border)' }} />
-                                    ))}
+            {
+                gigDetailModal && (
+                    <div className="modal-backdrop" onClick={() => setGigDetailModal(null)}>
+                        <div className="modal" onClick={e => e.stopPropagation()}>
+                            <button className="modal-close" onClick={() => setGigDetailModal(null)}>✕</button>
+                            <h2 style={{ marginBottom: 16, fontSize: 22 }}>{gigDetailModal.title}</h2>
+                            {gigDetailModal.category && (
+                                <span className="gig-category" style={{ marginBottom: 12, display: 'inline-block' }}>{gigDetailModal.category}</span>
+                            )}
+                            {gigDetailModal.images && gigDetailModal.images.length > 0 && (
+                                <div className="modal-section">
+                                    <h3>Portfolio</h3>
+                                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '8px' }}>
+                                        {gigDetailModal.images.map((url, i) => (
+                                            <img key={i} src={url} alt={`Portfolio ${i + 1}`} style={{ width: '150px', height: '150px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border)' }} />
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                        {gigDetailModal.description ? (
+                            )}
+                            {gigDetailModal.description ? (
+                                <div className="modal-section">
+                                    <h3>Description</h3>
+                                    <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{gigDetailModal.description}</p>
+                                </div>
+                            ) : (
+                                <div className="modal-section">
+                                    <p style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No description provided.</p>
+                                </div>
+                            )}
+                            {gigDetailModal.commitments && (
+                                <div className="modal-section">
+                                    <h3>What I Commit To</h3>
+                                    <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{gigDetailModal.commitments}</p>
+                                </div>
+                            )}
+                            {gigDetailModal.requirements && (
+                                <div className="modal-section">
+                                    <h3>Requirements</h3>
+                                    <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{gigDetailModal.requirements}</p>
+                                </div>
+                            )}
                             <div className="modal-section">
-                                <h3>Description</h3>
-                                <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{gigDetailModal.description}</p>
+                                <h3>Price</h3>
+                                <span className="gig-price" style={{ fontSize: 24 }}>${gigDetailModal.price?.toFixed(2)}</span>
                             </div>
-                        ) : (
-                            <div className="modal-section">
-                                <p style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No description provided.</p>
-                            </div>
-                        )}
-                        {gigDetailModal.commitments && (
-                            <div className="modal-section">
-                                <h3>What I Commit To</h3>
-                                <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{gigDetailModal.commitments}</p>
-                            </div>
-                        )}
-                        {gigDetailModal.requirements && (
-                            <div className="modal-section">
-                                <h3>Requirements</h3>
-                                <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{gigDetailModal.requirements}</p>
-                            </div>
-                        )}
-                        <div className="modal-section">
-                            <h3>Price</h3>
-                            <span className="gig-price" style={{ fontSize: 24 }}>${gigDetailModal.price?.toFixed(2)}</span>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {toast && <div className={`toast ${toastType}`}>{toast}</div>}
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile } from '@/lib/stores';
@@ -44,11 +44,78 @@ export default function GigsPage() {
     const [profileModal, setProfileModal] = useState(null);
     const [profileRatings, setProfileRatings] = useState([]);
     const [loadingRatings, setLoadingRatings] = useState(false);
+    const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+    const [favorites, setFavorites] = useState([]);
+    const [recentSearches, setRecentSearches] = useState([]);
+
+    // Filters
+    const [showFilters, setShowFilters] = useState(false);
+    const [availabilityDays, setAvailabilityDays] = useState([]);
+    const [timeFilter, setTimeFilter] = useState('');
+    const filterInnerRef = useRef(null);
+    const [panelHeight, setPanelHeight] = useState(0);
+
+    const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const TIMES = ['Mornings', 'Midday', 'Afternoon', 'Evening', 'Night', 'No preference'];
+
+    useEffect(() => {
+        if (filterInnerRef.current) {
+            setPanelHeight(filterInnerRef.current.scrollHeight);
+        }
+    }, [showFilters, availabilityDays, timeFilter]);
+
+    const hasActiveFilters = availabilityDays.length > 0 || (timeFilter && timeFilter !== 'No preference');
+
+    function toggleDay(day) {
+        setAvailabilityDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
+    }
+
+    function clearFilters() {
+        setAvailabilityDays([]);
+        setTimeFilter('');
+    }
 
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
         loadGigs();
+        loadFavorites();
+        loadRecentSearches();
     }, [user]);
+
+    async function loadFavorites() {
+        if (!user) return;
+        const { data } = await supabase.from('favorites').select('favorited_id').eq('user_id', user.id).eq('type', 'gig');
+        if (data) setFavorites(data.map(f => f.favorited_id));
+    }
+
+    async function toggleFavorite(odId) {
+        if (!user) return;
+        const isFav = favorites.includes(odId);
+        if (isFav) {
+            await supabase.from('favorites').delete().eq('user_id', user.id).eq('favorited_id', odId).eq('type', 'gig');
+            setFavorites(favorites.filter(id => id !== odId));
+        } else {
+            await supabase.from('favorites').insert({ user_id: user.id, favorited_id: odId, type: 'gig' });
+            setFavorites([...favorites, odId]);
+        }
+    }
+
+    function loadRecentSearches() {
+        const saved = localStorage.getItem('gig_recent_searches');
+        if (saved) setRecentSearches(JSON.parse(saved));
+    }
+
+    function addRecentSearch(query) {
+        if (!query?.trim()) return;
+        const updated = [query, ...recentSearches.filter(s => s !== query)].slice(0, 5);
+        setRecentSearches(updated);
+        localStorage.setItem('gig_recent_searches', JSON.stringify(updated));
+    }
+
+    function clearRecentSearches() {
+        setRecentSearches([]);
+        localStorage.removeItem('gig_recent_searches');
+    }
 
     async function loadGigs() {
         setBusy(true);
@@ -86,15 +153,41 @@ export default function GigsPage() {
     };
 
     const browseGigs = useMemo(() => {
-        const others = allGigs.filter(g => g.user_id !== user?.id);
-        if (!searchQuery) return others;
-        const q = searchQuery.toLowerCase();
-        return others.filter(g =>
-            g.title?.toLowerCase().includes(q) ||
-            g.category?.toLowerCase().includes(q) ||
-            g.profile?.full_name?.toLowerCase().includes(q)
-        );
-    }, [allGigs, user, searchQuery]);
+        let gigs = allGigs.filter(g => g.user_id !== user?.id);
+
+        // Favorites filter
+        if (showFavoritesOnly) {
+            gigs = gigs.filter(g => favorites.includes(g.user_id));
+        }
+
+        // Search filter
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            gigs = gigs.filter(g =>
+                g.title?.toLowerCase().includes(q) ||
+                g.category?.toLowerCase().includes(q) ||
+                g.profile?.full_name?.toLowerCase().includes(q)
+            );
+        }
+
+        // Availability days filter
+        if (availabilityDays.length > 0) {
+            gigs = gigs.filter(g =>
+                availabilityDays.some(day =>
+                    g.profile?.availability?.some(slot => slot.toLowerCase().includes(day.toLowerCase()))
+                )
+            );
+        }
+
+        // Time filter
+        if (timeFilter && timeFilter !== 'No preference') {
+            gigs = gigs.filter(g =>
+                g.profile?.availability?.some(slot => slot.toLowerCase().includes(timeFilter.toLowerCase()))
+            );
+        }
+
+        return gigs;
+    }, [allGigs, user, searchQuery, showFavoritesOnly, favorites, availabilityDays, timeFilter]);
 
     function showToast(msg, type = 'success') {
         setToast(msg);
@@ -168,17 +261,93 @@ export default function GigsPage() {
                     <Link to="/my-listings" className="btn btn-secondary" style={{ background: '#fff', border: '2px solid #c99772' }}>My Listings</Link>
                 </div>
 
-                <div className="search-box" style={{ marginBottom: 24 }}>
-                    <input
-                        type="text"
-                        placeholder="Search gigs..."
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                    />
+                {/* Search row */}
+                <div style={{ marginBottom: '24px' }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
+                        <div className="search-box" style={{ flex: 1 }}>
+                            <input
+                                type="text"
+                                placeholder="Search gigs..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') addRecentSearch(searchQuery); }}
+                            />
+                        </div>
+                        <button
+                            className={`btn btn-secondary sj-filter-btn ${showFilters ? 'sj-filter-btn-open' : ''}`}
+                            onClick={() => setShowFilters(v => !v)}
+                        >
+                            {hasActiveFilters && <span className="sj-filter-dot" />}
+                            🔍 Filters
+                            <span className={`sj-chevron ${showFilters ? 'sj-chevron-up' : ''}`}>▾</span>
+                        </button>
+                        <button
+                            className={`btn ${showFavoritesOnly ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setShowFavoritesOnly(v => !v)}
+                            style={{ padding: '10px 16px' }}
+                        >
+                            ⭐ Favorites {showFavoritesOnly ? '✓' : ''}
+                        </button>
+                    </div>
+
+                    {/* Recent searches */}
+                    {recentSearches.length > 0 && !searchQuery && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                            <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 500 }}>Recent:</span>
+                            {recentSearches.map((s, i) => (
+                                <button key={i} className="sj-recent-chip" onClick={() => setSearchQuery(s)}>{s}</button>
+                            ))}
+                            <button className="sj-clear-btn" onClick={clearRecentSearches}>Clear</button>
+                        </div>
+                    )}
+
+                    {/* Slide-down filter panel */}
+                    <div
+                        className="sj-filter-panel"
+                        style={{ maxHeight: showFilters ? `${panelHeight}px` : '0px' }}
+                    >
+                        <div className="sj-filter-inner" ref={filterInnerRef}>
+                            <div className="sj-filter-group">
+                                <label className="sj-filter-label">Availability</label>
+                                <div className="sj-chips">
+                                    {DAYS.map(day => (
+                                        <button
+                                            key={day}
+                                            className={`sj-chip ${availabilityDays.includes(day) ? 'sj-chip-on' : ''}`}
+                                            onClick={() => toggleDay(day)}
+                                        >
+                                            {day.slice(0, 3)}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="sj-filter-group">
+                                <label className="sj-filter-label">Time of day</label>
+                                <div className="sj-chips">
+                                    {TIMES.map(time => (
+                                        <button
+                                            key={time}
+                                            className={`sj-chip ${timeFilter === time ? 'sj-chip-on' : ''}`}
+                                            onClick={() => setTimeFilter(timeFilter === time ? '' : time)}
+                                        >
+                                            {time}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {hasActiveFilters && (
+                                <button className="sj-clear-filters-btn" onClick={clearFilters}>
+                                    Clear all filters
+                                </button>
+                            )}
+                        </div>
+                    </div>
                 </div>
-                <div style={{ marginBottom: '20px' }}>
-                    <SliderSearch onCategorySelect={handleCategorySelect} categories={GIG_CATEGORIES} />
-                </div>
+
+                {/* Category slider */}
+                <SliderSearch onCategorySelect={handleCategorySelect} categories={GIG_CATEGORIES} />
 
                 {busy ? (
                     <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
@@ -196,12 +365,24 @@ export default function GigsPage() {
                 ) : (
                     <div className="gigs-grid">
                         {browseGigs.map((gig, i) => (
-                            <div key={gig.id} className="gig-card fade-up" style={{ animationDelay: `${i * 0.04}s` }}>
+                            <div
+                                key={gig.id}
+                                className="gig-card fade-up"
+                                style={{ animationDelay: `${i * 0.04}s`, position: 'relative', cursor: 'pointer' }}
+                                onClick={() => navigate(`/gigs/${gig.id}`)}
+                            >
+                                <button
+                                    className={`sj-fav-btn ${favorites.includes(gig.user_id) ? 'sj-fav-btn-active' : ''}`}
+                                    onClick={e => { e.stopPropagation(); toggleFavorite(gig.user_id); }}
+                                    title={favorites.includes(gig.user_id) ? 'Remove from favorites' : 'Add to favorites'}
+                                >
+                                    {favorites.includes(gig.user_id) ? '⭐' : '☆'}
+                                </button>
                                 <div className="gig-card-header">
                                     <div className="avatar">{initials(gig.profile?.full_name)}</div>
                                     <div style={{ flex: 1 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
-                                            <p className="gig-author" style={{ cursor: 'pointer', textDecoration: 'underline', margin: 0 }} onClick={() => openProfileModal(gig.profile)}>
+                                            <p className="gig-author" style={{ cursor: 'pointer', textDecoration: 'underline', margin: 0 }} onClick={e => { e.stopPropagation(); navigate(`/profile/${gig.profile?.id}`); }}>
                                                 {gig.profile?.full_name ?? 'Unknown'}
                                             </p>
                                             {gig.avgRating && (
@@ -225,10 +406,9 @@ export default function GigsPage() {
                                     <span className="gig-price">${gig.price?.toFixed(2)}</span>
                                     <button
                                         className="btn btn-primary btn-sm"
-                                        disabled={sendingId === gig.id}
-                                        onClick={() => openPaymentModal(gig)}
+                                        onClick={e => { e.stopPropagation(); navigate(`/gigs/${gig.id}`); }}
                                     >
-                                        {sendingId === gig.id ? 'Sending...' : 'Hire'}
+                                        View Details
                                     </button>
                                 </div>
                             </div>
@@ -547,6 +727,147 @@ export default function GigsPage() {
         .payment-currency { padding: 10px 12px; font-size: 18px; font-weight: 700; color: var(--text); background: var(--surface-alt); border-right: 1px solid var(--border); }
         .amount-input { flex: 1; border: none; outline: none; padding: 10px 14px; font-size: 18px; font-weight: 600; font-family: var(--font-body); color: var(--text); background: transparent; width: 100%; }
         .amount-input::placeholder { color: var(--text-muted); font-weight: 400; }
+
+        /* ── Filter button ── */
+        .sj-filter-btn {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 16px;
+            white-space: nowrap;
+        }
+        .sj-filter-btn-open {
+            border-color: var(--primary) !important;
+            color: var(--primary) !important;
+        }
+        .sj-filter-dot {
+            width: 6px; height: 6px;
+            background: var(--primary);
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .sj-chevron {
+            font-size: 12px;
+            display: inline-block;
+            transition: transform 0.22s ease;
+            margin-left: 2px;
+        }
+        .sj-chevron-up { transform: rotate(180deg); }
+
+        /* ── Slide-down panel ── */
+        .sj-filter-panel {
+            overflow: hidden;
+            transition: max-height 0.30s cubic-bezier(0.4, 0, 0.2, 1);
+            max-height: 0;
+        }
+        .sj-filter-inner {
+            padding: 20px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+        .sj-filter-group { display: flex; flex-direction: column; gap: 8px; }
+        .sj-filter-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+        }
+
+        /* ── Chips ── */
+        .sj-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+        .sj-chip {
+            padding: 6px 14px;
+            border-radius: 100px;
+            border: 1.5px solid var(--border);
+            background: var(--surface-alt, #f5f4f0);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.14s, border-color 0.14s, color 0.14s, transform 0.1s;
+        }
+        .sj-chip:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            transform: translateY(-1px);
+        }
+        .sj-chip-on {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+            transform: translateY(-1px);
+        }
+        .sj-chip-on:hover { opacity: 0.88; color: #fff; }
+
+        /* ── Clear filters ── */
+        .sj-clear-filters-btn {
+            align-self: flex-start;
+            padding: 6px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: transparent;
+            font-size: 13px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-family: inherit;
+            transition: border-color 0.14s, color 0.14s;
+        }
+        .sj-clear-filters-btn:hover {
+            border-color: var(--text-secondary);
+            color: var(--text-primary);
+        }
+
+        /* ── Recent searches ── */
+        .sj-recent-chip {
+            padding: 4px 10px;
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-family: inherit;
+            transition: border-color 0.14s;
+        }
+        .sj-recent-chip:hover { border-color: var(--text-secondary); }
+        .sj-clear-btn {
+            padding: 4px 8px;
+            background: transparent;
+            border: none;
+            font-size: 12px;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-family: inherit;
+        }
+        .sj-clear-btn:hover { color: var(--text-primary); }
+
+        /* ── Favorite button ── */
+        .sj-fav-btn {
+            position: absolute;
+            top: 12px; right: 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 50%;
+            width: 32px; height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+            transition: transform 0.12s, background 0.14s;
+        }
+        .sj-fav-btn:hover { transform: scale(1.12); }
+        .sj-fav-btn-active { background: #fbbf24; border-color: #fbbf24; }
       `}</style>
         </>
     );

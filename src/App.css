@@ -21,6 +21,7 @@ button,
 .btn-primary {
   background: var(--text);
   color: var(--bg);
+
   padding: 13px 28px;
   font-size: 15px;
 }
@@ -629,4 +630,21 @@ label {
 /* Hide scrollbar for horizontal category slider */
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* Buttonz */
+
+.sj-filter-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  white-space: nowrap;
+  background-color: #fff;
+}
+
+.sj-filter-btn-open {
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
 }
