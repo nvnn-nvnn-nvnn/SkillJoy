@@ -19,7 +19,10 @@ import Swaps from './app-pages/Swaps'
 import MySwaps from './app-pages/MySwaps'
 import Rewards from './app-pages/Rewards'
 import Gigs from './app-pages/Gigs'
+import GigDetails from './app-pages/GigDetails'
 import MyListings from './app-pages/MyListings'
+import Profile from './app-pages/Profile'
+import Settings from './app-pages/Settings'
 
 function App() {
   return (
@@ -37,7 +40,11 @@ function App() {
           <Route path="/my-swaps" element={<MySwaps />} />
           <Route path="/rewards" element={<Rewards />} />
           <Route path="/gigs" element={<Gigs />} />
+          <Route path="/gigs/:gigId" element={<GigDetails />} />
           <Route path="/my-listings" element={<MyListings />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/profile/:userId" element={<Profile />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

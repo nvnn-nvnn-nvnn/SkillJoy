@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth, getSkillName } from '@/lib/stores';
 
@@ -38,7 +38,12 @@ export default function ChatPage() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
 
-    const [chatMode, setChatMode] = useState('swaps');
+    // Replace your initial state declarations with these:
+    const [chatMode, setChatMode] = useState(() => localStorage.getItem('chat_mode') || 'swaps');
+    const [activeTab, setActiveTab] = useState(() => localStorage.getItem('chat_tab') || 'active');
+    const [gigRoleTab, setGigRoleTab] = useState(() => localStorage.getItem('chat_role_tab') || 'hiring');
+
+
     const [conversations, setConversations] = useState([]);
     const [gigConversations, setGigConversations] = useState([]);
     const [activeSwapId, setActiveSwapId] = useState(null);
@@ -49,8 +54,8 @@ export default function ChatPage() {
     const [loadingConvos, setLoadingConvos] = useState(true);
     const [loadingMsgs, setLoadingMsgs] = useState(false);
     const [error, setError] = useState('');
-    const [activeTab, setActiveTab] = useState('active');
-    const [gigRoleTab, setGigRoleTab] = useState('all');
+
+
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [modalProfile, setModalProfile] = useState(null);
     const [showRatingModal, setShowRatingModal] = useState(false);
@@ -514,6 +519,14 @@ export default function ChatPage() {
         setActiveTab('active');
     }
 
+
+    // Tab information
+    useEffect(() => {
+        localStorage.setItem('chat_mode', chatMode);
+        localStorage.setItem('chat_tab', activeTab);
+        localStorage.setItem('chat_role_tab', gigRoleTab);
+    }, [chatMode, activeTab, gigRoleTab]);
+
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
         (async () => {
@@ -543,7 +556,7 @@ export default function ChatPage() {
         })();
     }, [chatMode, profile]);
 
-// ...
+    // ...
     return (
         <>
             <title>Chat — SkillJoy</title>
@@ -570,7 +583,7 @@ export default function ChatPage() {
                         </div>
                         {chatMode === 'gigs' && (
                             <div className="chat-role-tabs">
-                                {['all', 'hiring', 'providing'].map(rt => (
+                                {['providing', 'hiring',].map(rt => (
                                     <button
                                         key={rt}
                                         className={`role-tab${gigRoleTab === rt ? ' active' : ''}`}
@@ -793,6 +806,10 @@ export default function ChatPage() {
                             <div><h2>{modalProfile.full_name}</h2></div>
                         </div>
 
+                        <Link to={`/profile/${modalProfile.id}`}>
+                            View Profile
+                        </Link>
+
                         {(chatMode === 'swaps' || chatMode === 'gigs') && (
                             <div className="complete-swap">
                                 <div className="complete-swap-header">
@@ -863,48 +880,51 @@ export default function ChatPage() {
                             </div>
                         )}
                     </div>
-                </div>
-            )}
+                </div >
+            )
+            }
 
             {/* ── Rating Modal ── */}
-            {showRatingModal && activeConvo && (
-                <div className="modal-backdrop" onClick={closeRatingModal}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
-                        <button className="modal-close" onClick={closeRatingModal}>✕</button>
-                        <div className="modal-header">
-                            <div>
-                                <h2>Rate Your Experience</h2>
-                                <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 8 }}>
-                                    How was your {chatMode === 'swaps' ? 'swap' : 'experience'} with {activeConvo.other?.full_name}?
-                                </p>
+            {
+                showRatingModal && activeConvo && (
+                    <div className="modal-backdrop" onClick={closeRatingModal}>
+                        <div className="modal" onClick={e => e.stopPropagation()}>
+                            <button className="modal-close" onClick={closeRatingModal}>✕</button>
+                            <div className="modal-header">
+                                <div>
+                                    <h2>Rate Your Experience</h2>
+                                    <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 8 }}>
+                                        How was your {chatMode === 'swaps' ? 'swap' : 'experience'} with {activeConvo.other?.full_name}?
+                                    </p>
+                                </div>
                             </div>
-                        </div>
-                        <div className="rating-section">
-                            <h3>Your Rating</h3>
-                            <div className="star-rating">
-                                {[1, 2, 3, 4, 5].map(star => (
-                                    <button key={star} className={`star-btn${ratingValue >= star ? ' active' : ''}`} onClick={() => setRatingValue(star)}>★</button>
-                                ))}
+                            <div className="rating-section">
+                                <h3>Your Rating</h3>
+                                <div className="star-rating">
+                                    {[1, 2, 3, 4, 5].map(star => (
+                                        <button key={star} className={`star-btn${ratingValue >= star ? ' active' : ''}`} onClick={() => setRatingValue(star)}>★</button>
+                                    ))}
+                                </div>
+                                <p className="rating-description">{RATING_LABELS[ratingValue]}</p>
                             </div>
-                            <p className="rating-description">{RATING_LABELS[ratingValue]}</p>
-                        </div>
-                        <div className="modal-section">
-                            <h3>Comment (Optional)</h3>
-                            <textarea
-                                value={ratingComment}
-                                onChange={e => setRatingComment(e.target.value)}
-                                placeholder="Share your experience..."
-                                className="rating-comment"
-                                rows={4}
-                            />
-                        </div>
-                        <div className="modal-actions">
-                            <button className="btn btn-secondary" onClick={closeRatingModal}>Skip for Now</button>
-                            <button className="btn btn-primary" onClick={submitRating} disabled={ratingValue === 0}>Submit Rating</button>
+                            <div className="modal-section">
+                                <h3>Comment (Optional)</h3>
+                                <textarea
+                                    value={ratingComment}
+                                    onChange={e => setRatingComment(e.target.value)}
+                                    placeholder="Share your experience..."
+                                    className="rating-comment"
+                                    rows={4}
+                                />
+                            </div>
+                            <div className="modal-actions">
+                                <button className="btn btn-secondary" onClick={closeRatingModal}>Skip for Now</button>
+                                <button className="btn btn-primary" onClick={submitRating} disabled={ratingValue === 0}>Submit Rating</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             <style>{`
             .chat-shell { display: flex; height: calc(100vh - 57px); overflow: hidden; background: var(--bg); }

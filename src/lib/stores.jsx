@@ -35,9 +35,18 @@ export const SKILL_CATEGORIES = [
 
 export const ALL_SKILLS = SKILL_CATEGORIES.flatMap((c) => c.skills)
 
+export const DAYS_OF_WEEK = [
+  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+]
+
+export const TIME_PERIODS = [
+  'Morning', 'Midday', 'Afternoon', 'Evening', 'Night'
+]
+
+// Legacy - kept for backward compatibility
 export const AVAILABILITY_OPTIONS = [
   'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
-  'Mornings', 'Afternoons', 'Evenings',
+  'Morning', 'Midday', 'Afternoon', 'Evening', 'Night'
 ]
 
 // ── Helper functions ────────────────────────────────────────────────────────

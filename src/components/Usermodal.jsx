@@ -69,8 +69,13 @@ export default function UserModal({ user, onClose, onPropose, submitting }) {
 
                     <div className="user-header" style={{ marginBottom: 20 }}>
                         <div className="avatar avatar-lg">{initials(user.full_name)}</div>
-                        <div>
-                            <h2>{user.full_name}</h2>
+                        <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                                <h2 style={{ margin: 0 }}>{user.full_name}</h2>
+                                <Link to={`/profile/${user.id}`} className="btn btn-sm btn-secondary" onClick={onClose}>
+                                    View Profile →
+                                </Link>
+                            </div>
                             {user.bio && <p className="bio">{user.bio}</p>}
                         </div>
                     </div>

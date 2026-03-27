@@ -1,6 +1,7 @@
 import { useUser, useProfile, useAuth } from '@/lib/stores';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import Notifications from './Notifications';
 
 export default function Header() {
   const user = useUser();
@@ -32,7 +33,8 @@ export default function Header() {
         <div className="points-badge">
           🏆 {profile?.points || 0}
         </div>
-        <Link to="/onboarding" className={`nav-link${currentPath === '/onboarding' ? ' active' : ''}`}>Profile</Link>
+        <Notifications />
+        <Link to="/profile" className={`nav-link${currentPath === '/profile' ? ' active' : ''}`}>Profile</Link>
       </div>
     </nav>
   );
