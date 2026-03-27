@@ -21,6 +21,8 @@ import Rewards from './app-pages/Rewards'
 import Gigs from './app-pages/Gigs'
 import GigDetails from './app-pages/GigDetails'
 import MyListings from './app-pages/MyListings'
+import MyOrders from './app-pages/MyOrders'
+import Disputes from './app-pages/Disputes'
 import Profile from './app-pages/Profile'
 import Settings from './app-pages/Settings'
 
@@ -42,6 +44,8 @@ function App() {
           <Route path="/gigs" element={<Gigs />} />
           <Route path="/gigs/:gigId" element={<GigDetails />} />
           <Route path="/my-listings" element={<MyListings />} />
+          <Route path="/my-orders" element={<MyOrders />} />
+          <Route path="/disputes" element={<Disputes />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/profile/:userId" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />

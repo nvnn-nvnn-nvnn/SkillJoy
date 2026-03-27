@@ -147,27 +147,31 @@ export default function MySwaps() {
             <title>My Swaps — SkillJoy</title>
 
             <div className="page">
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '16px', marginBottom: '24px' }}>
-                    <div>
-                        <h1 className="page-title">My Swaps</h1>
-                        <p className="page-subtitle" style={{ color: '#fff' }}>Manage your skill exchange proposals</p>
+                <div className='swaps-hero-section'>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '16px', marginBottom: '24px' }}>
+                        <div>
+                            <h1 className="page-title">My Swaps</h1>
+                            <p className="page-subtitle" style={{ color: '#000' }}>Manage your skill exchange proposals</p>
+                        </div>
+                        <button className="btn btn-secondary" style={{ backgroundColor: '#fff', border: '1px solid #000' }} onClick={() => navigate('/swaps')}>
+                            ← Back to Discover
+                        </button>
                     </div>
-                    <button className="btn btn-secondary" style={{ backgroundColor: '#fff', border: '1px solid #000' }} onClick={() => navigate('/swaps')}>
-                        ← Back to Discover
-                    </button>
-                </div>
 
-                <div className="tabs">
-                    <button className={`tab ${tab === 'received' ? 'active' : ''}`} onClick={() => setTab('received')}>
-                        Received
-                        {pendingCount > 0 && <span className="pending-dot">{pendingCount}</span>}
-                    </button>
-                    <button className={`tab ${tab === 'sent' ? 'active' : ''}`} onClick={() => setTab('sent')}>
-                        Sent
-                    </button>
-                    <button className={`tab ${tab === 'completed' ? 'active' : ''}`} onClick={() => setTab('completed')}>
-                        Completed
-                    </button>
+                    <div className="tabs" style={{ border: "1px solid #000", backgroundColor: "#ec9146" }}>
+                        <button className={`tab ${tab === 'received' ? 'active' : ''}`} onClick={() => setTab('received')}>
+                            Received
+                            {pendingCount > 0 && <span className="pending-dot">{pendingCount}</span>}
+                        </button>
+                        <button className={`tab ${tab === 'sent' ? 'active' : ''}`} onClick={() => setTab('sent')}>
+                            Sent
+                        </button>
+                        <button className={`tab ${tab === 'completed' ? 'active' : ''}`} onClick={() => setTab('completed')}>
+                            Completed
+                        </button>
+                    </div>
+
+
                 </div>
 
                 {busy ? (
@@ -332,6 +336,13 @@ export default function MySwaps() {
             {toast && <div className={`toast ${toastType}`}>{toast}</div>}
 
             <style>{`
+
+                .swaps-hero-section {
+                    background: #f0ede8;
+                    padding: 24px;
+                    border-radius: 16px;
+                    margin-bottom: 24px;
+                }
                 .pending-dot {
                     background: var(--accent); color: white; font-size: 11px; font-weight: 600;
                     width: 18px; height: 18px; border-radius: 50%;

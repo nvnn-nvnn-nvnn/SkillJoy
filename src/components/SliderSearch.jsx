@@ -65,6 +65,7 @@ export default function SliderSearch({ onCategorySelect, categories = DEFAULT_CA
             <span style={{ fontWeight: 'bold', fontSize: '1.25rem', color: "var(--text)" }}>Categories</span>
 
             <div
+
                 style={{
                     display: 'flex',
                     gap: '1rem',

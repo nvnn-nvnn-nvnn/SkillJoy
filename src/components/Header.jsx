@@ -27,6 +27,7 @@ export default function Header() {
         <Link to="/matches" className={`nav-link${currentPath === '/matches' ? ' active' : ''}`}>Matches</Link>
         <Link to="/swaps" className={`nav-link${currentPath === '/swaps' ? ' active' : ''}`}>Swaps</Link>
         <Link to="/gigs" className={`nav-link${currentPath === '/gigs' ? ' active' : ''}`}>Gigs</Link>
+        <Link to="/my-orders" className={`nav-link${currentPath === '/my-orders' ? ' active' : ''}`}>Orders</Link>
         <Link to="/chat" className={`nav-link${currentPath === '/chat' ? ' active' : ''}`}>Chat</Link>
         <Link to="/rewards" className={`nav-link${currentPath === '/rewards' ? ' active' : ''}`}>Rewards</Link>
         <div style={{ flex: 1 }} />

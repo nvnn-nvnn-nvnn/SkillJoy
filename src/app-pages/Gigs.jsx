@@ -121,7 +121,7 @@ export default function GigsPage() {
         setBusy(true);
         const { data, error } = await supabase
             .from('gigs')
-            .select('*, profile:profiles!user_id(id, full_name, bio, service_type)')
+            .select('*, profile:profiles!user_id(id, full_name, bio, service_type, availability)')
             .order('created_at', { ascending: false });
 
         if (!error && data) {
@@ -157,7 +157,7 @@ export default function GigsPage() {
 
         // Favorites filter
         if (showFavoritesOnly) {
-            gigs = gigs.filter(g => favorites.includes(g.user_id));
+            gigs = gigs.filter(g => favorites.includes(g.id));
         }
 
         // Search filter
@@ -253,16 +253,17 @@ export default function GigsPage() {
             <title>Gigs — SkillJoy</title>
 
             <div className="page">
-                <div className="page-header" style={{ marginBottom: '20px', }}>
-                    <div>
-                        <h1 className="page-title">Gigs</h1>
-                        <p className="page-subtitle" style={{ color: '#fff' }}>Find someone to hire for paid services.</p>
+                {/* Hero + Search merged section */}
+                <div className="gigs-hero-section">
+                    <div className="page-header" style={{ marginBottom: '20px' }}>
+                        <div>
+                            <h1 className="page-title">Gigs</h1>
+                            <p className="page-subtitle" style={{ color: '#000', fontSize: '1rem' }}>Find freelancers at your University</p>
+                        </div>
+                        <Link to="/my-listings" className="btn btn-secondary" style={{ background: '#fff', border: '2px solid #c99772' }}>My Listings</Link>
                     </div>
-                    <Link to="/my-listings" className="btn btn-secondary" style={{ background: '#fff', border: '2px solid #c99772' }}>My Listings</Link>
-                </div>
 
-                {/* Search row */}
-                <div style={{ marginBottom: '24px' }}>
+                    {/* Search row */}
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
                         <div className="search-box" style={{ flex: 1 }}>
                             <input
@@ -271,11 +272,13 @@ export default function GigsPage() {
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
                                 onKeyDown={e => { if (e.key === 'Enter') addRecentSearch(searchQuery); }}
+                                style={{ background: '#fff' }}
                             />
                         </div>
                         <button
                             className={`btn btn-secondary sj-filter-btn ${showFilters ? 'sj-filter-btn-open' : ''}`}
                             onClick={() => setShowFilters(v => !v)}
+                            style={{ background: '#fff' }}
                         >
                             {hasActiveFilters && <span className="sj-filter-dot" />}
                             🔍 Filters
@@ -284,7 +287,7 @@ export default function GigsPage() {
                         <button
                             className={`btn ${showFavoritesOnly ? 'btn-primary' : 'btn-secondary'}`}
                             onClick={() => setShowFavoritesOnly(v => !v)}
-                            style={{ padding: '10px 16px' }}
+                            style={{ padding: '10px 16px', backgroundColor: "#fff" }}
                         >
                             ⭐ Favorites {showFavoritesOnly ? '✓' : ''}
                         </button>
@@ -293,11 +296,11 @@ export default function GigsPage() {
                     {/* Recent searches */}
                     {recentSearches.length > 0 && !searchQuery && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                            <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 500 }}>Recent:</span>
+                            <span style={{ fontSize: '13px', color: '#000', fontWeight: 500 }}>Recent:</span>
                             {recentSearches.map((s, i) => (
                                 <button key={i} className="sj-recent-chip" onClick={() => setSearchQuery(s)}>{s}</button>
                             ))}
-                            <button className="sj-clear-btn" onClick={clearRecentSearches}>Clear</button>
+                            <button className="sj-clear-btn" style={{ color: "#000" }} onClick={clearRecentSearches}>Clear</button>
                         </div>
                     )}
 
@@ -363,7 +366,7 @@ export default function GigsPage() {
                         </Link>
                     </div>
                 ) : (
-                    <div className="gigs-grid">
+                    <div className="gigs-grid" style={{ marginTop: '2rem' }}>
                         {browseGigs.map((gig, i) => (
                             <div
                                 key={gig.id}
@@ -372,11 +375,11 @@ export default function GigsPage() {
                                 onClick={() => navigate(`/gigs/${gig.id}`)}
                             >
                                 <button
-                                    className={`sj-fav-btn ${favorites.includes(gig.user_id) ? 'sj-fav-btn-active' : ''}`}
-                                    onClick={e => { e.stopPropagation(); toggleFavorite(gig.user_id); }}
-                                    title={favorites.includes(gig.user_id) ? 'Remove from favorites' : 'Add to favorites'}
+                                    className={`sj-fav-btn ${favorites.includes(gig.id) ? 'sj-fav-btn-active' : ''}`}
+                                    onClick={e => { e.stopPropagation(); toggleFavorite(gig.id); }}
+                                    title={favorites.includes(gig.id) ? 'Remove from favorites' : 'Add to favorites'}
                                 >
-                                    {favorites.includes(gig.user_id) ? '⭐' : '☆'}
+                                    {favorites.includes(gig.id) ? '⭐' : '☆'}
                                 </button>
                                 <div className="gig-card-header">
                                     <div className="avatar">{initials(gig.profile?.full_name)}</div>
@@ -652,6 +655,12 @@ export default function GigsPage() {
             }
 
             <style>{`
+        .gigs-hero-section {
+          background: #f0ede8;
+          padding: 24px;
+          border-radius: 16px;
+          margin-bottom: 24px;
+        }
         .gigs-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
