@@ -190,39 +190,43 @@ export default function MyListingsPage() {
             <title>My Listings — SkillJoy</title>
 
             <div className="page">
-                <div className="page-header" style={{ marginBottom: '20px' }}>
-                    <div>
-                        <h1 className="page-title">My Listings</h1>
-                        <p className="page-subtitle" style={{ color: '#fff' }}>Manage your gigs and hire requests.</p>
+                <div className="swaps-hero-section">
+                    <div className="page-header" style={{ marginBottom: '20px' }}>
+                        <div>
+                            <h1 className="page-title">My Listings</h1>
+                            <p className="page-subtitle" style={{ color: '#000' }}>Manage your gigs and hire requests.</p>
+                        </div>
+                        <Link to="/gigs" className="btn btn-secondary" style={{ backgroundColor: '#fff', border: '2px solid #c99772' }}>Browse Gigs</Link>
                     </div>
-                    <Link to="/gigs" className="btn btn-secondary" style={{ backgroundColor: '#fff', border: '2px solid #c99772' }}>Browse Gigs</Link>
-                </div>
 
-                {(profile?.service_type !== 'gigs' && profile?.service_type !== 'both') && (
-                    <div className="gig-notice">
-                        <p>Your profile is set to <strong>Skill Swap</strong> only. Update to "Paid Services" or "Both" so others know you're available for hire.</p>
-                        <button className="btn btn-secondary btn-sm" onClick={() => navigate('/onboarding')}>
-                            Update Profile
+                    {(profile?.service_type !== 'gigs' && profile?.service_type !== 'both') && (
+                        <div className="gig-notice">
+                            <p>Your profile is set to <strong>Skill Swap</strong> only. Update to "Paid Services" or "Both" so others know you're available for hire.</p>
+                            <button className="btn btn-secondary btn-sm" onClick={() => navigate('/onboarding')}>
+                                Update Profile
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="tabs">
+                        <button className={`tab ${tab === 'listings' ? 'active' : ''}`} onClick={() => setTab('listings')}>
+                            My Gigs ({myGigs.length})
+                        </button>
+                        <button className={`tab ${tab === 'incoming' ? 'active' : ''}`} onClick={() => setTab('incoming')}>
+                            Incoming {pendingIncoming > 0 && <span className="tab-badge">{pendingIncoming}</span>}
+                        </button>
+                        <button className={`tab ${tab === 'sent' ? 'active' : ''}`} onClick={() => setTab('sent')}>
+                            Sent ({sentRequests.length})
+                        </button>
+                        <button className={`tab ${tab === 'completed' ? 'active' : ''}`} onClick={() => setTab('completed')}>
+                            Completed ({completed.length})
+                        </button>
+                        <button className={`tab ${tab === 'create' ? 'active' : ''}`} onClick={() => setTab('create')}>
+                            + New Gig
                         </button>
                     </div>
-                )}
 
-                <div className="tabs">
-                    <button className={`tab ${tab === 'listings' ? 'active' : ''}`} onClick={() => setTab('listings')}>
-                        My Gigs ({myGigs.length})
-                    </button>
-                    <button className={`tab ${tab === 'incoming' ? 'active' : ''}`} onClick={() => setTab('incoming')}>
-                        Incoming {pendingIncoming > 0 && <span className="tab-badge">{pendingIncoming}</span>}
-                    </button>
-                    <button className={`tab ${tab === 'sent' ? 'active' : ''}`} onClick={() => setTab('sent')}>
-                        Sent ({sentRequests.length})
-                    </button>
-                    <button className={`tab ${tab === 'completed' ? 'active' : ''}`} onClick={() => setTab('completed')}>
-                        Completed ({completed.length})
-                    </button>
-                    <button className={`tab ${tab === 'create' ? 'active' : ''}`} onClick={() => setTab('create')}>
-                        + New Gig
-                    </button>
+
                 </div>
 
                 {busy ? (
@@ -654,6 +658,13 @@ export default function MyListingsPage() {
             {toast && <div className={`toast ${toastType}`}>{toast}</div>}
 
             <style>{`
+
+                     .swaps-hero-section {
+                    background: #f0ede8;
+                    padding: 24px;
+                    border-radius: 16px;
+                    margin-bottom: 24px;
+                }
         .gigs-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

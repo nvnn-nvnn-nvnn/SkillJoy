@@ -171,20 +171,23 @@ export default function ProfilePage() {
             <title>{profile.full_name} — SkillJoy</title>
 
             <div className="page">
-                <div className='' style={{
-                    margin: '20px 0',
-                    backgroundColor: '#fff',
-                    maxWidth: "150px",
-                    border: "2px solid #000",
-                    borderRadius: "10px",
-                    textDecoration: "none",
-                    color: "#000",
-                    padding: "5px"
-
+                <div style={{
+                    margin: '24px 0',
                 }}>
-                    <Link to="/">← Back to Home</Link>
+                    <Link to="/" style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '14px',
+                        fontWeight: 500,
+                        color: 'var(--text-secondary)',
+                        textDecoration: 'none',
+                        transition: 'color 0.15s',
+                    }}>
+                        ← Back to Home
+                    </Link>
                 </div>
-                <div className="profile-header">
+                <div className="profile-header" style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid var(--border)' }}>
                     <div className="avatar avatar-xl">{profile.full_name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'}</div>
                     <div className="profile-header-info">
                         {editMode ? (

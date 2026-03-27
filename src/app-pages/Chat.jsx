@@ -399,6 +399,19 @@ export default function ChatPage() {
         const otherUserId = chatMode === 'swaps'
             ? (activeConvo.requester_id === user.id ? activeConvo.receiver_id : activeConvo.requester_id)
             : (activeConvo.requester_id === user.id ? activeConvo.provider_id : activeConvo.requester_id);
+
+        // FIXED: Check if rating already exists to prevent duplicate key constraint violation
+        const checkQuery = supabase.from('ratings').select('id').eq('rater_id', user.id).eq('rated_id', otherUserId);
+        if (chatMode === 'swaps') checkQuery.eq('swap_id', activeSwapId);
+        else checkQuery.eq('gig_request_id', activeGigReqId);
+        const { data: existingRating } = await checkQuery.maybeSingle();
+
+        if (existingRating) {
+            showToast('You have already rated this exchange');
+            setShowRatingModal(false);
+            return;
+        }
+
         const payload = { rater_id: user.id, rated_id: otherUserId, rating: ratingValue, comment: ratingComment };
         if (chatMode === 'swaps') payload.swap_id = activeSwapId;
         else payload.gig_request_id = activeGigReqId;

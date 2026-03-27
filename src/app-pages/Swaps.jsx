@@ -199,106 +199,107 @@ export default function Swaps() {
 
             <div className="page">
 
-                {/* Header */}
-                <div style={{ display: 'flex', alignItems: 'flex-start', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
-                    <div>
-                        <h1 className="page-title" style={{ textAlign: 'left' }}>Discover Swaps</h1>
-                        {profile?.skills_learn?.length > 0 && (
-                            <p className="page-subtitle" style={{ color: '#000' }}>
-                                Based on your desire to learn <strong>{profile.skills_learn.map(s => getSkillName(s)).join(', ')}</strong>
-                            </p>
+                <div className='swaps-hero-section'>
+
+                    <div style={{ display: 'flex', alignItems: 'flex-start', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+                        <div>
+                            <h1 className="page-title" style={{ textAlign: 'left' }}>Discover Swaps</h1>
+                            {profile?.skills_learn?.length > 0 && (
+                                <p className="page-subtitle" style={{ color: '#000' }}>
+                                    Based on your desire to learn <strong>{profile.skills_learn.map(s => getSkillName(s)).join(', ')}</strong>
+                                </p>
+                            )}
+                        </div>
+                        <button
+                            className="btn btn-primary"
+                            style={{ backgroundColor: '#fff', color: '#000', border: '1px solid #000' }}
+                            onClick={() => navigate('/my-swaps')}
+                        >
+                            My Swaps →
+                        </button>
+                    </div>
+
+                    {/* Search row */}
+                    <div style={{ marginBottom: '24px' }}>
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
+                            <div className="search-box" style={{ flex: 1 }}>
+                                <input
+                                    type="text"
+                                    placeholder="Search skills or users…"
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') addRecentSearch(searchQuery); }}
+                                />
+                            </div>
+                            <button
+                                className={`btn btn-secondary sj-filter-btn ${showFilters ? 'sj-filter-btn-open' : ''}`}
+                                onClick={() => setShowFilters(v => !v)}
+                            >
+                                {hasActiveFilters && <span className="sj-filter-dot" />}
+                                🔍 Filters
+                                <span className={`sj-chevron ${showFilters ? 'sj-chevron-up' : ''}`}>▾</span>
+                            </button>
+                            <button
+                                className={`btn ${showFavoritesOnly ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => setShowFavoritesOnly(v => !v)}
+                                style={{ padding: '10px 16px' }}
+                            >
+                                ⭐ Favorites {showFavoritesOnly ? '✓' : ''}
+                            </button>
+                        </div>
+
+                        {/* Recent searches */}
+                        {recentSearches.length > 0 && !searchQuery && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                                <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 500 }}>Recent:</span>
+                                {recentSearches.map((s, i) => (
+                                    <button key={i} className="sj-recent-chip" onClick={() => setSearchQuery(s)}>{s}</button>
+                                ))}
+                                <button className="sj-clear-btn" style={{ color: "#000" }} onClick={clearRecentSearches}>Clear</button>
+                            </div>
                         )}
-                    </div>
-                    <button
-                        className="btn btn-primary"
-                        style={{ backgroundColor: '#fff', color: '#000', border: '1px solid #000' }}
-                        onClick={() => navigate('/my-swaps')}
-                    >
-                        My Swaps →
-                    </button>
-                </div>
 
-                {/* Search row */}
-                <div style={{ marginBottom: '24px' }}>
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
-                        <div className="search-box" style={{ flex: 1 }}>
-                            <input
-                                type="text"
-                                placeholder="Search skills or users…"
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') addRecentSearch(searchQuery); }}
-                            />
-                        </div>
-                        <button
-                            className={`btn btn-secondary sj-filter-btn ${showFilters ? 'sj-filter-btn-open' : ''}`}
-                            onClick={() => setShowFilters(v => !v)}
+                        {/* Slide-down filter panel */}
+                        <div
+                            className="sj-filter-panel"
+                            style={{ maxHeight: showFilters ? `${panelHeight}px` : '0px' }}
                         >
-                            {hasActiveFilters && <span className="sj-filter-dot" />}
-                            🔍 Filters
-                            <span className={`sj-chevron ${showFilters ? 'sj-chevron-up' : ''}`}>▾</span>
-                        </button>
-                        <button
-                            className={`btn ${showFavoritesOnly ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => setShowFavoritesOnly(v => !v)}
-                            style={{ padding: '10px 16px' }}
-                        >
-                            ⭐ Favorites {showFavoritesOnly ? '✓' : ''}
-                        </button>
-                    </div>
+                            <div className="sj-filter-inner" ref={filterInnerRef}>
 
-                    {/* Recent searches */}
-                    {recentSearches.length > 0 && !searchQuery && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                            <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 500 }}>Recent:</span>
-                            {recentSearches.map((s, i) => (
-                                <button key={i} className="sj-recent-chip" onClick={() => setSearchQuery(s)}>{s}</button>
-                            ))}
-                            <button className="sj-clear-btn" onClick={clearRecentSearches}>Clear</button>
-                        </div>
-                    )}
-
-                    {/* Slide-down filter panel */}
-                    <div
-                        className="sj-filter-panel"
-                        style={{ maxHeight: showFilters ? `${panelHeight}px` : '0px' }}
-                    >
-                        <div className="sj-filter-inner" ref={filterInnerRef}>
-
-                            {/* Availability — M–F day chips */}
-                            <div className="sj-filter-group">
-                                <label className="sj-filter-label">Availability</label>
-                                <div className="sj-chips">
-                                    {DAYS.map(day => (
-                                        <button
-                                            key={day}
-                                            className={`sj-chip ${availabilityDays.includes(day) ? 'sj-chip-on' : ''}`}
-                                            onClick={() => toggleDay(day)}
-                                        >
-                                            {day.slice(0, 3)}
-                                        </button>
-                                    ))}
+                                {/* Availability — M–F day chips */}
+                                <div className="sj-filter-group">
+                                    <label className="sj-filter-label">Availability</label>
+                                    <div className="sj-chips">
+                                        {DAYS.map(day => (
+                                            <button
+                                                key={day}
+                                                className={`sj-chip ${availabilityDays.includes(day) ? 'sj-chip-on' : ''}`}
+                                                onClick={() => toggleDay(day)}
+                                            >
+                                                {day.slice(0, 3)}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
 
-                            {/* Time of day */}
-                            <div className="sj-filter-group">
-                                <label className="sj-filter-label">Time of day</label>
-                                <div className="sj-chips">
-                                    {TIMES.map(time => (
-                                        <button
-                                            key={time}
-                                            className={`sj-chip ${timeFilter === time ? 'sj-chip-on' : ''}`}
-                                            onClick={() => setTimeFilter(timeFilter === time ? '' : time)}
-                                        >
-                                            {time}
-                                        </button>
-                                    ))}
+                                {/* Time of day */}
+                                <div className="sj-filter-group">
+                                    <label className="sj-filter-label">Time of day</label>
+                                    <div className="sj-chips">
+                                        {TIMES.map(time => (
+                                            <button
+                                                key={time}
+                                                className={`sj-chip ${timeFilter === time ? 'sj-chip-on' : ''}`}
+                                                onClick={() => setTimeFilter(timeFilter === time ? '' : time)}
+                                            >
+                                                {time}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
 
-                            {/* Location — commented out */}
-                            {/* <div className="sj-filter-group">
+                                {/* Location — commented out */}
+                                {/* <div className="sj-filter-group">
                                 <label className="sj-filter-label">Location</label>
                                 <input
                                     type="text"
@@ -309,14 +310,20 @@ export default function Swaps() {
                                 />
                             </div> */}
 
-                            {hasActiveFilters && (
-                                <button className="sj-clear-filters-btn" onClick={clearFilters}>
-                                    Clear all filters
-                                </button>
-                            )}
+                                {hasActiveFilters && (
+                                    <button className="sj-clear-filters-btn" onClick={clearFilters}>
+                                        Clear all filters
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
+
+
+
+
                 </div>
+                {/* Header */}
 
                 {/* Category slider */}
                 <SliderSearch onCategorySelect={handleCategorySelect} />
@@ -364,6 +371,12 @@ export default function Swaps() {
             {toast && <div className={`toast ${toastType}`}>{toast}</div>}
 
             <style>{`
+                .swaps-hero-section {
+                    background: #f0ede8;
+                    padding: 24px;
+                    border-radius: 16px;
+                    margin-bottom: 24px;
+                }
                 .search-box { width: 100%; }
 
                 .users-grid {
