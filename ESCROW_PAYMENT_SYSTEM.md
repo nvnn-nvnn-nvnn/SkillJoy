@@ -1,458 +1,365 @@
-# Escrow Payment System - Backend Integration Guide
+# SkillJoy — Stripe Connect Implementation Guide
 
-## Overview
-
-This document outlines the Fiverr-style escrow payment system implemented in SkillJoy. The frontend is complete with placeholders for backend integration. All payment logic, Stripe API calls, and database updates need to be implemented in your backend.
+This guide walks you through implementing Stripe Connect so sellers can actually receive payouts. Everything in this app already works except this final piece — when a buyer releases funds, the money sits in your Stripe account and never reaches the seller.
 
 ---
 
-## Payment Flow (Fiverr-Style)
+## How Stripe Connect Works (Plain English)
 
-```
-1. Buyer places order
-   ↓ payment_status: 'pending'
-   
-2. Buyer accepts & pays
-   ↓ payment_status: 'escrowed' (money held by platform)
-   ↓ Stripe charges buyer's card
-   ↓ Funds held in escrow
-   
-3. Provider delivers work
-   ↓ status: 'delivered'
-   ↓ auto_release_date set to +3 days
-   
-4. Buyer reviews (3-day window):
-   
-   Option A: Accept
-   ↓ payment_status: 'released'
-   ↓ Funds transferred to provider
-   ↓ 14-day clearing period starts
-   
-   Option B: Dispute
-   ↓ payment_status: 'disputed'
-   ↓ Support team reviews
-   ↓ Resolution: 'refunded' or 'released'
-   
-   Option C: No action
-   ↓ Auto-release after 3 days
-   ↓ payment_status: 'released'
-   
-5. Clearing period (14 days)
-   ↓ Provider can withdraw after clearing
-```
+Right now, when a buyer pays $20 for a gig:
+- Stripe charges the buyer's card
+- $20 lands in **your** Stripe account (the platform)
+- Your DB says `payment_status: 'released'` but nothing moves to the seller
+
+With Stripe Connect:
+- Buyer pays $20
+- Stripe charges the buyer's card
+- $17 moves to the **seller's** Stripe account (their cut)
+- $3 stays in **your** Stripe account (the service fee)
+- The seller can withdraw their $17 to their bank whenever they want
+
+Stripe handles all the KYC (identity verification), bank account linking, and compliance for you. You just redirect sellers to a Stripe-hosted page to set up their account.
 
 ---
 
-## Database Schema
+## Part 1 — Stripe Dashboard Setup
 
-### Migration File
-Location: `supabase/migrations/add_payment_escrow_fields.sql`
+### 1.1 Enable Connect in your Stripe Dashboard
 
-### New Fields in `gig_requests` Table
+1. Go to [dashboard.stripe.com](https://dashboard.stripe.com)
+2. In the left sidebar → **Connect** → **Get started**
+3. Choose **Express** accounts (recommended — Stripe hosts the onboarding UI for you)
+4. Fill in your platform details
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `payment_status` | TEXT | Payment lifecycle state: 'pending', 'escrowed', 'released', 'disputed', 'refunded' |
-| `payment_amount` | DECIMAL(10,2) | Amount paid by buyer |
-| `payment_intent_id` | TEXT | Stripe Payment Intent ID |
-| `escrow_date` | TIMESTAMPTZ | When payment was escrowed |
-| `release_date` | TIMESTAMPTZ | When payment was released to provider |
-| `auto_release_date` | TIMESTAMPTZ | Date for automatic release (3 days after delivery) |
-| `dispute_reason` | TEXT | Buyer's reason for dispute |
-| `dispute_date` | TIMESTAMPTZ | When dispute was filed |
-| `dispute_resolved_date` | TIMESTAMPTZ | When dispute was resolved |
-| `dispute_resolution` | TEXT | Resolution notes from support |
+### 1.2 Get your platform's account ID
+
+After enabling Connect, your platform account ID starts with `acct_`. You'll see it in the Dashboard. You don't need to store this — it's your own account.
 
 ---
 
-## Frontend Components
+## Part 2 — Database Changes
 
-### 1. MyOrders Page (`src/app-pages/MyOrders.jsx`)
+Run this in your Supabase SQL editor:
 
-**Purpose:** Track gig orders with payment status
-
-**Routes:**
-- `/my-orders` - View all orders (buying/selling tabs)
-
-**Backend Integration Points:**
-
-#### `handleAcceptOrder()` - Line 78
-```javascript
-// BACKEND TODO: Create Stripe Payment Intent
-// Endpoint: POST /api/payments/create-intent
-// Body: { orderId, amount }
-// Response: { paymentIntentId, clientSecret }
-
-// Steps:
-// 1. Create Stripe Payment Intent
-// 2. Return clientSecret to frontend
-// 3. Frontend uses Stripe.js to confirm payment
-// 4. On success, update payment_status to 'escrowed'
+```sql
+-- Add Stripe Connect fields to profiles
+ALTER TABLE profiles
+    ADD COLUMN IF NOT EXISTS stripe_account_id text,
+    ADD COLUMN IF NOT EXISTS stripe_onboarded boolean DEFAULT false;
 ```
 
-#### `confirmPayment()` - Line 87
-```javascript
-// BACKEND TODO: Confirm payment and update database
-// Endpoint: POST /api/payments/confirm
-// Body: { orderId, paymentIntentId }
-
-// Steps:
-// 1. Verify payment with Stripe
-// 2. Update gig_requests:
-//    - payment_status = 'escrowed'
-//    - payment_amount = amount
-//    - payment_intent_id = paymentIntentId
-//    - escrow_date = NOW()
-//    - status = 'accepted'
-```
-
-#### `handleReleasePayment()` - Line 119
-```javascript
-// BACKEND TODO: Transfer funds from escrow to provider
-// Endpoint: POST /api/payments/release
-// Body: { orderId }
-
-// Steps:
-// 1. Verify buyer is authorized
-// 2. Transfer funds to provider's Stripe Connect account
-// 3. Update gig_requests:
-//    - payment_status = 'released'
-//    - release_date = NOW()
-// 4. Notify provider
-```
-
-#### `handleDispute()` - Line 144
-```javascript
-// BACKEND TODO: Create dispute record
-// Endpoint: POST /api/disputes/create
-// Body: { orderId, reason }
-
-// Steps:
-// 1. Update gig_requests:
-//    - payment_status = 'disputed'
-//    - dispute_reason = reason
-//    - dispute_date = NOW()
-// 2. Create support ticket
-// 3. Notify support team
-// 4. Hold funds in escrow
-```
+`stripe_account_id` stores the seller's Connect account ID (e.g. `acct_1ABC...`).
+`stripe_onboarded` is `true` once they've completed Stripe's onboarding form.
 
 ---
 
-### 2. Disputes Page (`src/app-pages/Disputes.jsx`)
+## Part 3 — Backend Endpoints
 
-**Purpose:** Manage payment disputes
+You need two new endpoints in your backend. Add them to a new file `backend/routes/stripe-connect.js`:
 
-**Routes:**
-- `/disputes` - View and manage disputes
+```js
+const express = require('express');
+const router = express.Router();
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const supabase = require('../config/supabase');
 
-**Backend Integration Points:**
+// ── STEP 1: Create a Connect account + return onboarding URL ────────────────
+// Called when seller clicks "Set up payouts" in their profile
+router.post('/onboard', async (req, res) => {
+    try {
+        // Check if seller already has an account
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('stripe_account_id')
+            .eq('id', req.user.id)
+            .single();
 
-#### `submitEvidence()` - Line 65
-```javascript
-// BACKEND TODO: Submit evidence to support ticket
-// Endpoint: POST /api/disputes/submit-evidence
-// Body: { disputeId, evidence, files[] }
+        let accountId = profile?.stripe_account_id;
 
-// Steps:
-// 1. Create support ticket entry
-// 2. Store evidence text
-// 3. Upload files to storage (S3/Cloudinary)
-// 4. Notify support team
-// 5. Notify other party
+        // Create a new Express account if they don't have one
+        if (!accountId) {
+            const account = await stripe.accounts.create({ type: 'express' });
+            accountId = account.id;
+
+            // Save the account ID immediately
+            await supabase
+                .from('profiles')
+                .update({ stripe_account_id: accountId })
+                .eq('id', req.user.id);
+        }
+
+        // Create an onboarding link (valid for ~5 minutes)
+        const accountLink = await stripe.accountLinks.create({
+            account: accountId,
+            refresh_url: `${process.env.FRONTEND_URL}/profile?stripe=refresh`,
+            return_url:  `${process.env.FRONTEND_URL}/profile?stripe=success`,
+            type: 'account_onboarding',
+        });
+
+        res.json({ url: accountLink.url });
+    } catch (err) {
+        console.error('Stripe onboard error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── STEP 2: Check onboarding status (called when seller returns from Stripe) ─
+// Stripe redirects to /profile?stripe=success — call this to confirm
+router.get('/status', async (req, res) => {
+    try {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('stripe_account_id, stripe_onboarded')
+            .eq('id', req.user.id)
+            .single();
+
+        if (!profile?.stripe_account_id) {
+            return res.json({ onboarded: false });
+        }
+
+        // Ask Stripe if the account has finished onboarding
+        const account = await stripe.accounts.retrieve(profile.stripe_account_id);
+        const onboarded = account.details_submitted && account.charges_enabled;
+
+        // Update DB if they just finished
+        if (onboarded && !profile.stripe_onboarded) {
+            await supabase
+                .from('profiles')
+                .update({ stripe_onboarded: true })
+                .eq('id', req.user.id);
+        }
+
+        res.json({ onboarded, chargesEnabled: account.charges_enabled });
+    } catch (err) {
+        console.error('Stripe status error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+module.exports = router;
 ```
 
-#### `resolveDispute()` - Line 91
-```javascript
-// BACKEND TODO: Resolve dispute (Admin only)
-// Endpoint: POST /api/disputes/resolve
-// Body: { disputeId, resolution: 'refund' | 'release', notes }
-
-// Steps:
-// 1. Verify user is admin/support
-// 2. If resolution = 'refund':
-//    - Refund buyer via Stripe
-//    - payment_status = 'refunded'
-// 3. If resolution = 'release':
-//    - Transfer to provider
-//    - payment_status = 'released'
-// 4. Update dispute_resolved_date
-// 5. Notify both parties
-// 6. Close support ticket
+Then register it in `backend/index.js`:
+```js
+const stripeConnectRoutes = require('./routes/stripe-connect.js');
+app.use('/api/stripe-connect', authMiddleware, stripeConnectRoutes);
 ```
 
-#### `cancelDispute()` - Line 118
-```javascript
-// BACKEND TODO: Cancel dispute before review
-// Endpoint: POST /api/disputes/cancel
-// Body: { disputeId }
-
-// Steps:
-// 1. Verify dispute not yet reviewed
-// 2. Update gig_requests:
-//    - payment_status = 'escrowed'
-//    - dispute_reason = NULL
-//    - dispute_date = NULL
-// 3. Notify other party
+Add `FRONTEND_URL` to your `backend/.env`:
+```
+FRONTEND_URL=http://localhost:5173
 ```
 
 ---
 
-### 3. Chat Page Updates (`src/app-pages/Chat.jsx`)
+## Part 4 — Wire Up the Release Endpoint
 
-**Already Implemented (Lines 502-520):**
+Open `backend/routes/payments.js`, find the `/release` endpoint. Replace the TODO comment:
 
-```javascript
-// Payment release from chat (placeholder)
-async function confirmPayment(gigReqId) {
-    // Update payment_status to 'captured' (should be 'released')
-}
+```js
+// TODO: If using Stripe Connect, transfer funds to provider here
+// await stripe.transfers.create({ ... });
+```
 
-async function disputePayment(gigReqId) {
-    // Update payment_status to 'disputed'
+With this:
+
+```js
+// Transfer funds to seller via Stripe Connect
+const { data: providerProfile } = await supabase
+    .from('profiles')
+    .select('stripe_account_id, stripe_onboarded')
+    .eq('id', order.provider_id)
+    .single();
+
+if (!providerProfile?.stripe_account_id || !providerProfile?.stripe_onboarded) {
+    // Seller hasn't set up payouts — hold the funds, flag for manual review
+    console.warn(`Provider ${order.provider_id} has no Stripe account. Funds held.`);
+} else {
+    const SERVICE_FEE_CENTS = 300; // $3.00
+    const transferAmount = Math.round(order.payment_amount * 100) - SERVICE_FEE_CENTS;
+
+    await stripe.transfers.create({
+        amount: transferAmount,
+        currency: 'usd',
+        destination: providerProfile.stripe_account_id,
+        transfer_group: orderId, // groups this transfer with the original charge
+    });
 }
 ```
 
-**Note:** These functions are placeholders. They should call the same backend endpoints as MyOrders page.
+**How the math works:**
+- Buyer paid: `gig.price + $3.00`
+- `payment_amount` stored in DB is the full amount (e.g. `$23.00`)
+- Transfer to seller: `payment_amount - $3.00` = `$20.00`
+- Your platform keeps: `$3.00`
 
 ---
 
-## Backend Implementation Checklist
+## Part 5 — Frontend: "Set Up Payouts" Button
 
-### 1. Stripe Integration
+In the seller's profile page, show their payout status and an onboarding button.
 
-- [ ] Set up Stripe Connect for providers
-- [ ] Create Payment Intent endpoint
-- [ ] Implement payment confirmation webhook
-- [ ] Set up escrow account/holding pattern
-- [ ] Implement fund transfer to providers
-- [ ] Implement refund logic
-- [ ] Add 14-day clearing period tracking
+### 5.1 Check status on page load
 
-### 2. Database
+When the user visits their own profile, call `/api/stripe-connect/status`:
 
-- [ ] Run migration: `add_payment_escrow_fields.sql`
-- [ ] Create indexes for performance
-- [ ] Set up RLS policies for payment fields
-- [ ] Add triggers for status changes
+```js
+const [stripeStatus, setStripeStatus] = useState(null);
 
-### 3. API Endpoints
+useEffect(() => {
+    if (!isOwnProfile) return;
 
-#### Payment Endpoints
-```
-POST /api/payments/create-intent
-POST /api/payments/confirm
-POST /api/payments/release
-POST /api/payments/refund
-GET  /api/payments/status/:orderId
-```
+    // If returning from Stripe onboarding
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('stripe') === 'success' || params.get('stripe') === 'refresh') {
+        checkStripeStatus();
+        // Clean up URL
+        window.history.replaceState({}, '', '/profile');
+    } else {
+        checkStripeStatus();
+    }
+}, []);
 
-#### Dispute Endpoints
-```
-POST /api/disputes/create
-POST /api/disputes/submit-evidence
-POST /api/disputes/resolve (admin only)
-POST /api/disputes/cancel
-GET  /api/disputes/list
+async function checkStripeStatus() {
+    const res = await apiFetch('/api/stripe-connect/status');
+    const data = await res.json();
+    setStripeStatus(data);
+}
 ```
 
-### 4. Cron Jobs
+### 5.2 Show the banner
 
-#### Auto-Release Job (Run Daily)
-```javascript
-// Pseudo-code
-async function autoReleasePayments() {
-    const ordersToRelease = await db.query(`
-        SELECT * FROM gig_requests
-        WHERE payment_status = 'escrowed'
-        AND status = 'delivered'
-        AND auto_release_date <= NOW()
-    `);
-    
-    for (const order of ordersToRelease) {
-        await releasePayment(order.id);
-        await notifyProvider(order.provider_id);
+```jsx
+{isOwnProfile && profile?.offers_gigs && (
+    <div style={{
+        padding: '16px 20px',
+        background: stripeStatus?.onboarded ? '#f0fdf4' : '#fffbeb',
+        border: `1px solid ${stripeStatus?.onboarded ? '#86efac' : '#fde68a'}`,
+        borderRadius: 10,
+        marginBottom: 20
+    }}>
+        {stripeStatus?.onboarded ? (
+            <p style={{ color: '#166534', fontWeight: 600, margin: 0 }}>
+                ✅ Payouts active — you'll receive funds when buyers release payment.
+            </p>
+        ) : (
+            <>
+                <p style={{ color: '#92400e', fontWeight: 600, margin: '0 0 10px' }}>
+                    ⚠️ Set up payouts to receive money from completed orders.
+                </p>
+                <button
+                    className="btn btn-primary"
+                    onClick={handleStripeOnboard}
+                >
+                    Set Up Payouts with Stripe
+                </button>
+            </>
+        )}
+    </div>
+)}
+```
+
+### 5.3 Onboard handler
+
+```js
+async function handleStripeOnboard() {
+    const res = await apiFetch('/api/stripe-connect/onboard', { method: 'POST' });
+    const data = await res.json();
+    if (data.url) {
+        window.location.href = data.url; // Redirect to Stripe's hosted form
     }
 }
 ```
 
-### 5. Notifications
-
-- [ ] Email notifications for payment events
-- [ ] In-app notifications
-- [ ] SMS for disputes (optional)
-
-**Events to notify:**
-- Payment received (escrowed)
-- Work delivered (buyer reminder)
-- Payment released
-- Dispute filed
-- Dispute resolved
-- Auto-release warning (1 day before)
-
-### 6. Security
-
-- [ ] Verify user authorization for all payment actions
-- [ ] Validate payment amounts match gig price
-- [ ] Prevent duplicate payments
-- [ ] Rate limiting on payment endpoints
-- [ ] Audit logging for all payment actions
-- [ ] PCI compliance for card data
-
-### 7. Admin Dashboard
-
-- [ ] View all disputes
-- [ ] Resolve disputes
-- [ ] View payment analytics
-- [ ] Refund/release controls
-- [ ] Audit logs
-
 ---
 
-## Testing Checklist
+## Part 6 — Testing Stripe Connect Locally
 
-### Happy Path
-- [ ] Buyer accepts order and pays
-- [ ] Payment goes to escrow
-- [ ] Provider delivers work
-- [ ] Buyer releases payment
-- [ ] Provider receives funds after clearing period
+Stripe provides fake onboarding in test mode so you don't need real bank details.
 
-### Dispute Path
-- [ ] Buyer files dispute
-- [ ] Both parties submit evidence
-- [ ] Admin resolves in favor of buyer (refund)
-- [ ] Admin resolves in favor of seller (release)
-
-### Auto-Release Path
-- [ ] Provider delivers work
-- [ ] Buyer takes no action for 3 days
-- [ ] Payment auto-releases to provider
-
-### Edge Cases
-- [ ] Payment fails during escrow
-- [ ] Buyer cancels before payment
-- [ ] Provider cancels after payment
-- [ ] Dispute filed after auto-release
-- [ ] Multiple disputes on same order
-- [ ] Chargeback handling
-
----
-
-## Stripe Webhooks
-
-### Required Webhooks
-
-```javascript
-// payment_intent.succeeded
-// - Confirm payment escrowed
-// - Update payment_status to 'escrowed'
-
-// payment_intent.payment_failed
-// - Notify buyer
-// - Keep payment_status as 'pending'
-
-// charge.refunded
-// - Update payment_status to 'refunded'
-// - Notify buyer
-
-// charge.dispute.created
-// - Flag for review
-// - Hold funds
-
-// charge.dispute.closed
-// - Process based on outcome
-```
-
----
-
-## Environment Variables
-
-Add to `.env`:
+### 6.1 Create a test Connect account via CLI
 
 ```bash
-# Stripe
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_PUBLISHABLE_KEY=pk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
+# In your terminal (stripe CLI must be installed)
+stripe accounts create --type=express
+```
 
-# Escrow Settings
-ESCROW_AUTO_RELEASE_DAYS=3
-ESCROW_CLEARING_PERIOD_DAYS=14
+Copy the `id` (starts with `acct_`) and manually insert it into your `profiles` table for your test seller user:
 
-# Support
-SUPPORT_EMAIL=support@skilljoy.com
-ADMIN_USER_IDS=uuid1,uuid2,uuid3
+```sql
+UPDATE profiles
+SET stripe_account_id = 'acct_YOUR_TEST_ID', stripe_onboarded = true
+WHERE id = 'your-seller-user-id';
+```
+
+This skips the onboarding form so you can test the payout flow immediately.
+
+### 6.2 Test a full payout flow
+
+1. Seller: set `stripe_account_id` + `stripe_onboarded = true` in DB (step above)
+2. Buyer: request a gig → seller accepts → buyer pays (use card `4242 4242 4242 4242`)
+3. Seller: mark as delivered
+4. Buyer: release funds
+5. Check your Stripe Dashboard → **Connect** → **Accounts** → find the test account → **Payments** — you should see the transfer
+
+### 6.3 Test onboarding flow itself
+
+1. Call `POST /api/stripe-connect/onboard` from the frontend
+2. You'll get a URL — open it
+3. Stripe test mode shows a simplified form, click through with fake data
+4. You'll be redirected back to `/profile?stripe=success`
+5. Call `GET /api/stripe-connect/status` — should return `{ onboarded: true }`
+
+---
+
+## Part 7 — Going Live (Production)
+
+When you're ready to take real payments:
+
+1. In Stripe Dashboard → switch from **Test** to **Live** mode
+2. Get your **live** secret key and replace `STRIPE_SECRET_KEY` in your `.env`
+3. Get your **live** webhook secret and replace `STRIPE_WEBHOOK_SECRET`
+4. Set `FRONTEND_URL` to your production domain (e.g. `https://skilljoy.com`)
+5. In Stripe Dashboard → Connect → Settings — fill in your platform's branding, support email, and terms of service URL (required for live)
+
+> Stripe will review your platform before enabling live payouts. This usually takes 1–3 days. Apply early.
+
+---
+
+## Summary: What You're Building
+
+```
+Seller visits profile → clicks "Set Up Payouts"
+    ↓
+POST /api/stripe-connect/onboard
+    ↓ stripe.accounts.create({ type: 'express' })
+    ↓ stripe.accountLinks.create(...)
+    ↓ Returns URL → redirect seller to Stripe
+
+Seller fills out Stripe's form (bank account, ID, etc.)
+    ↓ Stripe redirects back to /profile?stripe=success
+
+GET /api/stripe-connect/status
+    ↓ stripe.accounts.retrieve(accountId)
+    ↓ checks details_submitted + charges_enabled
+    ↓ updates profiles.stripe_onboarded = true
+
+Buyer releases payment
+    ↓ POST /api/payments/release
+    ↓ stripe.transfers.create({ destination: seller.stripe_account_id })
+    ↓ Seller receives money in their Stripe balance
+    ↓ Seller withdraws to bank (Stripe handles this automatically on a schedule)
 ```
 
 ---
 
-## Frontend Usage
+## Key Files to Touch
 
-### For Buyers
-1. Navigate to `/my-orders`
-2. Click "Accept & Pay" on pending order
-3. Enter payment details (Stripe modal)
-4. Track order status
-5. After delivery, click "Release Payment" or "File Dispute"
-
-### For Sellers
-1. Navigate to `/my-orders`
-2. View orders in "Selling" tab
-3. See payment status
-4. After release, wait 14 days for clearing
-
-### For Disputes
-1. Navigate to `/disputes`
-2. View active disputes
-3. Submit evidence
-4. Wait for support resolution
-
----
-
-## Next Steps
-
-1. **Run the migration:**
-   ```bash
-   cd supabase
-   supabase migration up
-   ```
-
-2. **Set up Stripe:**
-   - Create Stripe Connect account
-   - Configure webhooks
-   - Test with Stripe test mode
-
-3. **Implement backend endpoints:**
-   - Start with payment creation
-   - Then payment release
-   - Then disputes
-   - Finally auto-release cron
-
-4. **Test thoroughly:**
-   - Use Stripe test cards
-   - Test all payment flows
-   - Test dispute resolution
-
-5. **Deploy:**
-   - Set production Stripe keys
-   - Enable webhooks
-   - Set up cron jobs
-   - Monitor for issues
-
----
-
-## Support
-
-For questions about the frontend implementation, check:
-- `src/app-pages/MyOrders.jsx` - Order tracking
-- `src/app-pages/Disputes.jsx` - Dispute management
-- `src/app-pages/Chat.jsx` - Payment actions in chat
-
-All backend integration points are marked with:
-```javascript
-// BACKEND TODO: [description]
-// PLACEHOLDER: [description]
-```
-
-Search for these comments to find all integration points.
+| File | What to add |
+|---|---|
+| `backend/routes/stripe-connect.js` | New file — onboard + status endpoints |
+| `backend/index.js` | Register the new route |
+| `backend/routes/payments.js` | Replace the TODO in `/release` with actual transfer |
+| `backend/.env` | Add `FRONTEND_URL` |
+| `src/app-pages/Profile.jsx` (or wherever your profile page is) | Add payout status banner + onboard button |
+| Supabase SQL editor | Run the ALTER TABLE migration |

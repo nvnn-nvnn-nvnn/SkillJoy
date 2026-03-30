@@ -43,18 +43,22 @@ export default function MyListingsPage() {
     const [toast, setToast] = useState('');
     const [toastType, setToastType] = useState('success');
 
-    // Create gig form
+    // Create / edit gig form
+    const [editingGig, setEditingGig] = useState(null);
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [price, setPrice] = useState('');
     const [category, setCategory] = useState('');
     const [commitments, setCommitments] = useState('');
     const [requirements, setRequirements] = useState('');
-    const [imageUrls, setImageUrls] = useState('');
-    const [faqs, setFaqs] = useState([]); // ← Change from string to array
+    const [images, setImages] = useState([]);   // array of URLs
+    const [urlInput, setUrlInput] = useState('');
+    const [uploadingImage, setUploadingImage] = useState(false);
+    const [faqs, setFaqs] = useState([]);
     const [submitting, setSubmitting] = useState(false);
     const [gigDetailModal, setGigDetailModal] = useState(null);
-    // Faqs
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [pendingDeleteId, setPendingDeleteId] = useState(null);
 
 
     useEffect(() => {
@@ -101,19 +105,57 @@ export default function MyListingsPage() {
         setTimeout(() => setToast(''), 3500);
     }
 
-    // ── Create Gig ──
+    // ── Image helpers ──
+    async function handleFileUpload(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        setUploadingImage(true);
+        const ext = file.name.split('.').pop();
+        const path = `${user.id}/${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from('gig-images').upload(path, file);
+        if (upErr) { showToast('Upload failed: ' + upErr.message, 'error'); setUploadingImage(false); return; }
+        const { data } = supabase.storage.from('gig-images').getPublicUrl(path);
+        setImages(prev => [...prev, data.publicUrl]);
+        setUploadingImage(false);
+        e.target.value = '';
+    }
+
+    function addImageUrl() {
+        const url = urlInput.trim();
+        if (!url) return;
+        setImages(prev => [...prev, url]);
+        setUrlInput('');
+    }
+
+    // ── Open edit mode ──
+    function handleEditGig(gig) {
+        setEditingGig(gig);
+        setTitle(gig.title || '');
+        setDescription(gig.description || '');
+        setPrice(gig.price?.toString() || '');
+        setCategory(gig.category || '');
+        setCommitments(gig.commitments || '');
+        setRequirements(gig.requirements || '');
+        setImages(gig.images || []);
+        setFaqs(gig.faqs || []);
+        setUrlInput('');
+        setTab('create');
+    }
+
+    function resetForm() {
+        setEditingGig(null);
+        setTitle(''); setDescription(''); setPrice(''); setCategory('');
+        setCommitments(''); setRequirements(''); setImages([]); setFaqs([]); setUrlInput('');
+    }
+
+    // ── Create / Update Gig ──
     async function handleCreateGig(e) {
         e.preventDefault();
-        if (!title.trim() || !price) {
-            showToast('Please fill in title and price', 'error');
-            return;
-        }
+        if (!title.trim() || !price) { showToast('Please fill in title and price', 'error'); return; }
 
         setSubmitting(true);
-        const images = imageUrls.trim() ? imageUrls.split(',').map(url => url.trim()).filter(Boolean) : [];
         const validFaqs = faqs.filter(faq => faq.question.trim() && faq.answer.trim());
-        const { error } = await supabase.from('gigs').insert({
-            user_id: user.id,
+        const payload = {
             title: title.trim(),
             description: description.trim(),
             price: parseFloat(price),
@@ -122,32 +164,44 @@ export default function MyListingsPage() {
             requirements: requirements.trim() || null,
             images: images.length > 0 ? images : null,
             faqs: validFaqs.length > 0 ? validFaqs : null,
-        });
-        setSubmitting(false);
+        };
 
-        if (error) { showToast(error.message, 'error'); return; }
+        if (editingGig) {
+            const { error } = await supabase.from('gigs').update(payload)
+                .eq('id', editingGig.id).eq('user_id', user.id);
+            setSubmitting(false);
+            if (error) { showToast(error.message, 'error'); return; }
+            showToast('Gig updated!', 'success');
+        } else {
+            const { error } = await supabase.from('gigs').insert({ user_id: user.id, ...payload });
+            setSubmitting(false);
+            if (error) { showToast(error.message, 'error'); return; }
+            showToast('Gig listed!', 'success');
+        }
 
-        setTitle(''); setDescription(''); setPrice(''); setCategory(''); setCommitments(''); setRequirements(''); setImageUrls(''); setFaqs([]);
-        showToast('Gig listed!', 'success');
+        resetForm();
         loadData();
         setTab('listings');
     }
 
     // ── Delete Gig ──
-    async function handleDeleteGig(gigId) {
-        if (!window.confirm('Remove this gig listing?')) return;
+    function handleDeleteGig(gigId) {
+        setPendingDeleteId(gigId);
+        setShowDeleteModal(true);
+    }
 
+    async function confirmDeleteGig() {
+        setShowDeleteModal(false);
         const { data, error } = await supabase
             .from('gigs')
             .delete()
-            .eq('id', gigId)
+            .eq('id', pendingDeleteId)
             .eq('user_id', user.id)
             .select();
-
+        setPendingDeleteId(null);
         if (error) { showToast(error.message, 'error'); return; }
         if (!data || data.length === 0) { showToast('Failed to delete — check RLS policies', 'error'); return; }
-
-        setMyGigs(prev => prev.filter(g => g.id !== gigId));
+        setMyGigs(prev => prev.filter(g => g.id !== pendingDeleteId));
         showToast('Gig removed', 'success');
     }
 
@@ -221,8 +275,8 @@ export default function MyListingsPage() {
                         <button className={`tab ${tab === 'completed' ? 'active' : ''}`} onClick={() => setTab('completed')}>
                             Completed ({completed.length})
                         </button>
-                        <button className={`tab ${tab === 'create' ? 'active' : ''}`} onClick={() => setTab('create')}>
-                            + New Gig
+                        <button className={`tab ${tab === 'create' ? 'active' : ''}`} onClick={() => { resetForm(); setTab('create'); }}>
+                            {editingGig ? '✏ Editing' : '+ New Gig'}
                         </button>
                     </div>
 
@@ -242,7 +296,7 @@ export default function MyListingsPage() {
                                     <span className="empty-icon">📋</span>
                                     <h3>No gigs yet</h3>
                                     <p>List your first service to start earning.</p>
-                                    <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setTab('create')}>
+                                    <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => { resetForm(); setTab('create'); }}>
                                         Create a gig
                                     </button>
                                 </div>
@@ -255,9 +309,14 @@ export default function MyListingsPage() {
                                             {gig.description && <p className="gig-desc">{gig.description}</p>}
                                             <div className="gig-footer">
                                                 <span className="gig-price">${gig.price?.toFixed(2)}</span>
-                                                <button className="btn btn-decline btn-sm" onClick={() => handleDeleteGig(gig.id)}>
-                                                    Remove
-                                                </button>
+                                                <div style={{ display: 'flex', gap: 6 }}>
+                                                    <button className="btn btn-secondary btn-sm" onClick={() => handleEditGig(gig)}>
+                                                        Edit
+                                                    </button>
+                                                    <button className="btn btn-decline btn-sm" onClick={() => handleDeleteGig(gig.id)}>
+                                                        Remove
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
@@ -481,17 +540,56 @@ export default function MyListingsPage() {
                                 </div>
 
                                 <div className="field">
-                                    <label htmlFor="gig-images">Portfolio Images <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
-                                    <input
-                                        id="gig-images"
-                                        type="text"
-                                        value={imageUrls}
-                                        onChange={e => setImageUrls(e.target.value)}
-                                        placeholder="Paste image URLs separated by commas"
-                                    />
-                                    <small style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '4px', display: 'block' }}>
-                                        Add URLs to showcase your work (e.g., from Imgur, Google Drive, etc.)
-                                    </small>
+                                    <label>Portfolio Images <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+
+                                    {/* Thumbnails */}
+                                    {images.length > 0 && (
+                                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                                            {images.map((url, i) => (
+                                                <div key={i} style={{ position: 'relative' }}>
+                                                    <img src={url} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setImages(prev => prev.filter((_, j) => j !== i))}
+                                                        style={{
+                                                            position: 'absolute', top: -6, right: -6,
+                                                            width: 20, height: 20, borderRadius: '50%',
+                                                            background: '#ef4444', color: '#fff', border: 'none',
+                                                            fontSize: 11, cursor: 'pointer', display: 'flex',
+                                                            alignItems: 'center', justifyContent: 'center', fontWeight: 700,
+                                                        }}
+                                                    >✕</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Upload file */}
+                                    <label style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                                        padding: '8px 14px', border: '1px dashed var(--border)',
+                                        borderRadius: 8, cursor: 'pointer', fontSize: 13,
+                                        color: 'var(--text-secondary)', marginBottom: 8,
+                                        background: uploadingImage ? 'var(--surface-alt)' : 'transparent',
+                                    }}>
+                                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileUpload} disabled={uploadingImage} />
+                                        {uploadingImage ? '⏳ Uploading...' : '↑ Upload from file'}
+                                    </label>
+
+                                    {/* Add by URL */}
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <input
+                                            type="text"
+                                            value={urlInput}
+                                            onChange={e => setUrlInput(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addImageUrl())}
+                                            placeholder="Or paste an image URL..."
+                                            style={{ flex: 1 }}
+                                        />
+                                        <button type="button" className="btn btn-secondary btn-sm" onClick={addImageUrl}>
+                                            Add
+                                        </button>
+                                    </div>
                                 </div>
 
 
@@ -595,9 +693,16 @@ export default function MyListingsPage() {
                                     </small>
                                 </div>
 
-                                <button className="btn btn-primary" type="submit" disabled={submitting || !title.trim() || !price}>
-                                    {submitting ? 'Listing...' : 'List Gig'}
-                                </button>
+                                <div style={{ display: 'flex', gap: 10 }}>
+                                    <button className="btn btn-primary" type="submit" disabled={submitting || !title.trim() || !price}>
+                                        {submitting ? (editingGig ? 'Saving...' : 'Listing...') : (editingGig ? 'Save Changes' : 'List Gig')}
+                                    </button>
+                                    {editingGig && (
+                                        <button type="button" className="btn btn-secondary" onClick={() => { resetForm(); setTab('listings'); }}>
+                                            Cancel
+                                        </button>
+                                    )}
+                                </div>
                             </form>
                         )}
                     </>
@@ -654,6 +759,22 @@ export default function MyListingsPage() {
                     </div>
                 )
             }
+
+            {showDeleteModal && (
+                <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420, textAlign: 'center', padding: '32px 28px 24px' }}>
+                        <div style={{ fontSize: 40, marginBottom: 12 }}>🗑️</div>
+                        <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 12px' }}>Remove Gig?</h2>
+                        <p style={{ fontSize: 15, color: '#374151', margin: '0 0 24px', lineHeight: 1.5 }}>
+                            This will permanently remove the listing. Active orders won't be affected.
+                        </p>
+                        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                            <button className="btn btn-secondary" style={{ minWidth: 120 }} onClick={() => setShowDeleteModal(false)}>Cancel</button>
+                            <button className="btn btn-danger" style={{ minWidth: 120 }} onClick={confirmDeleteGig}>Yes, Remove</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {toast && <div className={`toast ${toastType}`}>{toast}</div>}
 

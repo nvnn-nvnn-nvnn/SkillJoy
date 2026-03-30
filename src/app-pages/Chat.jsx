@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth, getSkillName } from '@/lib/stores';
+import { apiFetch } from '@/lib/api';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -26,7 +27,7 @@ function formatLastMsg(lastMsg, userId) {
 
 const RATING_LABELS = ['', 'Terrible experience', 'Poor experience', 'Average experience', 'Good experience', 'Greatest experience!'];
 
-function isGigCompleted(c) { return c.requester_completed && c.provider_completed; }
+function isGigCompleted(c) { return c.requester_completed && c.provider_completed || c.status === 'withdrawn' || c.status === 'completed' || c.payment_status === 'withdrawn' || c.payment_status === 'refunded'; }
 function isSwapCompleted(c) { return c.requester_completed && c.receiver_completed; }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -59,6 +60,14 @@ export default function ChatPage() {
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [modalProfile, setModalProfile] = useState(null);
     const [showRatingModal, setShowRatingModal] = useState(false);
+    const [showWithdrawConfirm, setShowWithdrawConfirm] = useState(false);
+    const [pendingWithdrawId, setPendingWithdrawId] = useState(null);
+    const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+    const [pendingCancelId, setPendingCancelId] = useState(null);
+    const [showDisputeModal, setShowDisputeModal] = useState(false);
+    const [pendingDisputeId, setPendingDisputeId] = useState(null);
+    const [disputeReason, setDisputeReason] = useState('');
+    const [disputeSubmitting, setDisputeSubmitting] = useState(false);
     const [ratingValue, setRatingValue] = useState(0);
     const [ratingComment, setRatingComment] = useState('');
 
@@ -66,6 +75,7 @@ export default function ChatPage() {
     const inputRef = useRef(null);
     const realtimeSub = useRef(null);
     const swapSub = useRef(null);
+    const hasMounted = useRef(false);
 
     // Derived
     const activeConvo = chatMode === 'swaps'
@@ -97,9 +107,9 @@ export default function ChatPage() {
 
     // ── Load conversations ────────────────────────────────────────────────────
 
-    const loadConversations = useCallback(async () => {
+    const loadConversations = useCallback(async (silent = false) => {
         if (!user) return;
-        setLoadingConvos(true);
+        if (!silent) setLoadingConvos(true);
         const { data, error: e } = await supabase
             .from('swaps')
             .select(`
@@ -146,9 +156,9 @@ export default function ChatPage() {
 
     // ── Load gig conversations ─────────────────────────────────────────────────
 
-    const loadGigConversations = useCallback(async () => {
+    const loadGigConversations = useCallback(async (silent = false) => {
         if (!user) return;
-        setLoadingConvos(true);
+        if (!silent) setLoadingConvos(true);
         const { data, error: e } = await supabase
             .from('gig_requests')
             .select(`
@@ -160,7 +170,7 @@ export default function ChatPage() {
                 requester_completed, provider_completed,
                 payment_status, confirmation_deadline
             `)
-            .in('status', ['accepted', 'completed'])
+            .in('status', ['accepted', 'in_progress', 'delivered', 'completed', 'withdrawn', 'refunded', 'disputed'])
             .or(`requester_id.eq.${user.id},provider_id.eq.${user.id}`)
             .order('created_at', { ascending: false });
 
@@ -172,11 +182,30 @@ export default function ChatPage() {
             const other = isProvider ? req.requester : req.provider;
 
             const { data: lastMsgs } = await supabase
-                .from('messages').select('content, created_at, sender_id')
-                .eq('gig_request_id', req.id).order('created_at', { ascending: false }).limit(1);
+                .from('messages')
+                .select('content, created_at, sender_id')
+                .eq('gig_request_id', req.id)
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+
+                // Profile Ratings
+            const {data: ratings} = await supabase
+                .from("ratings")
+                .select('rating')
+                .eq('rated_id', other.id)
+
+            const avgRating = ratings?.length
+                ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1)
+                : null;
+                
+            const ratingCount = ratings?.length ?? 0;
+
+
+        
 
             return {
-                gig_request_id: req.id, status: req.status, other,
+                gig_request_id: req.id, status: req.status,
                 gig: req.gig,
                 requester_id: req.requester_id, provider_id: req.provider_id,
                 requester_completed: req.requester_completed,
@@ -185,7 +214,12 @@ export default function ChatPage() {
                 confirmation_deadline: req.confirmation_deadline,
                 isProvider,
                 lastMsg: lastMsgs?.[0] ?? null,
+                other: { ...other, avgRating, ratingCount }
             };
+
+
+
+            
         }));
 
         setGigConversations(enriched);
@@ -205,11 +239,11 @@ export default function ChatPage() {
 
     function subscribeToMessages(id, mode) {
         const col = mode === 'gigs' ? 'gig_request_id' : 'swap_id';
-        realtimeSub.current = supabase
-            .channel(`messages:${col}=eq.${id}`)
+        const channel = supabase
+            .channel(`messages-${id}`)
             .on('postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'messages', filter: `${col}=eq.${id}` },
-                async (payload) => {
+                (payload) => {
                     setMessages(prev => prev.find(m => m.id === payload.new.id) ? prev : [...prev, payload.new]);
                     scrollToBottom();
                     if (mode === 'gigs') {
@@ -219,11 +253,12 @@ export default function ChatPage() {
                     }
                 }
             ).subscribe();
+        realtimeSub.current = channel;
     }
 
     function subscribeToSwapUpdates(swapId) {
-        swapSub.current = supabase
-            .channel(`swap:id=eq.${swapId}`)
+        const channel = supabase
+            .channel(`swap-${swapId}`)
             .on('postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'swaps', filter: `id=eq.${swapId}` },
                 async (payload) => {
@@ -238,14 +273,15 @@ export default function ChatPage() {
                     }
                 }
             ).subscribe();
+        swapSub.current = channel;
     }
 
     function subscribeToGigUpdates(gigReqId) {
-        swapSub.current = supabase
-            .channel(`gig_request:id=eq.${gigReqId}`)
+        const channel = supabase
+            .channel(`gig-${gigReqId}`)
             .on('postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'gig_requests', filter: `id=eq.${gigReqId}` },
-                async (payload) => {
+                (payload) => {
                     setGigConversations(prev => prev.map(c =>
                         c.gig_request_id === gigReqId
                             ? { ...c, requester_completed: payload.new.requester_completed, provider_completed: payload.new.provider_completed, status: payload.new.status, payment_status: payload.new.payment_status }
@@ -253,6 +289,12 @@ export default function ChatPage() {
                     ));
                 }
             ).subscribe();
+        swapSub.current = channel;
+    }
+
+    function cleanupSubs() {
+        if (realtimeSub.current) { supabase.removeChannel(realtimeSub.current); realtimeSub.current = null; }
+        if (swapSub.current) { supabase.removeChannel(swapSub.current); swapSub.current = null; }
     }
 
     async function selectConversation(id, mode) {
@@ -265,8 +307,7 @@ export default function ChatPage() {
 
         setMessages([]);
         setLoadingMsgs(true);
-        realtimeSub.current?.unsubscribe();
-        swapSub.current?.unsubscribe();
+        cleanupSubs();
         await fetchMessages(id, m);
         subscribeToMessages(id, m);
         if (m === 'swaps') subscribeToSwapUpdates(id);
@@ -315,85 +356,6 @@ export default function ChatPage() {
 
     // ── Complete swap ─────────────────────────────────────────────────────────
 
-    async function markSwapComplete(swapId) {
-        if (!activeConvo) return;
-        const isRequester = activeConvo.requester_id === user.id;
-        const fieldToUpdate = isRequester ? 'requester_completed' : 'receiver_completed';
-
-        // Update our completed field
-        const { error: e } = await supabase.from('swaps').update({ [fieldToUpdate]: true }).eq('id', swapId);
-        if (e) { setError(e.message); return; }
-
-        // Re-fetch and verify the update actually persisted (RLS may silently block it)
-        let { data: row } = await supabase.from('swaps').select('requester_completed, receiver_completed').eq('id', swapId).single();
-        if (!row?.[fieldToUpdate]) {
-            // RLS blocked the update — try via RPC as fallback
-            const { error: rpcErr } = await supabase.rpc('mark_swap_completed', {
-                swap_req_id: swapId,
-                field_name: fieldToUpdate
-            });
-            if (rpcErr) {
-                setError('Could not save your vote. Please check database permissions.');
-                return;
-            }
-            const { data: row2 } = await supabase.from('swaps').select('requester_completed, receiver_completed').eq('id', swapId).single();
-            if (!row2?.[fieldToUpdate]) {
-                setError('Could not save your vote. Please check database permissions.');
-                return;
-            }
-            row = row2;
-        }
-        const bothDone = row?.requester_completed && row?.receiver_completed;
-
-        if (bothDone) {
-            const requesterStars = activeConvo.teachStars ?? 3;
-            const requesterPoints = 50;
-            const receiverPoints = 30 + (requesterStars * 10);
-            await Promise.all([
-                supabase.rpc('increment_points', { user_id: activeConvo.requester_id, points: requesterPoints }),
-                supabase.rpc('increment_points', { user_id: activeConvo.receiver_id, points: receiverPoints }),
-            ]);
-            const { data: updatedProfile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-            if (updatedProfile) setProfile(updatedProfile);
-        }
-
-        // Update local state immediately
-        setConversations(prev => prev.map(c =>
-            c.swap_id === swapId
-                ? { ...c, [fieldToUpdate]: true }
-                : c
-        ));
-        setShowProfileModal(false);
-        setModalProfile(null);
-
-        if (bothDone) {
-            setActiveTab('completed');
-            showToast('Swap completed! Points awarded!');
-            await checkAndShowRatingModal(swapId);
-        } else {
-            showToast('Marked as complete. Waiting for other party. (1/2)');
-        }
-    }
-
-    async function unmarkSwapComplete(swapId) {
-        if (!activeConvo) return;
-        const isRequester = activeConvo.requester_id === user.id;
-        const fieldToUpdate = isRequester ? 'requester_completed' : 'receiver_completed';
-        const updates = { [fieldToUpdate]: false };
-
-        const { error: e } = await supabase.from('swaps').update(updates).eq('id', swapId);
-        if (e) { setError(e.message); return; }
-        await loadConversations();
-        showToast('Vote removed.');
-    }
-
-    async function checkAndShowRatingModal(swapId) {
-        const { data: existingRating, error: ratingError } = await supabase
-            .from('ratings').select('id')
-            .eq('swap_id', swapId).eq('rater_id', user.id).maybeSingle();
-        if (!existingRating && !ratingError) setShowRatingModal(true);
-    }
-
     async function submitRating() {
         if (!activeConvo || ratingValue === 0) { showToast('Please select a rating'); return; }
         const otherUserId = chatMode === 'swaps'
@@ -432,8 +394,9 @@ export default function ChatPage() {
         const isRequester = activeConvo.requester_id === user.id;
         const fieldToUpdate = isRequester ? 'requester_completed' : 'provider_completed';
 
-        // Update our completed field
-        const { error: e } = await supabase.from('gig_requests').update({ [fieldToUpdate]: true }).eq('id', gigReqId);
+        // Update our completed field (ownership check ensures only this user's row is touched)
+        const ownerField = isRequester ? 'requester_id' : 'provider_id';
+        const { error: e } = await supabase.from('gig_requests').update({ [fieldToUpdate]: true }).eq('id', gigReqId).eq(ownerField, user.id);
         if (e) { setError(e.message); return; }
 
         // Verify the update actually persisted (RLS may silently block it)
@@ -486,9 +449,14 @@ export default function ChatPage() {
         const upd = { [field]: false };
         if (activeConvo.status === 'completed') upd.status = 'accepted';
 
-        const { error: err } = await supabase.from('gig_requests').update(upd).eq('id', gigReqId);
+        const ownerField = isReq ? 'requester_id' : 'provider_id';
+        const { error: err } = await supabase.from('gig_requests').update(upd).eq('id', gigReqId).eq(ownerField, user.id);
         if (err) { setError(err.message); return; }
-        await loadGigConversations();
+        setGigConversations(prev => prev.map(c =>
+            c.gig_request_id === gigReqId
+                ? { ...c, [field]: false, ...(activeConvo.status === 'completed' ? { status: 'accepted' } : {}) }
+                : c
+        ));
         showToast('Vote removed.');
     }
 
@@ -499,32 +467,149 @@ export default function ChatPage() {
         if (!existing && !err) setShowRatingModal(true);
     }
 
-    // ── Payment escrow actions (placeholder) ────────────────────────────────
+    // ── Payment escrow actions ────────────────────────────────────────────────
 
-    async function confirmPayment(gigReqId) {
-        const { error: e } = await supabase.from('gig_requests').update({
-            payment_status: 'captured',
-        }).eq('id', gigReqId);
-        if (e) { setError(e.message); return; }
-        await loadGigConversations();
-        showToast('Payment released to provider!');
+
+    async function disputePayment(gigReqId, reason) {
+        setDisputeSubmitting(true);
+        const res = await apiFetch('/api/payments/dispute', {
+            method: 'POST',
+            body: JSON.stringify({ orderId: gigReqId, reason }),
+        });
+        const data = await res.json();
+        setDisputeSubmitting(false);
+        if (!res.ok) { showToast(data.error || 'Failed to file dispute'); return; }
+        setShowDisputeModal(false);
+        setDisputeReason('');
+        setPendingDisputeId(null);
+        setGigConversations(prev => prev.map(c =>
+            c.gig_request_id === gigReqId ? { ...c, payment_status: 'disputed' } : c
+        ));
+        showToast('Dispute filed. Payment is on hold for review.');
     }
 
-    async function disputePayment(gigReqId) {
-        const { error: e } = await supabase.from('gig_requests').update({
-            payment_status: 'disputed',
-        }).eq('id', gigReqId);
-        if (e) { setError(e.message); return; }
-        await loadGigConversations();
-        showToast('Dispute filed. Payment is on hold for review.');
+    // ── Seller: Mark as Delivered ─────────────────────────────────────────────
+
+    async function markAsDelivered(gigReqId) {
+        if (!activeConvo) return;
+        const { error: err } = await supabase
+            .from('gig_requests')
+            .update({ status: 'delivered', provider_completed: true })
+            .eq('id', gigReqId)
+            .eq('provider_id', user.id);
+        if (err) { setError(err.message); return; }
+
+        setGigConversations(prev => prev.map(c =>
+            c.gig_request_id === gigReqId
+                ? { ...c, status: 'delivered', provider_completed: true }
+                : c
+        ));
+        showToast('Marked as delivered! Waiting for buyer to release funds.');
+    }
+
+
+
+    // Seller: Mark as Undelivered
+
+    async function revertMarkAsDelivered(gigReqId) {
+
+        if (!activeConvo) return;
+
+        const { error: err } = await supabase
+            .from('gig_requests')
+            .update({ status: 'accepted', provider_completed: false })
+            .eq('id', gigReqId)
+            .eq('provider_id', user.id);
+
+        if (err) { showToast(err.message); return; }
+
+        setGigConversations(prev => prev.map(c =>
+            c.gig_request_id === gigReqId
+                ? { ...c, status: 'accepted', provider_completed: false }
+                : c
+        ));
+        showToast('Delivery reverted. Order back to accepted.');
+
+
+
+
+    }
+
+    // ── Seller: Cancel Order ──────────────────────────────────────────────────
+
+    async function cancelOrder(gigReqId) {
+        const res = await apiFetch('/api/payments/cancel', {
+            method: 'POST',
+            body: JSON.stringify({ orderId: gigReqId, reason: 'Cancelled by seller' }),
+        });
+        const data = await res.json();
+        if (!res.ok) { showToast(data.error || 'Failed to cancel order'); return; }
+        setGigConversations(prev => prev.map(c =>
+            c.gig_request_id === gigReqId
+                ? { ...c, status: 'cancelled', payment_status: c.payment_status === 'escrowed' ? 'withdrawn' : c.payment_status }
+                : c
+        ));
+        showToast('Order cancelled.');
+    }
+
+    // ── Buyer: Release Funds & Complete ───────────────────────────────────────
+
+    async function releaseFundsAndComplete(gigReqId) {
+        if (!activeConvo) return;
+
+        try {
+            const res = await apiFetch('/api/payments/release', {
+                method: 'POST',
+                body: JSON.stringify({ orderId: gigReqId }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to release payment');
+
+            setGigConversations(prev => prev.map(c =>
+                c.gig_request_id === gigReqId
+                    ? { ...c, status: 'completed', payment_status: 'released', requester_completed: true }
+                    : c
+            ));
+
+            setActiveTab('completed');
+            showToast('Payment released! Gig completed.');
+            await checkAndShowGigRatingModal(gigReqId);
+        } catch (err) {
+            setError(err.message);
+        }
+    }
+
+    // ── Buyer: Refund ─────────────────────────────────────────────────────────
+
+    async function handleRefund(gigReqId) {
+        if (!activeConvo) return;
+
+        try {
+            const res = await apiFetch('/api/payments/refund', {
+                method: 'POST',
+                body: JSON.stringify({ orderId: gigReqId }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to process withdrawal');
+
+            setGigConversations(prev => prev.map(c =>
+                c.gig_request_id === gigReqId
+                    ? { ...c, status: 'withdrawn', payment_status: 'withdrawn', requester_completed: true }
+                    : c
+            ));
+
+            setActiveTab('completed');
+            showToast('Withdrawal processed. Order marked as withdrawn.');
+        } catch (err) {
+            setError(err.message);
+        }
     }
 
     // ── Mount ─────────────────────────────────────────────────────────────────
 
     function handleSwitchMode(mode) {
         if (mode === chatMode) return;
-        realtimeSub.current?.unsubscribe();
-        swapSub.current?.unsubscribe();
+        cleanupSubs();
         setChatMode(mode);
         setActiveSwapId(null);
         setActiveGigReqId(null);
@@ -546,17 +631,24 @@ export default function ChatPage() {
             const convos = await loadConversations();
             await loadGigConversations();
             const swapParam = searchParams.get('swap');
-            if (swapParam) {
+            const gigParam = searchParams.get('gig');
+            if (gigParam) {
+                setChatMode('gigs');
+                const gigConvos = await loadGigConversations();
+                const found = gigConvos?.find(c => c.gig?.id === gigParam);
+                if (found) await selectConversation(found.gig_request_id, 'gigs');
+            } else if (swapParam) {
                 const found = convos?.find(c => c.swap_id === swapParam);
                 if (found) await selectConversation(found.swap_id, 'swaps');
             } else if (convos?.length > 0) {
                 await selectConversation(convos[0].swap_id, 'swaps');
             }
         })();
-        return () => { realtimeSub.current?.unsubscribe(); swapSub.current?.unsubscribe(); };
-    }, [user, profile]);
+        return () => cleanupSubs();
+    }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
+        if (!hasMounted.current) { hasMounted.current = true; return; }
         if (!user) return;
         (async () => {
             if (chatMode === 'swaps') {
@@ -567,7 +659,7 @@ export default function ChatPage() {
                 if (convos?.length > 0 && !activeGigReqId) await selectConversation(convos[0].gig_request_id, 'gigs');
             }
         })();
-    }, [chatMode, profile]);
+    }, [chatMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ...
     return (
@@ -746,24 +838,24 @@ export default function ChatPage() {
                                 <div ref={msgEndRef} />
                             </div>
 
-                            {chatMode === 'gigs' && activeConvo && activeConvo.provider_completed && !activeConvo.isProvider && activeConvo.payment_status === 'authorized' && (
+                            {chatMode === 'gigs' && activeConvo && !activeConvo.isProvider && activeConvo.status === 'delivered' && activeConvo.payment_status === 'escrowed' && (
                                 <div className="escrow-banner">
                                     <div className="escrow-banner-icon">🔒</div>
                                     <div className="escrow-banner-info">
                                         <p className="escrow-banner-title">Provider marked this gig as done</p>
-                                        <p className="escrow-banner-sub">Review the work and confirm to release payment, or file a dispute.</p>
-                                        {activeConvo.confirmation_deadline && (
-                                            <p className="escrow-banner-timer">Auto-releases {new Date(activeConvo.confirmation_deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
+                                        <p className="escrow-banner-sub">Review the work and release payment, or file a dispute.</p>
+                                        {activeConvo.auto_release_date && (
+                                            <p className="escrow-banner-timer">Auto-releases {new Date(activeConvo.auto_release_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
                                         )}
                                     </div>
                                     <div className="escrow-banner-actions">
-                                        <button className="btn btn-accept btn-sm" onClick={() => confirmPayment(activeConvo.gig_request_id)}>Confirm & Pay</button>
-                                        <button className="btn btn-decline btn-sm" onClick={() => disputePayment(activeConvo.gig_request_id)}>Dispute</button>
+                                        <button className="btn btn-accept btn-sm" onClick={() => releaseFundsAndComplete(activeConvo.gig_request_id)}>Release Funds</button>
+                                        <button className="btn btn-decline btn-sm" onClick={() => { setPendingDisputeId(activeConvo.gig_request_id); setShowDisputeModal(true); }}>Dispute</button>
                                     </div>
                                 </div>
                             )}
 
-                            {chatMode === 'gigs' && activeConvo && activeConvo.payment_status === 'captured' && (
+                            {chatMode === 'gigs' && activeConvo && activeConvo.payment_status === 'released' && (
                                 <div className="escrow-banner escrow-captured">
                                     <span style={{ fontSize: 18 }}>✅</span>
                                     <p style={{ flex: 1, margin: 0, fontWeight: 600, fontSize: 13 }}>Payment released — ${activeConvo.gig?.price?.toFixed(2)} paid to provider</p>
@@ -803,99 +895,370 @@ export default function ChatPage() {
                             </div>
                         </>
                     )}
-                </main>
-            </div>
+                </main >
+            </div >
 
             {error && <div className="toast error">{error}</div>}
 
             {/* ── Profile Modal ── */}
-            {showProfileModal && modalProfile && (
-                <div className="modal-backdrop" onClick={() => { setShowProfileModal(false); setModalProfile(null); }}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
-                        <button className="modal-close" onClick={() => { setShowProfileModal(false); setModalProfile(null); }}>✕</button>
+            {
+                showProfileModal && modalProfile && (
+                    <div className="modal-backdrop" onClick={() => { setShowProfileModal(false); setModalProfile(null); }}>
+                        <div className="modal" onClick={e => e.stopPropagation()}>
+                            <button className="modal-close" onClick={() => { setShowProfileModal(false); setModalProfile(null); }}>✕</button>
 
-                        <div className="modal-header">
-                            <div className="avatar avatar-lg">{initials(modalProfile.full_name)}</div>
-                            <div><h2>{modalProfile.full_name}</h2></div>
-                        </div>
+                            <div className="modal-header">
+                                <div className="avatar avatar-lg">{initials(modalProfile.full_name)}</div>
+                                {/* <div><h2>{modalProfile.full_name}</h2></div> */}
+                                <Link to={`/profile/${modalProfile.id}`}>
+                                    <h2>{modalProfile.full_name}</h2>
+                                </Link>
+                                {modalProfile.avgRating && (
+                                    <p style={{ margin: 0, fontSize: 14, color: '#92400e' }}>
+                                        ★ {modalProfile.avgRating} <span style={{ color: '#6b7280' }}>({modalProfile.ratingCount} review{modalProfile.ratingCount !== 1 ? 's' : ''})</span>
+                                    </p>
+                                )}
+                            </div>
 
-                        <Link to={`/profile/${modalProfile.id}`}>
-                            View Profile
-                        </Link>
 
-                        {(chatMode === 'swaps' || chatMode === 'gigs') && (
-                            <div className="complete-swap">
-                                <div className="complete-swap-header">
-                                    <h3>{chatMode === 'swaps' ? 'Complete Swap' : 'Complete Gig'}</h3>
+
+                            {/* {(chatMode === 'swaps' || chatMode === 'gigs') && (
+                                <div className="complete-swap">
+                                    <div className="complete-swap-header">
+                                        <h3>{chatMode === 'swaps' ? 'Complete Swap' : 'Complete Gig'}</h3>
+                                        {activeConvo && (() => {
+                                            const completionCount = chatMode === 'swaps' ? (activeConvo.requester_completed ? 1 : 0) + (activeConvo.receiver_completed ? 1 : 0) : (activeConvo.requester_completed ? 1 : 0) + (activeConvo.provider_completed ? 1 : 0);
+                                            return <span className="completion-badge-large">Complete {completionCount}/2</span>;
+                                        })()}
+                                    </div>
                                     {activeConvo && (() => {
-                                        const completionCount = chatMode === 'swaps' ? (activeConvo.requester_completed ? 1 : 0) + (activeConvo.receiver_completed ? 1 : 0) : (activeConvo.requester_completed ? 1 : 0) + (activeConvo.provider_completed ? 1 : 0);
-                                        return <span className="completion-badge-large">Complete {completionCount}/2</span>;
+                                        const isRequester = chatMode === 'swaps' ? activeConvo.requester_id === user?.id : activeConvo.requester_id === user?.id;
+                                        const hasVoted = chatMode === 'swaps' ? (isRequester ? activeConvo.requester_completed : activeConvo.receiver_completed) : (isRequester ? activeConvo.requester_completed : activeConvo.provider_completed);
+                                        return hasVoted ? (
+                                            <button className="btn-unvote-swap" onClick={() => chatMode === 'swaps' ? unmarkSwapComplete(activeConvo.swap_id) : unmarkGigComplete(activeConvo.gig_request_id)}>Remove Vote</button>
+                                        ) : (
+                                            <button className="btn-complete-swap" onClick={() => chatMode === 'swaps' ? markSwapComplete(activeConvo.swap_id) : markGigComplete(activeConvo.gig_request_id)}>{chatMode === 'swaps' ? 'Vote to Complete Swap' : 'Vote to Complete Gig'}</button>
+                                        );
                                     })()}
                                 </div>
-                                {activeConvo && (() => {
-                                    const isRequester = chatMode === 'swaps' ? activeConvo.requester_id === user?.id : activeConvo.requester_id === user?.id;
-                                    const hasVoted = chatMode === 'swaps' ? (isRequester ? activeConvo.requester_completed : activeConvo.receiver_completed) : (isRequester ? activeConvo.requester_completed : activeConvo.provider_completed);
-                                    return hasVoted ? (
-                                        <button className="btn-unvote-swap" onClick={() => chatMode === 'swaps' ? unmarkSwapComplete(activeConvo.swap_id) : unmarkGigComplete(activeConvo.gig_request_id)}>Remove Vote</button>
-                                    ) : (
-                                        <button className="btn-complete-swap" onClick={() => chatMode === 'swaps' ? markSwapComplete(activeConvo.swap_id) : markGigComplete(activeConvo.gig_request_id)}>{chatMode === 'swaps' ? 'Vote to Complete Swap' : 'Vote to Complete Gig'}</button>
-                                    );
-                                })()}
-                            </div>
-                        )}
+                            )} */}
 
-                        {chatMode === 'gigs' && activeConvo?.gig && (
-                            <div className="modal-section">
-                                <h3>Gig Details</h3>
-                                <p style={{ fontWeight: 600, fontSize: 16 }}>{activeConvo.gig.title}</p>
-                                <p style={{ color: 'var(--text-secondary)', marginTop: 4 }}>
-                                    ${activeConvo.gig.price?.toFixed(2)} · {activeConvo.gig.category ?? 'No category'}
-                                </p>
-                            </div>
-                        )}
-
-                        {modalProfile.bio && (
-                            <div className="modal-section">
-                                <h3>About {modalProfile.full_name}:</h3>
-                                <p className="bio">{modalProfile.bio}</p>
-                            </div>
-                        )}
-                        {chatMode === 'swaps' && (
-                            <>
+                            {chatMode === 'gigs' && activeConvo?.gig && (
                                 <div className="modal-section">
-                                    <h3>Can teach</h3>
-                                    <div className="skill-tags">
-                                        {(modalProfile.skills_teach ?? []).map((s, i) => (
-                                            <span key={i} className="skill-tag skill-teach">{getSkillName(s)}</span>
-                                        ))}
+                                    <h3>Gig Details</h3>
+
+                                    <p style={{ fontWeight: 600, fontSize: 16 }}>{activeConvo.gig.title}</p>
+                                
+                                    <p style={{ color: 'var(--text-secondary)', marginTop: 4 }}>
+                                        ${activeConvo.gig.price?.toFixed(2)} · {activeConvo.gig.category ?? 'No category'}
+                                    </p>
+
+                                    <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+                                        <div style={{
+                                            flex: 1, padding: '10px 14px',
+                                            background: 'var(--color-background-tertiary)',
+                                            borderRadius: 10, border: '1px solid var(--border)'
+                                        }}>
+                                            <p style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', margin: '0 0 4px' }}>
+                                                Order Status
+                                            </p>
+                                            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: 0, textTransform: 'capitalize' }}>
+                                                {activeConvo.status?.replace(/_/g, ' ') ?? '—'}
+                                            </p>
+                                        </div>
+
+                                        <div style={{
+                                            flex: 1, padding: '10px 14px',
+                                            background: 'var(--color-background-tertiary)',
+                                            borderRadius: 10, border: '1px solid var(--border)'
+                                        }}>
+                                            <p style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', margin: '0 0 4px' }}>
+                                                Payment Status
+                                            </p>
+                                            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: 0, textTransform: 'capitalize' }}>
+                                                {activeConvo.payment_status?.replace(/_/g, ' ') ?? '—'}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Gig Completion Actions */}
+                                    <div style={{ marginTop: 20 }}>
+                                        {/* Buyer: Unpaid — go pay */}
+                                        {!activeConvo.isProvider && ['unpaid', 'pending'].includes(activeConvo.payment_status) && activeConvo.status === 'accepted' && (
+                                            <button
+                                                className="btn btn-primary"
+                                                style={{ width: '100%', marginBottom: 10 }}
+                                                onClick={() => {
+                                                    setShowProfileModal(false);
+                                                    navigate(`/my-orders?pay=${activeConvo.gig_request_id}`);
+                                                }}>
+                                                💳 Pay Now
+                                            </button>
+                                        )}
+
+                                        {/* Provider: Cancel Order */}
+                                        {activeConvo.isProvider && ['pending', 'accepted', 'in_progress'].includes(activeConvo.status) && ['unpaid', 'escrowed'].includes(activeConvo.payment_status) && (
+                                            <button
+                                                className="btn btn-danger"
+                                                style={{ width: '100%', marginBottom: 10 }}
+                                                onClick={() => {
+                                                    setPendingCancelId(activeConvo.gig_request_id);
+                                                    setShowProfileModal(false);
+                                                    setShowCancelConfirm(true);
+                                                }}>
+                                                ✕ Cancel Order
+                                            </button>
+                                        )}
+
+                                        {/* Provider: Mark as Delivered */}
+                                        {activeConvo.isProvider && activeConvo.payment_status === 'escrowed' && activeConvo.status === 'accepted' && (
+                                            <button
+                                                className="btn btn-primary"
+                                                style={{ width: '100%', marginBottom: 10 }}
+                                                onClick={() => { markAsDelivered(activeConvo.gig_request_id); setShowProfileModal(false); }}>
+                                                📦 Mark as Delivered
+                                            </button>
+                                        )}
+
+
+                                        {activeConvo.isProvider && activeConvo.payment_status == 'escrowed' && activeConvo.status == "delivered"&& (
+                                            
+                                            <button
+                                                className='btn btn-primary'
+                                                style={{ width: '100%', marginBottom: 10 }} 
+                                                onClick={() => { revertMarkAsDelivered(activeConvo.gig_request_id); setShowProfileModal(false); }} 
+                                                
+                                            >
+                                                📦 Revert Delivered
+                                            </button>
+                                        )}
+
+                                        {/* Provider: Waiting for buyer */}
+                                        {activeConvo.isProvider && activeConvo.status === 'delivered' && activeConvo.payment_status === 'escrowed' && (
+                                            <div style={{ padding: '12px 14px', background: '#fefce8', border: '1px solid #fde047', borderRadius: 8, fontSize: 13, color: '#a16207' }}>
+                                                ⏳ Waiting for buyer to release funds...
+                                            </div>
+                                        )}
+
+                                        {/* Buyer: Release Funds after delivery */}
+                                        {!activeConvo.isProvider && activeConvo.status === 'delivered' && activeConvo.payment_status === 'escrowed' && (
+                                            <>
+                                                <div style={{ padding: '12px 14px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, fontSize: 13, color: '#166534', marginBottom: 10 }}>
+                                                    ✅ Work delivered! Review and release payment.
+                                                </div>
+                                                <button
+                                                    className="btn btn-primary"
+                                                    style={{ width: '100%', marginBottom: 10 }}
+                                                    onClick={() => { releaseFundsAndComplete(activeConvo.gig_request_id); setShowProfileModal(false); }}>
+                                                    💰 Release Funds & Complete
+                                                </button>
+                                                <button
+                                                    className="btn btn-secondary"
+                                                    style={{ width: '100%' }}
+                                                    onClick={() => {
+                                                        setPendingDisputeId(activeConvo.gig_request_id);
+                                                        setShowProfileModal(false);
+                                                        setShowDisputeModal(true);
+                                                    }}>
+                                                    ⚠️ File Dispute
+                                                </button>
+                                            </>
+                                        )}
+
+                                        {/* Buyer: Withdraw before work starts */}
+                                        {!activeConvo.isProvider && activeConvo.payment_status === 'escrowed' && activeConvo.status === 'accepted' && (
+                                            <button
+                                                className="btn chat-withdraw-btn"
+                                                style={{ width: '100%', marginTop: 10 }}
+                                                onClick={() => {
+                                                    setPendingWithdrawId(activeConvo.gig_request_id);
+                                                    setShowProfileModal(false);
+                                                    setShowWithdrawConfirm(true);
+                                                }}>
+                                                <span>↩</span> Withdraw & Cancel
+                                            </button>
+                                        )}
+
+                                        {/* Completed state */}
+                                        {activeConvo.payment_status === 'released' && (
+                                            <div style={{ padding: '12px 14px', background: '#d1fae5', border: '1px solid #6ee7b7', borderRadius: 8, fontSize: 13, color: '#065f46' }}>
+                                                ✓ Payment released. Gig completed!
+                                            </div>
+                                        )}
+
+                                        {/* Disputed state */}
+                                        {activeConvo.payment_status === 'disputed' && (
+                                            <div style={{ padding: '12px 14px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, fontSize: 13, color: '#991b1b' }}>
+                                                ⚠️ Payment disputed. Under review.
+                                            </div>
+                                        )}
+
+                                        {/* Withdrawn state (also catches legacy 'refunded') */}
+                                        {(activeConvo.status === 'withdrawn' || activeConvo.payment_status === 'withdrawn' || activeConvo.payment_status === 'refunded') && (
+                                            <div style={{ padding: '12px 14px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, color: '#4b5563' }}>
+                                                ✓ Order withdrawn. Payment returned.
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
-                                <div className="modal-section">
-                                    <h3>Wants to learn</h3>
-                                    <div className="skill-tags">
-                                        {(modalProfile.skills_learn ?? []).map((s, i) => (
-                                            <span key={i} className="skill-tag skill-learn">{getSkillName(s)}</span>
-                                        ))}
-                                    </div>
-                                </div>
-                            </>
-                        )}
+                            )}
 
-                        {activeConvo && (chatMode === 'gigs' ? isGigCompleted(activeConvo) : isSwapCompleted(activeConvo)) && (
-                            <div className="modal-section">
-                                <button className="btn-rate-user" onClick={() => {
-                                    setShowProfileModal(false);
-                                    setModalProfile(null);
-                                    setShowRatingModal(true);
-                                }}>
-                                    ⭐ Rate {modalProfile.full_name}
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div >
-            )
+                            {modalProfile.bio && (
+                                <div className="modal-section">
+                                    <h3>About {modalProfile.full_name}:</h3>
+                                    <p className="bio">{modalProfile.bio}</p>
+                                </div>
+                            )}
+                            {chatMode === 'swaps' && (
+                                <>
+                                    <div className="modal-section">
+                                        <h3>Can teach</h3>
+                                        <div className="skill-tags">
+                                            {(modalProfile.skills_teach ?? []).map((s, i) => (
+                                                <span key={i} className="skill-tag skill-teach">{getSkillName(s)}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="modal-section">
+                                        <h3>Wants to learn</h3>
+                                        <div className="skill-tags">
+                                            {(modalProfile.skills_learn ?? []).map((s, i) => (
+                                                <span key={i} className="skill-tag skill-learn">{getSkillName(s)}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+
+                            {activeConvo && (chatMode === 'gigs' ? isGigCompleted(activeConvo) : isSwapCompleted(activeConvo)) && (
+                                <div className="modal-section">
+                                    <button className="btn-rate-user" onClick={() => {
+                                        setShowProfileModal(false);
+                                        setModalProfile(null);
+                                        setShowRatingModal(true);
+                                    }}>
+                                        ⭐ Rate {modalProfile.full_name}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div >
+                )
             }
+
+            {/* ── Withdraw Confirm Modal ── */}
+            {showWithdrawConfirm && (
+                <div className="modal-backdrop" onClick={() => setShowWithdrawConfirm(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420, textAlign: 'center', padding: '32px 28px 24px' }}>
+                        <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+                        <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 12px' }}>Withdraw Order?</h2>
+                        <p style={{ fontSize: 15, color: '#374151', margin: '0 0 6px', lineHeight: 1.5 }}>
+                            This will <strong>cancel the order</strong> and return your payment.
+                        </p>
+                        <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 24px', lineHeight: 1.5 }}>
+                            Once withdrawn, this cannot be undone.
+                        </p>
+                        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                            <button className="btn btn-secondary" style={{ minWidth: 120 }} onClick={() => setShowWithdrawConfirm(false)}>
+                                Cancel
+                            </button>
+                            <button
+                                className="btn btn-danger"
+                                style={{ minWidth: 120 }}
+                                onClick={() => {
+                                    setShowWithdrawConfirm(false);
+                                    handleRefund(pendingWithdrawId);
+                                    setPendingWithdrawId(null);
+                                }}>
+                                Yes, Withdraw
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Cancel Confirm Modal ── */}
+            {showCancelConfirm && (
+                <div className="modal-backdrop" onClick={() => setShowCancelConfirm(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420, textAlign: 'center', padding: '32px 28px 24px' }}>
+                        <div style={{ fontSize: 40, marginBottom: 12 }}>🚫</div>
+                        <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 12px' }}>Cancel Order?</h2>
+                        <p style={{ fontSize: 15, color: '#374151', margin: '0 0 6px', lineHeight: 1.5 }}>
+                            This will <strong>cancel the order</strong>. If the buyer already paid, their payment will be refunded.
+                        </p>
+                        <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 24px', lineHeight: 1.5 }}>
+                            This cannot be undone.
+                        </p>
+                        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                            <button className="btn btn-secondary" style={{ minWidth: 120 }} onClick={() => setShowCancelConfirm(false)}>
+                                Go Back
+                            </button>
+                            <button
+                                className="btn btn-danger"
+                                style={{ minWidth: 120 }}
+                                onClick={() => {
+                                    setShowCancelConfirm(false);
+                                    cancelOrder(pendingCancelId);
+                                    setPendingCancelId(null);
+                                }}>
+                                Yes, Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Dispute Modal ── */}
+            {showDisputeModal && (
+                <div className="modal-backdrop" onClick={() => { setShowDisputeModal(false); setDisputeReason(''); }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 460, padding: '28px 28px 24px' }}>
+                        <button className="modal-close" onClick={() => { setShowDisputeModal(false); setDisputeReason(''); }}>✕</button>
+
+                        <div style={{ fontSize: 36, marginBottom: 12 }}>⚠️</div>
+                        <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 8px' }}>File a Dispute</h2>
+                        <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '0 0 20px', lineHeight: 1.6 }}>
+                            Filing a dispute puts the payment <strong>on hold</strong> and notifies our support team to review the situation. Only file a dispute if there's a genuine issue with the service.
+                        </p>
+
+                        <div style={{ background: '#fefce8', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px', marginBottom: 20, fontSize: 13, color: '#92400e', lineHeight: 1.5 }}>
+                            <strong>Before filing:</strong> Have you tried resolving this with the seller via chat? Most issues can be resolved directly without a dispute.
+                        </div>
+
+                        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: 'var(--text-primary)' }}>
+                            Describe the issue <span style={{ color: '#ef4444' }}>*</span>
+                        </label>
+                        <textarea
+                            value={disputeReason}
+                            onChange={e => setDisputeReason(e.target.value)}
+                            placeholder="e.g. The work delivered doesn't match what was agreed. The seller did not respond after payment..."
+                            rows={4}
+                            style={{
+                                width: '100%', boxSizing: 'border-box', padding: '10px 12px',
+                                border: '1.5px solid var(--border)', borderRadius: 8,
+                                fontSize: 14, fontFamily: 'inherit', resize: 'vertical',
+                                outline: 'none', lineHeight: 1.5,
+                                color: 'var(--text-primary)', background: 'var(--surface)',
+                            }}
+                        />
+
+                        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                            <button
+                                className="btn btn-secondary"
+                                style={{ flex: 1 }}
+                                onClick={() => { setShowDisputeModal(false); setDisputeReason(''); }}>
+                                Cancel
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                style={{ flex: 1, background: '#ef4444', opacity: (!disputeReason.trim() || disputeSubmitting) ? 0.5 : 1 }}
+                                disabled={!disputeReason.trim() || disputeSubmitting}
+                                onClick={() => disputePayment(pendingDisputeId, disputeReason)}>
+                                {disputeSubmitting ? 'Filing...' : '⚠️ File Dispute'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ── Rating Modal ── */}
             {
@@ -940,7 +1303,7 @@ export default function ChatPage() {
             }
 
             <style>{`
-            .chat-shell { display: flex; height: calc(100vh - 57px); overflow: hidden; background: var(--bg); }
+            .chat-shell { display: flex; height: calc(100vh - 90px); overflow: hidden; background: var(--bg); }
 
             /* Sidebar */
             .sidebar { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--surface); overflow: hidden; }
@@ -1022,6 +1385,10 @@ export default function ChatPage() {
             .modal-section h3 { font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
             .modal-section .bio { color: var(--text-secondary); line-height: 1.6; }
             .modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary); }
+            .btn-danger { background: #ef4444; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+            .btn-danger:hover { background: #dc2626; }
+            .chat-withdraw-btn { display: flex; align-items: center; justify-content: center; gap: 7px; background: #fff5f5; border: 1.5px solid #fca5a5; color: #dc2626; padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+            .chat-withdraw-btn:hover { background: #fee2e2; border-color: #ef4444; color: #b91c1c; }
             .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
             .skill-tags { display: flex; flex-wrap: wrap; gap: 8px; }
 

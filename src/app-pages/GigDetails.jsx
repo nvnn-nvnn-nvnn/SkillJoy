@@ -15,6 +15,7 @@ export default function GigDetailsPage() {
 
     const [gig, setGig] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [lightbox, setLightbox] = useState(null); // index of open image
     const [profileRatings, setProfileRatings] = useState([]);
     const [loadingRatings, setLoadingRatings] = useState(false);
     const [customAmount, setCustomAmount] = useState('');
@@ -68,16 +69,33 @@ export default function GigDetailsPage() {
         const amount = parseFloat(customAmount);
         if (isNaN(amount) || amount <= 0) { showToast('Please enter a valid amount', 'error'); return; }
         setSendingRequest(true);
+
+        // Check for existing active request (not completed/cancelled)
+        const { data: existingRequest } = await supabase
+            .from('gig_requests')
+            .select('id, status, payment_status')
+            .eq('gig_id', gig.id)
+            .eq('requester_id', user.id)
+            .not('status', 'in', '("completed","cancelled","declined","withdrawn")')
+            .not('payment_status', 'in', '("withdrawn","refunded")')
+            .maybeSingle();
+
+        if (existingRequest) {
+            setSendingRequest(false);
+            showToast('You already have an active request for this gig', 'error');
+            return;
+        }
+
         const { error } = await supabase.from('gig_requests').insert({
             gig_id: gig.id, requester_id: user.id, provider_id: gig.user_id, status: 'pending',
         });
         setSendingRequest(false);
         if (error) {
-            showToast(error.code === '23505' ? 'You already sent a request for this gig' : error.message, 'error');
+            showToast(error.message, 'error');
             return;
         }
         showToast('Hire request sent!', 'success');
-        setTimeout(() => navigate('/chat?gig=' + gig.id), 1500);
+        setTimeout(() => navigate('/my-orders'), 1500);
     }
 
     function showToast(msg, type = 'success') {
@@ -108,7 +126,7 @@ export default function GigDetailsPage() {
             <div className="page gd-page">
 
                 {/* Back */}
-                <button onClick={() => navigate('/gigs')} className="gd-back">
+                <button onClick={() => navigate('/gigs')} className="gd-back" style={{backgroundColor: "#fff"}}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
                     Back to Gigs
                 </button>
@@ -160,9 +178,19 @@ export default function GigDetailsPage() {
                                 <h3 className="gd-section-label">Portfolio</h3>
                                 <div className="gd-portfolio">
                                     {gig.images.map((url, i) => (
-                                        <img key={i} src={url} alt={`Portfolio ${i + 1}`} className="gd-portfolio-img" />
+                                        <img key={i} src={url} alt={`Portfolio ${i + 1}`} className="gd-portfolio-img" onClick={() => setLightbox(i)} />
                                     ))}
                                 </div>
+                            </div>
+                        )}
+
+                        {lightbox !== null && gig.images?.length > 0 && (
+                            <div className="gd-lightbox-backdrop" onClick={() => setLightbox(null)}>
+                                <button className="gd-lb-nav gd-lb-prev" onClick={e => { e.stopPropagation(); setLightbox((lightbox - 1 + gig.images.length) % gig.images.length); }}>‹</button>
+                                <img src={gig.images[lightbox]} alt="" className="gd-lb-img" onClick={e => e.stopPropagation()} />
+                                <button className="gd-lb-nav gd-lb-next" onClick={e => { e.stopPropagation(); setLightbox((lightbox + 1) % gig.images.length); }}>›</button>
+                                <button className="gd-lb-close" onClick={() => setLightbox(null)}>✕</button>
+                                <span className="gd-lb-counter">{lightbox + 1} / {gig.images.length}</span>
                             </div>
                         )}
 
@@ -458,7 +486,38 @@ export default function GigDetailsPage() {
                     border: 1px solid var(--border);
                     transition: transform 0.18s;
                 }
+                .gd-portfolio-img { cursor: zoom-in; }
                 .gd-portfolio-img:hover { transform: scale(1.02); }
+
+                .gd-lightbox-backdrop {
+                    position: fixed; inset: 0; background: rgba(0,0,0,0.88);
+                    z-index: 1000; display: flex; align-items: center; justify-content: center;
+                }
+                .gd-lb-img {
+                    max-width: 90vw; max-height: 85vh; object-fit: contain;
+                    border-radius: 8px; box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+                }
+                .gd-lb-nav {
+                    position: absolute; top: 50%; transform: translateY(-50%);
+                    background: rgba(255,255,255,0.15); border: none; color: #fff;
+                    font-size: 48px; line-height: 1; padding: 8px 18px; cursor: pointer;
+                    border-radius: 8px; transition: background 0.15s;
+                }
+                .gd-lb-nav:hover { background: rgba(255,255,255,0.3); }
+                .gd-lb-prev { left: 16px; }
+                .gd-lb-next { right: 16px; }
+                .gd-lb-close {
+                    position: absolute; top: 16px; right: 16px;
+                    background: rgba(255,255,255,0.15); border: none; color: #fff;
+                    font-size: 20px; width: 36px; height: 36px; border-radius: 50%;
+                    cursor: pointer; display: flex; align-items: center; justify-content: center;
+                    transition: background 0.15s;
+                }
+                .gd-lb-close:hover { background: rgba(255,255,255,0.3); }
+                .gd-lb-counter {
+                    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+                    color: rgba(255,255,255,0.7); font-size: 13px;
+                }
 
                 /* Reviews */
                 .gd-reviews-count {
