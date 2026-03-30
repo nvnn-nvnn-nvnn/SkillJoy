@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/stores';
+import { apiFetch } from '@/lib/api';
 
 /**
  * Disputes - Payment dispute resolution page
@@ -29,6 +30,9 @@ export default function Disputes() {
     const [toastType, setToastType] = useState('success');
     const [selectedDispute, setSelectedDispute] = useState(null);
     const [evidenceText, setEvidenceText] = useState('');
+    const [evidenceImage, setEvidenceImage] = useState(null); // File object
+    const [uploadingEvidence, setUploadingEvidence] = useState(false);
+    const [cancelTarget, setCancelTarget] = useState(null);
 
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
@@ -37,8 +41,8 @@ export default function Disputes() {
 
     async function loadDisputes() {
         setLoading(true);
-        
-        // Load disputes where user is either buyer or seller
+
+        // Load all disputes (active and resolved) where user is buyer or seller
         const { data, error } = await supabase
             .from('gig_requests')
             .select(`
@@ -47,7 +51,7 @@ export default function Disputes() {
                 requester:profiles!requester_id(id, full_name),
                 provider:profiles!provider_id(id, full_name)
             `)
-            .eq('payment_status', 'disputed')
+            .not('dispute_date', 'is', null)
             .or(`requester_id.eq.${user.id},provider_id.eq.${user.id}`)
             .order('dispute_date', { ascending: false });
 
@@ -73,62 +77,35 @@ export default function Disputes() {
             return;
         }
 
-        // PLACEHOLDER: Call backend to submit evidence
-        // Example: POST /api/disputes/submit-evidence
-        // Body: { disputeId, evidence: evidenceText, files: [] }
-
+        setUploadingEvidence(true);
         try {
-            // For now, just store in dispute_resolution field as placeholder
-            const { error } = await supabase
-                .from('gig_requests')
-                .update({
-                    dispute_resolution: evidenceText
-                })
-                .eq('id', disputeId);
+            let imageUrl = null;
 
-            if (error) throw error;
+            // Upload image to Supabase Storage if provided
+            if (evidenceImage) {
+                const ext = evidenceImage.name.split('.').pop();
+                const path = `${user.id}/${disputeId}/${Date.now()}.${ext}`;
+                const { error: upErr } = await supabase.storage.from('dispute-evidence').upload(path, evidenceImage);
+                if (upErr) throw new Error('Image upload failed: ' + upErr.message);
+                const { data } = supabase.storage.from('dispute-evidence').getPublicUrl(path);
+                imageUrl = data.publicUrl;
+            }
 
-            showToast('Evidence submitted to support team', 'success');
+            const res = await apiFetch('/api/payments/submit-evidence', {
+                method: 'POST',
+                body: JSON.stringify({ orderId: disputeId, content: evidenceText.trim(), imageUrl }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to submit evidence');
+
+            showToast('Evidence submitted.', 'success');
             setEvidenceText('');
+            setEvidenceImage(null);
             setSelectedDispute(null);
-            loadDisputes();
         } catch (err) {
             showToast(err.message, 'error');
-        }
-    }
-
-    /**
-     * Resolve dispute (Admin only)
-     * BACKEND TODO:
-     * - Verify user is admin/support
-     * - Process refund or release payment
-     * - Update payment_status
-     * - Notify both parties
-     * - Close support ticket
-     */
-    async function resolveDispute(disputeId, resolution) {
-        // PLACEHOLDER: This should only be callable by admin/support
-        // Example: POST /api/disputes/resolve
-        // Body: { disputeId, resolution: 'refund' | 'release', notes: '' }
-
-        try {
-            const newStatus = resolution === 'refund' ? 'refunded' : 'released';
-            
-            const { error } = await supabase
-                .from('gig_requests')
-                .update({
-                    payment_status: newStatus,
-                    dispute_resolved_date: new Date().toISOString(),
-                    dispute_resolution: `Resolved: ${resolution}`
-                })
-                .eq('id', disputeId);
-
-            if (error) throw error;
-
-            showToast(`Dispute resolved: ${resolution}`, 'success');
-            loadDisputes();
-        } catch (err) {
-            showToast(err.message, 'error');
+        } finally {
+            setUploadingEvidence(false);
         }
     }
 
@@ -140,21 +117,14 @@ export default function Disputes() {
      * - Notify other party
      */
     async function cancelDispute(disputeId) {
-        if (!confirm('Are you sure you want to cancel this dispute?')) return;
-
         try {
-            const { error } = await supabase
-                .from('gig_requests')
-                .update({
-                    payment_status: 'escrowed',
-                    dispute_reason: null,
-                    dispute_date: null
-                })
-                .eq('id', disputeId);
-
-            if (error) throw error;
-
-            showToast('Dispute cancelled', 'success');
+            const res = await apiFetch('/api/payments/cancel-dispute', {
+                method: 'POST',
+                body: JSON.stringify({ orderId: disputeId }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to cancel dispute');
+            showToast('Dispute cancelled — order marked as completed.', 'success');
             loadDisputes();
         } catch (err) {
             showToast(err.message, 'error');
@@ -216,9 +186,11 @@ export default function Disputes() {
                             const isBuyer = dispute.requester_id === user.id;
                             const otherUser = isBuyer ? dispute.provider : dispute.requester;
                             const daysOpen = getDaysOpen(dispute);
+                            const isResolved = dispute.payment_status === 'refunded' || dispute.payment_status === 'released';
+                            const resolvedInBuyerFavor = dispute.payment_status === 'refunded';
 
                             return (
-                                <div key={dispute.id} className="dispute-card">
+                                <div key={dispute.id} className="dispute-card" style={isResolved ? { borderColor: '#d1d5db', opacity: 0.85 } : {}}>
                                     <div className="dispute-header">
                                         <div>
                                             <h3 className="dispute-title">{dispute.gig.title}</h3>
@@ -226,9 +198,16 @@ export default function Disputes() {
                                                 {isBuyer ? 'Seller' : 'Buyer'}: {otherUser.full_name}
                                             </p>
                                         </div>
-                                        <span className="dispute-badge">
-                                            Under Review
-                                        </span>
+                                        {isResolved ? (
+                                            <span className="dispute-badge" style={{
+                                                background: resolvedInBuyerFavor ? '#f0fdf4' : '#eff6ff',
+                                                color: resolvedInBuyerFavor ? '#166534' : '#1e40af',
+                                            }}>
+                                                {resolvedInBuyerFavor ? '✓ Refunded' : '✓ Released to Seller'}
+                                            </span>
+                                        ) : (
+                                            <span className="dispute-badge">Under Review</span>
+                                        )}
                                     </div>
 
                                     <div className="dispute-details">
@@ -250,30 +229,46 @@ export default function Disputes() {
                                         )}
                                     </div>
 
-                                    <div className="dispute-info-banner">
-                                        <p>
-                                            🛡️ Your payment is safely held while our support team reviews this case. 
-                                            Both parties will be notified of the resolution.
-                                        </p>
-                                    </div>
+                                    {isResolved ? (
+                                        <div className="dispute-info-banner" style={{
+                                            background: resolvedInBuyerFavor ? '#f0fdf4' : '#eff6ff',
+                                        }}>
+                                            <p style={{ color: resolvedInBuyerFavor ? '#166534' : '#1e40af' }}>
+                                                {resolvedInBuyerFavor
+                                                    ? isBuyer
+                                                        ? '✓ This dispute was resolved in your favor. A full refund has been issued.'
+                                                        : '✗ This dispute was resolved in the buyer\'s favor. The payment was refunded.'
+                                                    : isBuyer
+                                                        ? '✓ This dispute was reviewed and payment was released to the seller.'
+                                                        : '✓ This dispute was resolved in your favor. Payment has been released to you.'
+                                                }
+                                            </p>
+                                            {dispute.dispute_resolution && (
+                                                <p style={{ margin: '4px 0 0', fontSize: 13, opacity: 0.8 }}>
+                                                    Resolution: {dispute.dispute_resolution}
+                                                </p>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="dispute-info-banner">
+                                            <p>
+                                                🛡️ Your payment is safely held while our support team reviews this case.
+                                                Both parties will be notified of the resolution.
+                                            </p>
+                                        </div>
+                                    )}
 
                                     <div className="dispute-actions">
-                                        <button 
-                                            className="btn btn-primary" 
-                                            onClick={() => setSelectedDispute(dispute)}
+                                        <button
+                                            className="btn btn-primary"
+                                            onClick={() => navigate(`/disputes/${dispute.id}`)}
                                         >
-                                            Submit Evidence
+                                            View Details
                                         </button>
-                                        <button 
-                                            className="btn btn-secondary" 
-                                            onClick={() => navigate(`/chat?gig=${dispute.gig.id}`)}
-                                        >
-                                            View Chat
-                                        </button>
-                                        {isBuyer && (
-                                            <button 
-                                                className="btn btn-secondary" 
-                                                onClick={() => cancelDispute(dispute.id)}
+                                        {!isResolved && isBuyer && (
+                                            <button
+                                                className="btn btn-secondary"
+                                                onClick={() => setCancelTarget(dispute)}
                                                 style={{ marginLeft: 'auto' }}
                                             >
                                                 Cancel Dispute
@@ -325,8 +320,27 @@ export default function Disputes() {
                                 placeholder="Describe the issue and provide evidence..."
                                 value={evidenceText}
                                 onChange={e => setEvidenceText(e.target.value)}
-                                rows={8}
+                                rows={6}
                             />
+
+                            {/* Optional image attachment */}
+                            <div style={{ marginTop: 12 }}>
+                                <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
+                                    Attach image (optional)
+                                </label>
+                                {evidenceImage ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <img src={URL.createObjectURL(evidenceImage)} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)' }} />
+                                        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{evidenceImage.name}</span>
+                                        <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setEvidenceImage(null)}>Remove</button>
+                                    </div>
+                                ) : (
+                                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '8px 14px', border: '1px dashed var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
+                                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => setEvidenceImage(e.target.files[0] || null)} />
+                                        📎 Choose image
+                                    </label>
+                                )}
+                            </div>
 
                             {/* PLACEHOLDER: File upload would go here */}
                             <div style={{ background: '#f3f4f6', padding: '16px', borderRadius: '8px', marginTop: '16px', textAlign: 'center' }}>
@@ -342,8 +356,38 @@ export default function Disputes() {
                             <button className="btn btn-secondary" onClick={() => setSelectedDispute(null)}>
                                 Cancel
                             </button>
-                            <button className="btn btn-primary" onClick={() => submitEvidence(selectedDispute.id)}>
-                                Submit Evidence
+                            <button className="btn btn-primary" onClick={() => submitEvidence(selectedDispute.id)} disabled={uploadingEvidence}>
+                                {uploadingEvidence ? 'Uploading...' : 'Submit Evidence'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* CANCEL DISPUTE MODAL */}
+            {cancelTarget && (
+                <div className="modal-overlay" onClick={() => setCancelTarget(null)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+                        <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
+                            <div style={{ fontSize: 40, marginBottom: 12 }}>🚫</div>
+                            <h2 className="modal-title">Cancel Dispute?</h2>
+                            <p style={{ fontSize: 15, color: '#374151', margin: '0 0 6px', lineHeight: 1.5 }}>
+                                This will cancel the dispute for <strong>{cancelTarget.gig?.title}</strong> and return the payment to escrow.
+                            </p>
+                            <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 24px' }}>
+                                You can re-file a dispute later if needed.
+                            </p>
+                        </div>
+                        <div className="modal-actions" style={{ justifyContent: 'center', gap: 12 }}>
+                            <button className="btn btn-secondary" onClick={() => setCancelTarget(null)}>
+                                Go Back
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                style={{ background: '#ef4444' }}
+                                onClick={() => { cancelDispute(cancelTarget.id); setCancelTarget(null); }}
+                            >
+                                Yes, Cancel Dispute
                             </button>
                         </div>
                     </div>

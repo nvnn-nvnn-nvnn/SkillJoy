@@ -23,8 +23,10 @@ import GigDetails from './app-pages/GigDetails'
 import MyListings from './app-pages/MyListings'
 import MyOrders from './app-pages/MyOrders'
 import Disputes from './app-pages/Disputes'
+import DisputeDetail from './app-pages/DisputeDetail'
 import Profile from './app-pages/Profile'
 import Settings from './app-pages/Settings'
+import Admin from './app-pages/Admin'
 
 function App() {
   return (
@@ -46,9 +48,11 @@ function App() {
           <Route path="/my-listings" element={<MyListings />} />
           <Route path="/my-orders" element={<MyOrders />} />
           <Route path="/disputes" element={<Disputes />} />
+          <Route path="/disputes/:disputeId" element={<DisputeDetail />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/profile/:userId" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/admin" element={<Admin />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

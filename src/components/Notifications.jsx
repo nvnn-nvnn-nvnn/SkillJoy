@@ -95,22 +95,30 @@ export default function Notifications() {
         markAsRead(notification.id);
         setShowDropdown(false);
 
-        // Navigate based on notification type
         if (notification.type === 'message') {
             navigate(`/chat?${notification.related_type === 'gig' ? 'gig' : 'swap'}=${notification.related_id}`);
         } else if (notification.type === 'swap_request') {
             navigate('/my-swaps');
         } else if (notification.type === 'gig_request') {
             navigate('/my-listings');
+        } else if (notification.type === 'dispute_filed' || notification.type === 'dispute_resolved') {
+            navigate('/disputes');
+        } else if (notification.type === 'order_update' || notification.type === 'order_cancelled' || notification.type === 'gig_completed') {
+            navigate('/my-orders');
         }
     }
 
     function getNotificationIcon(type) {
         switch (type) {
-            case 'message': return '💬';
-            case 'swap_request': return '🔄';
-            case 'gig_request': return '💼';
-            default: return '🔔';
+            case 'message':          return '💬';
+            case 'swap_request':     return '🔄';
+            case 'gig_request':      return '💼';
+            case 'dispute_filed':    return '⚠️';
+            case 'dispute_resolved': return '✅';
+            case 'order_update':     return '📦';
+            case 'order_cancelled':  return '🚫';
+            case 'gig_completed':    return '🎉';
+            default:                 return '🔔';
         }
     }
 

@@ -227,6 +227,24 @@ export default function GigsPage() {
         }
         const gig = paymentModal;
         setSendingId(gig.id);
+
+        // Check for existing active request (not completed/cancelled)
+        const { data: existingRequest } = await supabase
+            .from('gig_requests')
+            .select('id, status, payment_status')
+            .eq('gig_id', gig.id)
+            .eq('requester_id', user.id)
+            .not('status', 'in', '("completed","cancelled","declined","withdrawn")')
+            .not('payment_status', 'in', '("withdrawn","refunded")')
+            .maybeSingle();
+
+        if (existingRequest) {
+            setSendingId(null);
+            setPaymentModal(null);
+            showToast('You already have an active request for this gig', 'error');
+            return;
+        }
+
         const { error } = await supabase.from('gig_requests').insert({
             gig_id: gig.id,
             requester_id: user.id,
@@ -238,11 +256,7 @@ export default function GigsPage() {
         setCustomAmount('');
 
         if (error) {
-            if (error.code === '23505') {
-                showToast('You already sent a request for this gig', 'error');
-            } else {
-                showToast(error.message, 'error');
-            }
+            showToast(error.message, 'error');
             return;
         }
         showToast('Hire request sent!', 'success');
@@ -360,7 +374,7 @@ export default function GigsPage() {
                     <div className="empty-state">
                         <span className="empty-icon">💼</span>
                         <h3>No gigs found</h3>
-                        <p>Be the first to list a paid service!</p>
+                        <p style={{color: "#fff"}}>Be the first to list a paid service!</p>
                         <Link to="/my-listings" className="btn btn-primary" style={{ marginTop: 16 }}>
                             Create a gig
                         </Link>
@@ -403,6 +417,13 @@ export default function GigsPage() {
                                         {gig.category && <span className="gig-category">{gig.category}</span>}
                                     </div>
                                 </div>
+                                {gig.images?.[0] && (
+                                    <img
+                                        src={gig.images[0]}
+                                        alt={gig.title}
+                                        style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '8px', marginBottom: '10px' }}
+                                    />
+                                )}
                                 <h3 className="gig-title">{gig.title}</h3>
                                 {gig.description && <p className="gig-desc">{gig.description}</p>}
                                 <div className="gig-footer">
