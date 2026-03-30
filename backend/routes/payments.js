@@ -170,6 +170,51 @@ router.post('/release', async (req, res) => {
         // TODO: If using Stripe Connect, transfer funds to provider here
         // await stripe.transfers.create({ ... });
 
+
+        const { data: providerProfile} = await supabase
+            .from('profiles')
+            .select('stripe_account_id, stripe_onboarded')
+            .eq('id', order.provider_id)
+            .single();
+
+            if (!providerProfile?.stripe_account_id ||
+                !providerProfile?.stripe_onboarded
+            ){
+                    console.warn(`Provider ${order.provider_id} has no Stripe account. Funds held.`);
+
+            } else {
+
+                const SERVICE_FEES_CENTS = 300;
+                // $3.00
+
+                const transferAmount = Math.round(order.payment_amount * 100)
+                - SERVICE_FEES_CENTS;
+
+                await stripe.transfers.create({
+                    amount: transferAmount,
+                    currency: "usd",
+                    destination: providerProfile.stripe_account_id,
+                    transfer_group: orderId
+
+                });
+
+
+
+            };
+
+
+
+
+
+
+
+
+
+
+        // stripe release
+
+
+
         // Notify seller
         const { data: fullOrder } = await supabase
             .from('gig_requests')

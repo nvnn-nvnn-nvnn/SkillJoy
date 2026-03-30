@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth, getSkillName, normalizeSkills, DAYS_OF_WEEK, TIME_PERIODS } from '@/lib/stores';
+import { apiFetch } from '@/lib/api';
 import SkillEditor from '@/components/Skillededitor';
 
 export default function ProfilePage() {
@@ -26,6 +27,14 @@ export default function ProfilePage() {
     const [skillsTeach, setSkillsTeach] = useState([]);
     const [skillsLearn, setSkillsLearn] = useState([]);
     const [availability, setAvailability] = useState([]);
+
+
+    // Stripe Status
+    const [stripeStatus, setStripeStatus] = useState(null);
+
+
+
+
 
     const isOwnProfile = !userId || userId === user?.id;
 
@@ -74,6 +83,52 @@ export default function ProfilePage() {
         setRatings(ratingsData);
         setLoading(false);
     }
+
+
+// Stripe Load Start
+
+
+    useEffect(() => {
+
+        if (!isOwnProfile) {
+            return
+        };
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('stripe') === 'success' || params.get('stripe') === 'refresh') {
+            checkStripeStatus();
+            window.history.replaceState({}, '', '/profile');
+        } else {
+            checkStripeStatus();
+        }
+
+        async function checkStripeStatus() {
+            const res = await apiFetch('/api/stripe-connect/status');
+            const data = await res.json();
+            setStripeStatus(data);
+        }
+
+    }, []);
+
+    async function handleStripeOnboard() {
+        const res = await apiFetch('/api/stripe-connect/onboard', { method: 'POST' });
+        const data = await res.json();
+        if (data.url) {
+            window.location.href = data.url;
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+// Stripe Load End
 
     async function loadGigs() {
         setBusy(true);
@@ -238,9 +293,35 @@ export default function ProfilePage() {
                             </button>
                         </div>
                     )}
+                    
                 </div>
 
                 {error && <div className="toast error">{error}</div>}
+
+                {isOwnProfile && profile?.offers_gigs && (
+                    <div style={{
+                        padding: '16px 20px',
+                        background: stripeStatus?.onboarded ? '#f0fdf4' : '#fffbeb',
+                        border: `1px solid ${stripeStatus?.onboarded ? '#86efac' : '#fde68a'}`,
+                        borderRadius: 10,
+                        marginBottom: 20
+                    }}>
+                        {stripeStatus?.onboarded ? (
+                            <p style={{ color: '#166534', fontWeight: 600, margin: 0 }}>
+                                ✅ Payouts active — you'll receive funds when buyers release payment.
+                            </p>
+                        ) : (
+                            <>
+                                <p style={{ color: '#92400e', fontWeight: 600, margin: '0 0 10px' }}>
+                                    ⚠️ Set up payouts to receive money from completed orders.
+                                </p>
+                                <button className="btn btn-primary" onClick={handleStripeOnboard}>
+                                    Set Up Payouts with Stripe
+                                </button>
+                            </>
+                        )}
+                    </div>
+                )}
 
                 <div className="profile-section">
                     <h2 className="section-title">About</h2>

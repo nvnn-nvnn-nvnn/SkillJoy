@@ -9,6 +9,8 @@ const paymentRoutes = require('./routes/payments.js');
 const userRoutes = require('./routes/users.js');
 const webhookRoutes = require('./routes/webhooks.js');
 const adminRoutes = require('./routes/admin.js');
+const stripeConnectRoutes = require('./routes/stripe-connect.js');
+
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,6 +32,12 @@ app.use(express.json());
 app.use('/api/payments', authMiddleware, paymentRoutes);
 app.use('/api/admin', authMiddleware, adminRoutes);
 app.use('/api/users', userRoutes);
+
+
+// Stripe Connect
+
+app.use('/api/stripe-connect' , authMiddleware,
+     stripeConnectRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
