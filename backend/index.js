@@ -74,6 +74,33 @@ cron.schedule('0 0 * * *', async () => {
 
     for (const order of overdueOrders) {
         const clearanceDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+        
+        // Edgecases
+
+        if (!order){
+            console.error(`There is no order to return`)
+            return
+        }
+
+        // Find Profile 
+
+        const { data: profileProvider, error : profileError } = await supabase
+            .from('profile')
+            .select('striple_account_id', 'stripe_onboarded')
+            .eq('id', order.id)
+            .single()
+
+            if (!providerProfile?.stripe_account_id || !providerProfile?.stripe_onboarded) {
+            console.warn(`Provider ${order.provider_id} has no Stripe account. Funds Held`)
+            } else{
+
+            }
+
+            
+        
+
+
+        
         const { error: releaseError } = await supabase
             .from('gig_requests')
             .update({

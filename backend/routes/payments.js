@@ -171,6 +171,31 @@ router.post('/release', async (req, res) => {
         }
 
 
+        const { data: providerProfile } = await supabase
+            .from('profiles')
+            .select('stripe_account_id, stripe_onboarded')
+            .eq('id', order.provider_id)
+            .single();
+
+        
+        if (!providerProfile?.stripe_account_id || !providerProfile?.stripe_onboarded) {
+            console.warn(`Provider ${order.provider_id} has no Stripe account. Funds Held`)
+        } else {
+            
+            const SERVICE_FEE_CENTS = 600;
+            const transferAmount = Math.round(order.payment_amount * 100) - SERVICE_FEE_CENTS;
+
+            await stripe.transfers.create({
+                amount: transferAmount,
+                currency: 'usd',
+                destination: providerProfile.stripe_account_id,
+                transfer_group: orderId,
+            });
+
+
+        };
+
+
 
 
 
