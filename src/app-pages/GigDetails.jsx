@@ -23,7 +23,7 @@ export default function GigDetailsPage() {
     const [toast, setToast] = useState('');
     const [toastType, setToastType] = useState('success');
 
-    const SERVICE_FEE = 3.00;
+    const SERVICE_FEE = 6.00;
 
     useEffect(() => {
         if (!user) { navigate('/login'); return; }

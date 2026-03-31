@@ -1,41 +1,40 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useUser, useProfile } from '@/lib/stores';
+import { useUser, useProfile, useAuth } from '@/lib/stores';
 
 export default function SettingsPage() {
     const user = useUser();
     const profile = useProfile();
+    const { setProfile } = useAuth();
     const navigate = useNavigate();
 
     const [email, setEmail] = useState('');
+    const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [offersGigs, setOffersGigs] = useState(false);
     const [notificationPrefs, setNotificationPrefs] = useState({
-        swapRequests: true,
-        gigRequests: true,
-        messages: true,
-        reviews: true,
+        swapRequests: true, gigRequests: true, messages: true, reviews: true,
     });
     const [privacySettings, setPrivacySettings] = useState({
-        showEmail: false,
-        showAvailability: true,
-        allowMessages: true,
+        showEmail: false, showAvailability: true, allowMessages: true,
     });
     const [saving, setSaving] = useState(false);
     const [toast, setToast] = useState('');
     const [toastType, setToastType] = useState('success');
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deleteInput, setDeleteInput] = useState('');
 
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
         setEmail(user.email || '');
-        loadPreferences();
-    }, [user]);
-
-    async function loadPreferences() {
-        if (profile?.notification_prefs) setNotificationPrefs(profile.notification_prefs);
-        if (profile?.privacy_settings) setPrivacySettings(profile.privacy_settings);
-    }
+        if (profile) {
+            setOffersGigs(profile.offers_gigs || false);
+            if (profile.notification_prefs) setNotificationPrefs(profile.notification_prefs);
+            if (profile.privacy_settings) setPrivacySettings(profile.privacy_settings);
+        }
+    }, [user, profile]);
 
     async function updateEmail() {
         if (!email || email === user.email) { showToast('Please enter a new email address', 'error'); return; }
@@ -46,15 +45,29 @@ export default function SettingsPage() {
     }
 
     async function updatePassword() {
-        if (!newPassword || newPassword.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
+        if (!currentPassword) { showToast('Enter your current password', 'error'); return; }
+        if (!newPassword || newPassword.length < 6) { showToast('New password must be at least 6 characters', 'error'); return; }
         if (newPassword !== confirmPassword) { showToast('Passwords do not match', 'error'); return; }
         setSaving(true);
+        // Re-authenticate with current password first
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email: user.email, password: currentPassword });
+        if (signInError) { setSaving(false); showToast('Current password is incorrect', 'error'); return; }
         const { error } = await supabase.auth.updateUser({ password: newPassword });
         setSaving(false);
         if (error) { showToast(error.message, 'error'); } else {
             showToast('Password updated!', 'success');
-            setNewPassword(''); setConfirmPassword('');
+            setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
         }
+    }
+
+    async function saveGigSettings() {
+        setSaving(true);
+        const { error } = await supabase.from('profiles').update({ offers_gigs: offersGigs }).eq('id', user.id);
+        setSaving(false);
+        if (error) { showToast(error.message, 'error'); return; }
+        const { data: updated } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        if (updated) setProfile(updated);
+        showToast('Gig settings saved!', 'success');
     }
 
     async function saveNotificationPrefs() {
@@ -69,6 +82,13 @@ export default function SettingsPage() {
         const { error } = await supabase.from('profiles').update({ privacy_settings: privacySettings }).eq('id', user.id);
         setSaving(false);
         error ? showToast(error.message, 'error') : showToast('Privacy settings saved!', 'success');
+    }
+
+    async function deleteAccount() {
+        if (deleteInput !== 'DELETE') return;
+        setSaving(true);
+        await supabase.auth.signOut();
+        navigate('/login');
     }
 
     function showToast(msg, type = 'success') {
@@ -102,12 +122,31 @@ export default function SettingsPage() {
 
                 <div className="sj-field">
                     <label className="sj-label">Change password</label>
+                    <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="Current password" className="sj-input" style={{ marginBottom: 8 }} />
                     <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="New password" className="sj-input" style={{ marginBottom: 8 }} />
                     <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirm new password" className="sj-input" style={{ marginBottom: 12 }} />
-                    <button className="sj-btn sj-btn-ghost" onClick={updatePassword} disabled={saving || !newPassword}>
+                    <button className="sj-btn sj-btn-ghost" onClick={updatePassword} disabled={saving || !currentPassword || !newPassword}>
                         Update password
                     </button>
                 </div>
+            </section>
+
+            {/* Gig Settings */}
+            <section className="sj-card">
+                <h2 className="sj-section-title">Gig Settings</h2>
+                <div className="sj-toggle-row">
+                    <div>
+                        <p className="sj-toggle-label">Offer gig services</p>
+                        <p className="sj-hint">Show your profile as a seller and allow buyers to hire you</p>
+                    </div>
+                    <label className="sj-switch">
+                        <input type="checkbox" checked={offersGigs} onChange={e => setOffersGigs(e.target.checked)} />
+                        <span className="sj-slider" />
+                    </label>
+                </div>
+                <button className="sj-btn sj-btn-primary" onClick={saveGigSettings} disabled={saving} style={{ marginTop: 16 }}>
+                    {saving ? 'Saving…' : 'Save'}
+                </button>
             </section>
 
             {/* Notifications */}
@@ -169,6 +208,46 @@ export default function SettingsPage() {
                 <button className="sj-btn sj-btn-primary" onClick={savePrivacySettings} disabled={saving} style={{ marginTop: 8 }}>
                     {saving ? 'Saving…' : 'Save settings'}
                 </button>
+            </section>
+
+            {/* Danger Zone */}
+            <section className="sj-card" style={{ borderColor: '#fca5a5' }}>
+                <h2 className="sj-section-title" style={{ color: '#dc2626' }}>Danger Zone</h2>
+                {!showDeleteConfirm ? (
+                    <div>
+                        <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                            Permanently delete your account and all associated data. This cannot be undone.
+                        </p>
+                        <button className="sj-btn" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fca5a5' }} onClick={() => setShowDeleteConfirm(true)}>
+                            Delete account
+                        </button>
+                    </div>
+                ) : (
+                    <div>
+                        <p style={{ fontSize: 14, color: '#dc2626', fontWeight: 600, marginBottom: 8 }}>
+                            Type DELETE to confirm
+                        </p>
+                        <div className="sj-row">
+                            <input
+                                className="sj-input"
+                                value={deleteInput}
+                                onChange={e => setDeleteInput(e.target.value)}
+                                placeholder="DELETE"
+                            />
+                            <button
+                                className="sj-btn"
+                                style={{ background: '#dc2626', color: '#fff', border: 'none' }}
+                                onClick={deleteAccount}
+                                disabled={deleteInput !== 'DELETE' || saving}
+                            >
+                                Confirm
+                            </button>
+                            <button className="sj-btn sj-btn-ghost" onClick={() => { setShowDeleteConfirm(false); setDeleteInput(''); }}>
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                )}
             </section>
 
             {toast && <div className={`sj-toast sj-toast-${toastType}`}>{toast}</div>}

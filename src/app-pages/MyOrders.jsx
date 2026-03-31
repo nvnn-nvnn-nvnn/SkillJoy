@@ -25,7 +25,7 @@ function PaymentForm({ order, onSuccess, onError, onClose }) {
     const [cardName, setCardName] = useState('');
     const [zipCode, setZipCode] = useState('');
 
-    const SERVICE_FEE = 3.00;
+    const SERVICE_FEE = 6.00;
     const total = (parseFloat(order.gig.price) || 0) + SERVICE_FEE;
 
     async function handleSubmit(e) {
@@ -38,7 +38,7 @@ function PaymentForm({ order, onSuccess, onError, onClose }) {
                 method: 'POST',
                 body: JSON.stringify({
                     orderId: order.id,
-                    amount: order.gig.price + 3.00
+                    amount: order.gig.price + SERVICE_FEE
                 }),
             });
 
@@ -618,7 +618,9 @@ export default function MyOrders() {
         if (status === 'withdrawn' || payment_status === 'withdrawn') return { text: 'Withdrawn', color: '#6b7280' };
         if (payment_status === 'refunded') return { text: 'Refunded', color: '#6b7280' };
         if (payment_status === 'disputed') return { text: 'Disputed', color: '#ef4444' };
-        if (payment_status === 'released') return { text: 'Completed', color: '#10b981' };
+        if (payment_status === 'cleared') return { text: 'Cleared', color: '#10b981' };
+        if (payment_status === 'released') return { text: 'Pending Clearance', color: '#b45309' };
+        if (status === 'cancelled') return { text: 'Cancelled', color: '#6b7280' };
         if (payment_status === 'escrowed' && status === 'delivered') return { text: 'Review Pending', color: '#f59e0b' };
         if (payment_status === 'escrowed') return { text: 'In Progress', color: '#3b82f6' };
         if (status === 'pending') return { text: 'Waiting for seller to accept', color: '#6b7280' };
@@ -891,10 +893,17 @@ export default function MyOrders() {
                                             </>
                                         )}
 
-                                        {/* Seller: payment released */}
-                                        {!isBuyer && order.payment_status === 'released' && (
+                                        {/* Seller: pending clearance */}
+                                        {!isBuyer && order.payment_status === 'released' && order.clearance_date && (
+                                            <div className="mo-success-note" style={{ background: '#fffbeb', color: '#92400e' }}>
+                                                🕐 Pending clearance — funds available {new Date(order.clearance_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ({Math.max(0, Math.ceil((new Date(order.clearance_date) - Date.now()) / (1000 * 60 * 60 * 24)))}d left)
+                                            </div>
+                                        )}
+
+                                        {/* Seller: cleared */}
+                                        {!isBuyer && order.payment_status === 'cleared' && (
                                             <div className="mo-success-note">
-                                                ✓ Payment released. Available after 14-day clearing period.
+                                                ✓ Funds cleared and sent to your Stripe account.
                                             </div>
                                         )}
 

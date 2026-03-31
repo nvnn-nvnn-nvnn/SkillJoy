@@ -10,12 +10,19 @@ const userRoutes = require('./routes/users.js');
 const webhookRoutes = require('./routes/webhooks.js');
 const adminRoutes = require('./routes/admin.js');
 const stripeConnectRoutes = require('./routes/stripe-connect.js');
+const rateLimit = require('express-rate-limit');
 
+// Global limiter: 200 req per 15 min per IP
+const globalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
+
+// Strict limiter: 30 req per 15 min — for payment actions
+const strictLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many requests, please try again later.' } });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
+app.use(globalLimiter);
 
 // Webhook must be BEFORE express.json() to receive raw body
 app.use('/webhooks', (req, res, next) => {
@@ -29,7 +36,7 @@ app.use('/webhooks', (req, res, next) => {
 // JSON parsing for all other routes
 app.use(express.json());
 
-app.use('/api/payments', authMiddleware, paymentRoutes);
+app.use('/api/payments', strictLimiter, authMiddleware, paymentRoutes);
 app.use('/api/admin', authMiddleware, adminRoutes);
 app.use('/api/users', userRoutes);
 
@@ -66,12 +73,14 @@ cron.schedule('0 0 * * *', async () => {
     if (!overdueOrders?.length) { console.log('No orders to auto-release.'); return; }
 
     for (const order of overdueOrders) {
+        const clearanceDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
         const { error: releaseError } = await supabase
             .from('gig_requests')
             .update({
                 payment_status: 'released',
                 status: 'completed',
                 release_date: new Date().toISOString(),
+                clearance_date: clearanceDate,
             })
             .eq('id', order.id);
 
@@ -84,8 +93,8 @@ cron.schedule('0 0 * * *', async () => {
                 {
                     user_id: order.provider_id,
                     type: 'order_update',
-                    title: 'Payment auto-released!',
-                    message: `Payment for "${gigTitle}" was automatically released after 3 days. The funds are on their way.`,
+                    title: 'Payment auto-released — clearance started',
+                    message: `Payment for "${gigTitle}" was automatically released after 3 days. Funds will be available in 14 days.`,
                     related_id: order.id, related_type: 'gig',
                 },
                 {
@@ -100,4 +109,77 @@ cron.schedule('0 0 * * *', async () => {
     }
 
     console.log(`Auto-release done. Processed ${overdueOrders.length} order(s).`);
+});
+
+// ── Clearance cron ────────────────────────────────────────────────────────────
+// Runs daily at 1am. Finds orders past their 14-day clearance window and
+// transfers funds to the seller's Stripe Connect account.
+cron.schedule('0 1 * * *', async () => {
+    console.log('⏰ Clearance cron running:', new Date().toISOString());
+
+    const { data: readyOrders, error } = await supabase
+        .from('gig_requests')
+        .select('id, provider_id, payment_amount, clearance_date, gig:gigs(title)')
+        .eq('payment_status', 'released')
+        .lte('clearance_date', new Date().toISOString());
+
+    if (error) { console.error('Clearance query error:', error.message); return; }
+    if (!readyOrders?.length) { console.log('No orders ready for clearance.'); return; }
+
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    const SERVICE_FEES_CENTS = 600;
+
+    for (const order of readyOrders) {
+        const { data: provider } = await supabase
+            .from('profiles')
+            .select('stripe_account_id, stripe_onboarded')
+            .eq('id', order.provider_id)
+            .single();
+
+        if (!provider?.stripe_account_id || !provider?.stripe_onboarded) {
+            console.warn(`Clearance: provider ${order.provider_id} has no Stripe account. Skipping.`);
+            continue;
+        }
+
+        try {
+            const transferAmount = Math.round(order.payment_amount * 100) - SERVICE_FEES_CENTS;
+            await stripe.transfers.create({
+                amount: transferAmount,
+                currency: 'usd',
+                destination: provider.stripe_account_id,
+                transfer_group: order.id,
+            });
+
+            await supabase.from('gig_requests').update({ payment_status: 'cleared' }).eq('id', order.id);
+
+            const gigTitle = order.gig?.title ?? 'your order';
+            await supabase.from('notifications').insert({
+                user_id: order.provider_id,
+                type: 'order_update',
+                title: 'Funds cleared!',
+                message: `Your earnings for "${gigTitle}" have cleared and are on their way to your Stripe account.`,
+                related_id: order.id, related_type: 'gig',
+            });
+
+            console.log(`✅ Cleared order ${order.id}`);
+        } catch (err) {
+            console.error(`Clearance transfer failed for order ${order.id}:`, err.message);
+        }
+    }
+
+    console.log(`Clearance cron done. Processed ${readyOrders.length} order(s).`);
+});
+
+// ── Chat archive cron ─────────────────────────────────────────────────────────
+// Runs hourly. Archives completed gig chats 24h after completion.
+cron.schedule('0 * * * *', async () => {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { error } = await supabase
+        .from('gig_requests')
+        .update({ chat_archived_at: new Date().toISOString() })
+        .eq('status', 'completed')
+        .is('chat_archived_at', null)
+        .lte('release_date', cutoff);
+    if (error) console.error('Chat archive cron error:', error.message);
+    else console.log('✅ Chat archive cron ran');
 });

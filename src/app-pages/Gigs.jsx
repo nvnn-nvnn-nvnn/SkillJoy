@@ -36,6 +36,7 @@ export default function GigsPage() {
     const [allGigs, setAllGigs] = useState([]);
     const [busy, setBusy] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState('');
     const [toast, setToast] = useState('');
     const [toastType, setToastType] = useState('success');
     const [sendingId, setSendingId] = useState(null);
@@ -160,14 +161,21 @@ export default function GigsPage() {
             gigs = gigs.filter(g => favorites.includes(g.id));
         }
 
-        // Search filter
+        // Search filter with relevance scoring
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
-            gigs = gigs.filter(g =>
-                g.title?.toLowerCase().includes(q) ||
-                g.category?.toLowerCase().includes(q) ||
-                g.profile?.full_name?.toLowerCase().includes(q)
-            );
+            gigs = gigs
+                .map(g => {
+                    let score = 0;
+                    if (g.title?.toLowerCase().includes(q)) score += 4;
+                    if (g.tags?.some(t => t.toLowerCase().includes(q))) score += 3;
+                    if (g.category?.toLowerCase().includes(q)) score += 2;
+                    if (g.description?.toLowerCase().includes(q)) score += 1;
+                    if (g.profile?.full_name?.toLowerCase().includes(q)) score += 1;
+                    return { ...g, _score: score };
+                })
+                .filter(g => g._score > 0)
+                .sort((a, b) => b._score - a._score);
         }
 
         // Availability days filter
@@ -186,8 +194,13 @@ export default function GigsPage() {
             );
         }
 
+        // Category filter
+        if (categoryFilter) {
+            gigs = gigs.filter(g => g.category === categoryFilter);
+        }
+
         return gigs;
-    }, [allGigs, user, searchQuery, showFavoritesOnly, favorites, availabilityDays, timeFilter]);
+    }, [allGigs, user, searchQuery, showFavoritesOnly, favorites, availabilityDays, timeFilter, categoryFilter]);
 
     function showToast(msg, type = 'success') {
         setToast(msg);
@@ -195,7 +208,7 @@ export default function GigsPage() {
         setTimeout(() => setToast(''), 3500);
     }
 
-    const SERVICE_FEE = 3.00;
+    const SERVICE_FEE = 6.00;
 
     function openPaymentModal(gig) {
         setPaymentModal(gig);
@@ -364,11 +377,35 @@ export default function GigsPage() {
                 </div>
 
                 {/* Category slider */}
-                <SliderSearch onCategorySelect={handleCategorySelect} categories={GIG_CATEGORIES} />
+                {/* <SliderSearch onCategorySelect={handleCategorySelect} categories={GIG_CATEGORIES} /> */}
+
+                {/* Category filter pills */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: 12 }}>
+                    {GIG_CATEGORIES.map(cat => (
+                        <button
+                            key={cat.label}
+                            onClick={() => setCategoryFilter(prev => prev === cat.label ? '' : cat.label)}
+                            style={{
+                                padding: '5px 12px',
+                                borderRadius: 20,
+                                border: '1px solid',
+                                borderColor: categoryFilter === cat.label ? 'var(--primary)' : 'var(--border)',
+                                background: categoryFilter === cat.label ? 'var(--primary)' : '#fff',
+                                color: categoryFilter === cat.label ? '#fff' : 'var(--text-secondary)',
+                                fontSize: 13,
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {cat.emoji} {cat.label}
+                        </button>
+                    ))}
+                </div>
 
                 {busy ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
-                        <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', gap: 16 }}>
+                        <div className="spinner" style={{ width: 40, height: 40, borderWidth: 3 }} />
+                        <p style={{ color: 'var(--text-muted)', fontSize: 14, margin: 0 }}>Loading gigs…</p>
                     </div>
                 ) : browseGigs.length === 0 ? (
                     <div className="empty-state">
@@ -426,6 +463,15 @@ export default function GigsPage() {
                                 )}
                                 <h3 className="gig-title">{gig.title}</h3>
                                 {gig.description && <p className="gig-desc">{gig.description}</p>}
+                                {gig.tags?.length > 0 && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+                                        {gig.tags.slice(0, 4).map(tag => (
+                                            <span key={tag} onClick={e => { e.stopPropagation(); setSearchQuery(tag); }} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: 'var(--surface-alt)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                                                {tag}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
                                 <div className="gig-footer">
                                     <span className="gig-price">${gig.price?.toFixed(2)}</span>
                                     <button

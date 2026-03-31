@@ -55,6 +55,8 @@ export default function MyListingsPage() {
     const [urlInput, setUrlInput] = useState('');
     const [uploadingImage, setUploadingImage] = useState(false);
     const [faqs, setFaqs] = useState([]);
+    const [tags, setTags] = useState([]);
+    const [tagInput, setTagInput] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [gigDetailModal, setGigDetailModal] = useState(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -138,6 +140,7 @@ export default function MyListingsPage() {
         setRequirements(gig.requirements || '');
         setImages(gig.images || []);
         setFaqs(gig.faqs || []);
+        setTags(gig.tags || []);
         setUrlInput('');
         setTab('create');
     }
@@ -145,7 +148,7 @@ export default function MyListingsPage() {
     function resetForm() {
         setEditingGig(null);
         setTitle(''); setDescription(''); setPrice(''); setCategory('');
-        setCommitments(''); setRequirements(''); setImages([]); setFaqs([]); setUrlInput('');
+        setCommitments(''); setRequirements(''); setImages([]); setFaqs([]); setUrlInput(''); setTags([]); setTagInput('');
     }
 
     // ── Create / Update Gig ──
@@ -164,6 +167,7 @@ export default function MyListingsPage() {
             requirements: requirements.trim() || null,
             images: images.length > 0 ? images : null,
             faqs: validFaqs.length > 0 ? validFaqs : null,
+            tags: tags.length > 0 ? tags : null,
         };
 
         if (editingGig) {
@@ -293,12 +297,10 @@ export default function MyListingsPage() {
                         {tab === 'listings' && (
                             myGigs.length === 0 ? (
                                 <div className="empty-state">
-                                    <span className="empty-icon">📋</span>
-                                    <h3>No gigs yet</h3>
-                                    <p>List your first service to start earning.</p>
-                                    <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => { resetForm(); setTab('create'); }}>
-                                        Create a gig
-                                    </button>
+                                    <span className="empty-icon">🛍️</span>
+                                    <h3>No gigs listed yet</h3>
+                                    <p>Create your first gig to start earning</p>
+                                    <button className="btn btn-primary" onClick={() => setTab('create')}>Create a Gig</button>
                                 </div>
                             ) : (
                                 <div className="gigs-grid">
@@ -465,6 +467,25 @@ export default function MyListingsPage() {
                         {/* ── Create Gig Tab ── */}
                         {tab === 'create' && (
                             <form onSubmit={handleCreateGig} className="gig-form">
+                                {!profile?.stripe_onboarded && (
+                                    <div style={{
+                                        padding: '14px 18px',
+                                        background: '#fff7ed',
+                                        border: '1px solid #fdba74',
+                                        borderRadius: 10,
+                                        marginBottom: 20,
+                                    }}>
+                                        <p style={{ color: '#92400e', fontWeight: 600, margin: '0 0 6px' }}>
+                                            ⚠️ Stripe not connected
+                                        </p>
+                                        <p style={{ color: '#78350f', margin: '0 0 10px', fontSize: 14 }}>
+                                            You need to connect Stripe to receive payments before listing a gig.
+                                        </p>
+                                        <Link to="/profile" className="btn btn-primary" style={{ fontSize: 13, padding: '6px 14px' }}>
+                                            Set Up Payouts
+                                        </Link>
+                                    </div>
+                                )}
                                 <div className="field">
                                     <label htmlFor="gig-title">Gig Title</label>
                                     <input
@@ -691,6 +712,40 @@ export default function MyListingsPage() {
                                     <small style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '8px', display: 'block' }}>
                                         Add frequently asked questions about your gig
                                     </small>
+                                </div>
+
+                                <div className="field">
+                                    <label>Tags <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                                        {tags.map(tag => (
+                                            <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: 20, padding: '3px 10px', fontSize: 13 }}>
+                                                {tag}
+                                                <button type="button" onClick={() => setTags(tags.filter(t => t !== tag))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1, padding: 0 }}>×</button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <input
+                                            type="text"
+                                            value={tagInput}
+                                            onChange={e => setTagInput(e.target.value)}
+                                            onKeyDown={e => {
+                                                if ((e.key === 'Enter' || e.key === ',') && tagInput.trim()) {
+                                                    e.preventDefault();
+                                                    const t = tagInput.trim().toLowerCase().replace(/,/g, '');
+                                                    if (t && !tags.includes(t) && tags.length < 8) setTags([...tags, t]);
+                                                    setTagInput('');
+                                                }
+                                            }}
+                                            placeholder="e.g. fast delivery, remote, beginner-friendly"
+                                            style={{ flex: 1 }}
+                                        />
+                                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => {
+                                            const t = tagInput.trim().toLowerCase().replace(/,/g, '');
+                                            if (t && !tags.includes(t) && tags.length < 8) { setTags([...tags, t]); setTagInput(''); }
+                                        }}>Add</button>
+                                    </div>
+                                    <small style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>Press Enter or comma to add. Max 8 tags.</small>
                                 </div>
 
                                 <div style={{ display: 'flex', gap: 10 }}>
