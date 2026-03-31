@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(\"c:\\\\Users\\\\Devan Chuyen:*)",
+      "Bash(grep -n \"clearance_date\\\\|select\\\\`\" \"c:/Users/Devan Chuyen Lee/Documents/Skill-Swap/src/app-pages/MyOrders.jsx\")"
+    ]
+  }
+}

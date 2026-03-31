@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth, getSkillName, normalizeSkills, DAYS_OF_WEEK, TIME_PERIODS } from '@/lib/stores';
@@ -29,8 +29,14 @@ export default function ProfilePage() {
     const [availability, setAvailability] = useState([]);
 
 
+    // Avatar
+    const [avatarUrl, setAvatarUrl] = useState('');
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const avatarInputRef = useRef(null);
+
     // Stripe Status
     const [stripeStatus, setStripeStatus] = useState(null);
+    const [stripeBalance, setStripeBalance] = useState(null);
 
 
 
@@ -44,6 +50,8 @@ export default function ProfilePage() {
         loadProfile();
         loadGigs();
     }, [user, userId]);
+
+
 
     async function loadProfile() {
         setLoading(true);
@@ -60,6 +68,7 @@ export default function ProfilePage() {
         setProfileData(profileData);
         setFullName(profileData.full_name || '');
         setBio(profileData.bio || '');
+        setAvatarUrl(profileData.avatar_url || '');
         setSkillsTeach(normalizeSkills(profileData.skills_teach || []));
         setSkillsLearn((profileData.skills_learn || []).map(s => getSkillName(s)));
         // Filter out old plural time periods
@@ -85,36 +94,46 @@ export default function ProfilePage() {
     }
 
 
-// Stripe Load Start
+    async function handleAvatarUpload(e) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) { setError('Image must be under 2MB'); return; }
+        setUploadingAvatar(true);
+        const ext = file.name.split('.').pop();
+        const path = `${user.id}/avatar.${ext}`;
+        const { error: uploadErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
+        if (uploadErr) { setError(uploadErr.message); setUploadingAvatar(false); return; }
+        const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+        setAvatarUrl(publicUrl);
+        setUploadingAvatar(false);
+    }
 
+    async function checkStripeStatus() {
+        const res = await apiFetch('/api/stripe-connect/status');
+        const data = await res.json();
+        if (!res.ok) { console.error(data.error); return; }
+        setStripeStatus(data);
+        if (data.onboarded) {
+            const balRes = await apiFetch('/api/stripe-connect/balance');
+            const balData = await balRes.json();
+            if (balRes.ok) setStripeBalance(balData);
+        }
+    }
 
     useEffect(() => {
-
-        if (!isOwnProfile) {
-            return
-        };
+        if (!isOwnProfile) return;
         const params = new URLSearchParams(window.location.search);
         if (params.get('stripe') === 'success' || params.get('stripe') === 'refresh') {
-            checkStripeStatus();
             window.history.replaceState({}, '', '/profile');
-        } else {
-            checkStripeStatus();
         }
-
-        async function checkStripeStatus() {
-            const res = await apiFetch('/api/stripe-connect/status');
-            const data = await res.json();
-            setStripeStatus(data);
-        }
-
-    }, []);
+        checkStripeStatus();
+    }, [isOwnProfile]);
 
     async function handleStripeOnboard() {
         const res = await apiFetch('/api/stripe-connect/onboard', { method: 'POST' });
         const data = await res.json();
-        if (data.url) {
-            window.location.href = data.url;
-        }
+        if (!res.ok) { console.error(data.error); return; }
+        window.location.href = data.url;
     }
 
 
@@ -166,6 +185,7 @@ export default function ProfilePage() {
             skills_teach: skillsTeach,
             skills_learn: skillsLearn,
             availability: cleanedAvailability,
+            avatar_url: avatarUrl || null,
         }).eq('id', user.id);
 
         setSaving(false);
@@ -188,6 +208,7 @@ export default function ProfilePage() {
         setSkillsTeach(normalizeSkills(profile.skills_teach || []));
         setSkillsLearn((profile.skills_learn || []).map(s => getSkillName(s)));
         setAvailability(profile.availability || []);
+        setAvatarUrl(profile.avatar_url || '');
         setError('');
     }
 
@@ -229,21 +250,64 @@ export default function ProfilePage() {
                 <div style={{
                     margin: '24px 0',
                 }}>
-                    <Link to="/" style={{
+                    <Link to="/"
+                    className='btn btn-secondary'
+                    style={{
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '6px',
                         fontSize: '14px',
-                        fontWeight: 500,
+                        fontWeight: 600,
                         color: 'var(--text-secondary)',
                         textDecoration: 'none',
                         transition: 'color 0.15s',
+                        backgroundColor:  "#fff",
+                        border: "solid 1px #000",
+                        padding: "10px",
+                        borderRadius: "10px"
+
+                    
                     }}>
                         ← Back to Home
                     </Link>
                 </div>
                 <div className="profile-header" style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                    <div className="avatar avatar-xl">{profile.full_name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'}</div>
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                        {profile.avatar_url || avatarUrl ? (
+                            <img
+                                src={avatarUrl || profile.avatar_url}
+                                alt={profile.full_name}
+                                style={{ width: 120, height: 120, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border)' }}
+                            />
+                        ) : (
+                            <div className="avatar avatar-xl">{profile.full_name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'}</div>
+                        )}
+                        {editMode && (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => avatarInputRef.current?.click()}
+                                    disabled={uploadingAvatar}
+                                    style={{
+                                        position: 'absolute', bottom: 0, right: 0,
+                                        width: 32, height: 32, borderRadius: '50%',
+                                        background: 'var(--primary)', border: '2px solid #fff',
+                                        color: '#fff', fontSize: 14, cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    }}
+                                >
+                                    {uploadingAvatar ? '…' : '✏️'}
+                                </button>
+                                <input
+                                    ref={avatarInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    style={{ display: 'none' }}
+                                    onChange={handleAvatarUpload}
+                                />
+                            </>
+                        )}
+                    </div>
                     <div className="profile-header-info">
                         {editMode ? (
                             <input
@@ -254,7 +318,25 @@ export default function ProfilePage() {
                                 placeholder="Your name"
                             />
                         ) : (
-                            <h1 className="profile-name">{profile.full_name}</h1>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                <h1 className="profile-name" style={{ margin: 0 }}>{profile.full_name}</h1>
+                                {profile.stripe_onboarded && (
+                                    <span style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        background: '#f0fdf4',
+                                        border: '1px solid #86efac',
+                                        color: '#15803d',
+                                        fontSize: '12px',
+                                        fontWeight: 600,
+                                        padding: '3px 10px',
+                                        borderRadius: '20px',
+                                    }}>
+                                        ✓ Verified Seller
+                                    </span>
+                                )}
+                            </div>
                         )}
                         <div className="profile-stats">
                             <div className="stat">
@@ -269,7 +351,9 @@ export default function ProfilePage() {
                                 <span className="stat-value">{stats.gigsCompleted}</span>
                                 <span className="stat-label">Gigs</span>
                             </div>
-                            <div className="stat">
+                            <div className="stat" 
+                                style={{display: "flex", }}
+                            >
                                 <span className="stat-value">
                                     {stats.avgRating > 0 ? `⭐ ${stats.avgRating.toFixed(1)}` : 'N/A'}
                                 </span>
@@ -301,15 +385,29 @@ export default function ProfilePage() {
                 {isOwnProfile && profile?.offers_gigs && (
                     <div style={{
                         padding: '16px 20px',
-                        background: stripeStatus?.onboarded ? '#f0fdf4' : '#fffbeb',
-                        border: `1px solid ${stripeStatus?.onboarded ? '#86efac' : '#fde68a'}`,
+                        background: stripeStatus?.onboarded ? '#f0fdf4' : '#fff7ed',
+                        border: `1px solid ${stripeStatus?.onboarded ? '#86efac' : '#fdba74'}`,
                         borderRadius: 10,
                         marginBottom: 20
                     }}>
                         {stripeStatus?.onboarded ? (
-                            <p style={{ color: '#166534', fontWeight: 600, margin: 0 }}>
-                                ✅ Payouts active — you'll receive funds when buyers release payment.
-                            </p>
+                            <div>
+                                <p style={{ color: '#15803d', fontWeight: 600, margin: '0 0 10px' }}>
+                                    ✅ Payouts active — you'll receive funds when buyers release payment.
+                                </p>
+                                {stripeBalance && (
+                                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                                        <div style={{ background: '#fff', border: '1px solid #86efac', borderRadius: 8, padding: '10px 16px' }}>
+                                            <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>AVAILABLE</div>
+                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#15803d' }}>${stripeBalance.available.toFixed(2)}</div>
+                                        </div>
+                                        <div style={{ background: '#fff', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 16px' }}>
+                                            <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>PENDING</div>
+                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#374151' }}>${stripeBalance.pending.toFixed(2)}</div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         ) : (
                             <>
                                 <p style={{ color: '#92400e', fontWeight: 600, margin: '0 0 10px' }}>
@@ -570,7 +668,10 @@ export default function ProfilePage() {
                     letter-spacing: 0.5px;
                 }
                 .profile-section {
-                    margin-bottom: 32px;
+                    margin-bottom: 24px;
+                    background: #f0ede8;
+                    padding: 24px;
+                    border-radius: 16px;
                 }
                 .section-title {
                     font-size: 18px;

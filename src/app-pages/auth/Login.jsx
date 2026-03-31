@@ -29,7 +29,13 @@ export default function LoginPage() {
             } else {
                 const { error: e } = await supabase.auth.signInWithPassword({ email, password });
                 if (e) throw e;
-                navigate('/matches');
+                const { data: { user: signedInUser } } = await supabase.auth.getUser();
+                const { data: userProfile } = await supabase.from('profiles').select('full_name').eq('id', signedInUser.id).single();
+                if (!userProfile?.full_name) {
+                    navigate('/onboarding');
+                } else {
+                    navigate('/matches');
+                }
             }
         } catch (e) {
             setError(e.message ?? 'Something went wrong.');

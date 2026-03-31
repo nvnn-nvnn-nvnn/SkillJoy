@@ -27,7 +27,7 @@ function formatLastMsg(lastMsg, userId) {
 
 const RATING_LABELS = ['', 'Terrible experience', 'Poor experience', 'Average experience', 'Good experience', 'Greatest experience!'];
 
-function isGigCompleted(c) { return c.requester_completed && c.provider_completed || c.status === 'withdrawn' || c.status === 'completed' || c.payment_status === 'withdrawn' || c.payment_status === 'refunded'; }
+function isGigCompleted(c) { return c.requester_completed && c.provider_completed || c.status === 'withdrawn' || c.status === 'completed' || c.status === 'cancelled' || c.payment_status === 'withdrawn' || c.payment_status === 'refunded'; }
 function isSwapCompleted(c) { return c.requester_completed && c.receiver_completed; }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -60,6 +60,7 @@ export default function ChatPage() {
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [modalProfile, setModalProfile] = useState(null);
     const [showRatingModal, setShowRatingModal] = useState(false);
+    const [hasRated, setHasRated] = useState(false);
     const [showWithdrawConfirm, setShowWithdrawConfirm] = useState(false);
     const [pendingWithdrawId, setPendingWithdrawId] = useState(null);
     const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -168,9 +169,9 @@ export default function ChatPage() {
                 provider:profiles!provider_id(id, full_name, bio),
                 requester_id, provider_id,
                 requester_completed, provider_completed,
-                payment_status, confirmation_deadline
+                payment_status, confirmation_deadline, chat_archived_at, clearance_date
             `)
-            .in('status', ['accepted', 'in_progress', 'delivered', 'completed', 'withdrawn', 'refunded', 'disputed'])
+            .in('status', ['accepted', 'in_progress', 'delivered', 'completed', 'withdrawn', 'refunded', 'disputed', 'cancelled'])
             .or(`requester_id.eq.${user.id},provider_id.eq.${user.id}`)
             .order('created_at', { ascending: false });
 
@@ -212,6 +213,8 @@ export default function ChatPage() {
                 provider_completed: req.provider_completed,
                 payment_status: req.payment_status,
                 confirmation_deadline: req.confirmation_deadline,
+                chat_archived_at: req.chat_archived_at,
+                clearance_date: req.clearance_date,
                 isProvider,
                 lastMsg: lastMsgs?.[0] ?? null,
                 other: { ...other, avgRating, ratingCount }
@@ -284,7 +287,7 @@ export default function ChatPage() {
                 (payload) => {
                     setGigConversations(prev => prev.map(c =>
                         c.gig_request_id === gigReqId
-                            ? { ...c, requester_completed: payload.new.requester_completed, provider_completed: payload.new.provider_completed, status: payload.new.status, payment_status: payload.new.payment_status }
+                            ? { ...c, requester_completed: payload.new.requester_completed, provider_completed: payload.new.provider_completed, status: payload.new.status, payment_status: payload.new.payment_status, chat_archived_at: payload.new.chat_archived_at, clearance_date: payload.new.clearance_date }
                             : c
                     ));
                 }
@@ -306,6 +309,7 @@ export default function ChatPage() {
         else { setActiveGigReqId(id); setActiveSwapId(null); }
 
         setMessages([]);
+        setHasRated(false);
         setLoadingMsgs(true);
         cleanupSubs();
         await fetchMessages(id, m);
@@ -315,6 +319,11 @@ export default function ChatPage() {
         setLoadingMsgs(false);
         scrollToBottom();
         inputRef.current?.focus();
+
+        // Check if user already rated this conversation
+        const col = m === 'gigs' ? 'gig_request_id' : 'swap_id';
+        const { data: existing } = await supabase.from('ratings').select('id').eq(col, id).eq('rater_id', user.id).maybeSingle();
+        if (existing) setHasRated(true);
     }
 
     // ── Send message ──────────────────────────────────────────────────────────
@@ -323,6 +332,7 @@ export default function ChatPage() {
         const content = newMessage.trim();
         const activeId = chatMode === 'swaps' ? activeSwapId : activeGigReqId;
         if (!content || sending || !activeId) return;
+        if (chatMode === 'gigs' && activeConvo?.chat_archived_at) return;
         setSending(true);
         setNewMessage('');
         const tempId = crypto.randomUUID();
@@ -382,6 +392,7 @@ export default function ChatPage() {
         setShowRatingModal(false);
         setRatingValue(0);
         setRatingComment('');
+        setHasRated(true);
         showToast('Thank you for your rating!');
     }
 
@@ -801,8 +812,26 @@ export default function ChatPage() {
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                                     <span className="gig-chat-badge">{activeConvo.isProvider ? 'Client' : 'Provider'}</span>
                                                     {(() => {
-                                                        const completionCount = (activeConvo.requester_completed ? 1 : 0) + (activeConvo.provider_completed ? 1 : 0);
-                                                        return <span className="completion-badge-chat">Complete {completionCount}/2</span>;
+                                                        const s = activeConvo.status;
+                                                        const ps = activeConvo.payment_status;
+                                                        let label, color;
+                                                        if (s === 'cancelled') { label = 'Cancelled'; color = '#6b7280'; }
+                                                        else if (s === 'withdrawn' || ps === 'withdrawn') { label = 'Withdrawn'; color = '#6b7280'; }
+                                                        else if (ps === 'refunded') { label = 'Refunded'; color = '#6b7280'; }
+                                                        else if (ps === 'disputed') { label = 'Disputed'; color = '#b45309'; }
+                                                        else if (ps === 'cleared') { label = 'Cleared ✓'; color = '#15803d'; }
+                                                        else if (ps === 'released' && activeConvo.clearance_date) {
+                                                            const daysLeft = Math.ceil((new Date(activeConvo.clearance_date) - Date.now()) / (1000 * 60 * 60 * 24));
+                                                            label = daysLeft > 0 ? `Clearance ${daysLeft}d` : 'Clearance soon';
+                                                            color = '#b45309';
+                                                        }
+                                                        else if (s === 'completed' || (activeConvo.requester_completed && activeConvo.provider_completed)) { label = 'Complete 2/2'; color = '#15803d'; }
+                                                        else {
+                                                            const count = (activeConvo.requester_completed ? 1 : 0) + (activeConvo.provider_completed ? 1 : 0);
+                                                            label = `Complete ${count}/2`;
+                                                            color = undefined;
+                                                        }
+                                                        return <span className="completion-badge-chat" style={color ? { color, borderColor: color, background: 'transparent' } : {}}>{label}</span>;
                                                     })()}
                                                 </div>
                                             </div>
@@ -869,30 +898,36 @@ export default function ChatPage() {
                                 </div>
                             )}
 
-                            <div className="composer">
-                                <textarea
-                                    ref={inputRef}
-                                    value={newMessage}
-                                    onChange={e => setNewMessage(e.target.value)}
-                                    onKeyDown={handleKeydown}
-                                    placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
-                                    rows={1}
-                                    className="composer-input"
-                                />
-                                <button
-                                    className="btn btn-primary composer-send"
-                                    onClick={sendMessage}
-                                    disabled={sending || !newMessage.trim()}
-                                >
-                                    {sending ? (
-                                        <span className="spinner" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white', width: 14, height: 14 }} />
-                                    ) : (
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                            <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
-                                        </svg>
-                                    )}
-                                </button>
-                            </div>
+                            {chatMode === 'gigs' && activeConvo?.chat_archived_at ? (
+                                <div style={{ padding: '12px 16px', background: '#f3f4f6', borderTop: '1px solid var(--border)', textAlign: 'center', color: '#6b7280', fontSize: 14 }}>
+                                    🗄️ This chat was archived {new Date(activeConvo.chat_archived_at).toLocaleDateString()}.
+                                </div>
+                            ) : (
+                                <div className="composer">
+                                    <textarea
+                                        ref={inputRef}
+                                        value={newMessage}
+                                        onChange={e => setNewMessage(e.target.value)}
+                                        onKeyDown={handleKeydown}
+                                        placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
+                                        rows={1}
+                                        className="composer-input"
+                                    />
+                                    <button
+                                        className="btn btn-primary composer-send"
+                                        onClick={sendMessage}
+                                        disabled={sending || !newMessage.trim()}
+                                    >
+                                        {sending ? (
+                                            <span className="spinner" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white', width: 14, height: 14 }} />
+                                        ) : (
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+                                            </svg>
+                                        )}
+                                    </button>
+                                </div>
+                            )}
                         </>
                     )}
                 </main >
@@ -1079,11 +1114,43 @@ export default function ChatPage() {
                                             </button>
                                         )}
 
-                                        {/* Completed state */}
-                                        {activeConvo.payment_status === 'released' && (
-                                            <div style={{ padding: '12px 14px', background: '#d1fae5', border: '1px solid #6ee7b7', borderRadius: 8, fontSize: 13, color: '#065f46' }}>
-                                                ✓ Payment released. Gig completed!
+                                        {/* Pending clearance state */}
+                                        {activeConvo.payment_status === 'released' && activeConvo.clearance_date && (
+                                            <div style={{ padding: '12px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontSize: 13, color: '#92400e' }}>
+                                                🕐 Pending clearance — funds available {new Date(activeConvo.clearance_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                             </div>
+                                        )}
+
+                                        {/* Cleared state */}
+                                        {activeConvo.payment_status === 'cleared' && (
+                                            <div style={{ padding: '12px 14px', background: '#d1fae5', border: '1px solid #6ee7b7', borderRadius: 8, fontSize: 13, color: '#065f46' }}>
+                                                ✓ Funds cleared. Gig completed!
+                                            </div>
+                                        )}
+
+                                        {/* Buyer: Manual archive */}
+                                        {!activeConvo.isProvider && isGigCompleted(activeConvo) && !activeConvo.chat_archived_at && (
+                                            <button
+                                                className="btn btn-secondary"
+                                                style={{ width: '100%', marginTop: 10 }}
+                                                onClick={async () => {
+                                                    const now = new Date().toISOString();
+                                                    const { error } = await supabase
+                                                        .from('gig_requests')
+                                                        .update({ chat_archived_at: now })
+                                                        .eq('id', activeConvo.gig_request_id)
+                                                        .eq('requester_id', user.id);
+                                                    if (!error) {
+                                                        setGigConversations(prev => prev.map(c =>
+                                                            c.gig_request_id === activeConvo.gig_request_id
+                                                                ? { ...c, chat_archived_at: now }
+                                                                : c
+                                                        ));
+                                                        setShowProfileModal(false);
+                                                    }
+                                                }}>
+                                                🗄️ Archive Chat
+                                            </button>
                                         )}
 
                                         {/* Disputed state */}
@@ -1132,13 +1199,19 @@ export default function ChatPage() {
 
                             {activeConvo && (chatMode === 'gigs' ? isGigCompleted(activeConvo) : isSwapCompleted(activeConvo)) && (
                                 <div className="modal-section">
-                                    <button className="btn-rate-user" onClick={() => {
-                                        setShowProfileModal(false);
-                                        setModalProfile(null);
-                                        setShowRatingModal(true);
-                                    }}>
-                                        ⭐ Rate {modalProfile.full_name}
-                                    </button>
+                                    {hasRated ? (
+                                        <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
+                                            ⭐ You've already rated {modalProfile.full_name}
+                                        </div>
+                                    ) : (
+                                        <button className="btn-rate-user" onClick={() => {
+                                            setShowProfileModal(false);
+                                            setModalProfile(null);
+                                            setShowRatingModal(true);
+                                        }}>
+                                            ⭐ Rate {modalProfile.full_name}
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>

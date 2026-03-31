@@ -7,11 +7,18 @@ import './App.css'
 
 // Layout
 import Header from './components/Header'
+import Footer from './components/Footer'
 
 // Pages
 import LandingPage from './introduction-pages/Home'
 import LoginPage from './app-pages/auth/Login'
 import Onboarding from './app-pages/auth/Onboarding'
+import About from './introduction-pages/About'
+import Contact from './introduction-pages/Contact'
+import HowItWorks from './introduction-pages/HowItWorks'
+import Terms from './introduction-pages/Terms'
+import Privacy from './introduction-pages/Privacy'
+import RefundPolicy from './introduction-pages/RefundPolicy'
 import ChatPage from './app-pages/Chat'
 import MatchesPage from './app-pages/Matches'
 import DiscoverPage from './app-pages/MainSearch'
@@ -32,7 +39,9 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <Header />
+        <div style={{ flex: 1 }}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -53,7 +62,16 @@ function App() {
           <Route path="/profile/:userId" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/how-it-works" element={<HowItWorks />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/refund-policy" element={<RefundPolicy />} />
         </Routes>
+        </div>
+        <Footer />
+        </div>
       </BrowserRouter>
     </AuthProvider>
   )

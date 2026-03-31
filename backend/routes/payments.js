@@ -32,7 +32,7 @@ router.post('/create-intent', async (req, res) => {
             return res.status(400).json({ error: 'Could not determine gig price' });
         }
 
-        const SERVICE_FEE = 3.00;
+        const SERVICE_FEE = 6.00;
         const amount = parseFloat(order.gig.price) + SERVICE_FEE;
 
         const paymentIntent = await stripe.paymentIntents.create({
@@ -153,12 +153,15 @@ router.post('/release', async (req, res) => {
             return res.status(400).json({ error: 'Payment is not in escrow' });
         }
 
-        // Update database - mark as released
+        const clearanceDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+        // Update database - mark as released, start 14-day clearance
         const { error } = await supabase
             .from('gig_requests')
             .update({
                 payment_status: 'released',
                 release_date: new Date().toISOString(),
+                clearance_date: clearanceDate,
                 status: 'completed'
             })
             .eq('id', orderId);
@@ -166,41 +169,6 @@ router.post('/release', async (req, res) => {
         if (error) {
             return res.status(500).json({ error: error.message });
         }
-
-        // TODO: If using Stripe Connect, transfer funds to provider here
-        // await stripe.transfers.create({ ... });
-
-
-        const { data: providerProfile} = await supabase
-            .from('profiles')
-            .select('stripe_account_id, stripe_onboarded')
-            .eq('id', order.provider_id)
-            .single();
-
-            if (!providerProfile?.stripe_account_id ||
-                !providerProfile?.stripe_onboarded
-            ){
-                    console.warn(`Provider ${order.provider_id} has no Stripe account. Funds held.`);
-
-            } else {
-
-                const SERVICE_FEES_CENTS = 300;
-                // $3.00
-
-                const transferAmount = Math.round(order.payment_amount * 100)
-                - SERVICE_FEES_CENTS;
-
-                await stripe.transfers.create({
-                    amount: transferAmount,
-                    currency: "usd",
-                    destination: providerProfile.stripe_account_id,
-                    transfer_group: orderId
-
-                });
-
-
-
-            };
 
 
 
@@ -226,8 +194,8 @@ router.post('/release', async (req, res) => {
                 {
                     user_id: fullOrder.provider_id,
                     type: 'order_update',
-                    title: 'Payment released!',
-                    message: `${fullOrder.requester?.full_name ?? 'The buyer'} released payment for "${gigTitle}". The funds are on their way.`,
+                    title: 'Payment released — clearance started',
+                    message: `${fullOrder.requester?.full_name ?? 'The buyer'} released payment for "${gigTitle}". Funds will be available in 14 days.`,
                     related_id: orderId, related_type: 'gig',
                 },
                 {
