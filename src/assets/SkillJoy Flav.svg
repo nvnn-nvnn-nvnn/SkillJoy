@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 138.12 142.63">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #fff;
+      }
+
+      .cls-2 {
+        fill: #ed9147;
+      }
+
+      .cls-3 {
+        font-family: Futura-Bold, Futura;
+        font-size: 125px;
+        font-weight: 700;
+      }
+    </style>
+  </defs>
+  <text class="cls-3" transform="translate(0 109.63)"><tspan class="cls-2" x="0" y="0">S</tspan><tspan class="cls-1" x="77" y="0">J</tspan></text>
+</svg>
