@@ -34,6 +34,7 @@ import DisputeDetail from './app-pages/DisputeDetail'
 import Profile from './app-pages/Profile'
 import Settings from './app-pages/Settings'
 import Admin from './app-pages/Admin'
+import VerifyCollege from './app-pages/VerifyCollege'
 
 function App() {
   return (
@@ -62,6 +63,7 @@ function App() {
           <Route path="/profile/:userId" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/verify-college" element={<VerifyCollege />} />
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/how-it-works" element={<HowItWorks />} />

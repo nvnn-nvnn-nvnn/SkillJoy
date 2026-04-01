@@ -13,14 +13,14 @@ const GIG_CATEGORIES = [
     { label: 'Errands & Delivery', emoji: '📦', query: 'errands' },
     { label: 'Laundry & Cleaning', emoji: '🧺', query: 'laundry' },
     { label: 'Tutoring & Homework Help', emoji: '📚', query: 'tutoring' },
-    { label: 'Photography & Headshots', emoji: '�', query: 'photography' },
+    { label: 'Photography & Headshots', emoji: '📷', query: 'photography' },
     { label: 'Graphic Design & Logos', emoji: '🎨', query: 'design' },
     { label: 'Resume & Cover Letter', emoji: '📄', query: 'resume' },
-    { label: 'Moving & Heavy Lifting', emoji: '�', query: 'moving' },
+    { label: 'Moving & Heavy Lifting', emoji: '🛻', query: 'moving' },
     { label: 'Cooking & Meal Prep', emoji: '🍳', query: 'cooking' },
     { label: 'Tech Support & Setup', emoji: '💻', query: 'tech' },
     { label: 'Rides & Airport Trips', emoji: '🚗', query: 'rides' },
-    { label: 'Pet Sitting & Dog Walking', emoji: '�', query: 'pet' },
+    { label: 'Pet Sitting & Dog Walking', emoji: '🐶', query: 'pet' },
     { label: 'Event Help & Setup', emoji: '🎉', query: 'event' },
     { label: 'Music Lessons', emoji: '🎵', query: 'music' },
     { label: 'Fitness & Personal Training', emoji: '💪', query: 'fitness' },
@@ -76,13 +76,6 @@ export default function GigsPage() {
         setTimeFilter('');
     }
 
-    useEffect(() => {
-        if (!user) { navigate('/login'); return; }
-        loadGigs();
-        loadFavorites();
-        loadRecentSearches();
-    }, [user]);
-
     async function loadFavorites() {
         if (!user) return;
         const { data } = await supabase.from('favorites').select('favorited_id').eq('user_id', user.id).eq('type', 'gig');
@@ -118,12 +111,14 @@ export default function GigsPage() {
         localStorage.removeItem('gig_recent_searches');
     }
 
-    async function loadGigs() {
+    async function loadGigs(universityDomain) {
         setBusy(true);
-        const { data, error } = await supabase
+        let query = supabase
             .from('gigs')
             .select('*, profile:profiles!user_id(id, full_name, bio, service_type, availability)')
             .order('created_at', { ascending: false });
+        if (universityDomain) query = query.eq('university_domain', universityDomain);
+        const { data, error } = await query;
 
         if (!error && data) {
             // Fetch ratings for each provider
@@ -146,7 +141,12 @@ export default function GigsPage() {
         setBusy(false);
     }
 
-
+    useEffect(() => {
+        if (!user) { navigate('/login'); return; }
+        loadGigs(profile?.university_domain); // eslint-disable-line react-hooks/set-state-in-effect
+        loadFavorites();
+        loadRecentSearches();
+    }, [user, profile?.university_domain]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleCategorySelect = (category) => {
         setSearchQuery(category);
@@ -291,7 +291,7 @@ export default function GigsPage() {
                     </div>
 
                     {/* Search row */}
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
+                    <div className="gigs-search-row" style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
                         <div className="search-box" style={{ flex: 1 }}>
                             <input
                                 type="text"

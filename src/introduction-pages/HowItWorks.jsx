@@ -69,7 +69,13 @@ export default function HowItWorksPage() {
 
             <div style={{ display: 'flex', gap: 12 }}>
                 <Link to="/gigs" className="btn btn-primary">Browse Gigs</Link>
-                <Link to="/swaps" className="btn btn-secondary">Explore Swaps</Link>
+                <Link to="/swaps" 
+                className="btn btn-secondary"
+                style={{
+                    color: "#000",
+                    backgroundColor: "#fff"
+                }}
+                >Explore Swaps</Link>
             </div>
         </div>
     );

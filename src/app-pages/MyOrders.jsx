@@ -1040,10 +1040,10 @@ export default function MyOrders() {
                             </div>
                         </div>
 
-                        <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+                        <div style={{ display: 'flex', gap: 12, marginTop: 20, flexWrap: 'wrap' }}>
                             <button
                                 className="btn btn-primary"
-                                style={{ flex: 1 }}
+                                style={{ flex: 1, minWidth: 140 }}
                                 onClick={() => {
                                     setShowEscrowModal(false);
                                     navigate(`/chat?gig=${selectedOrder.gig.id}`);
@@ -1053,7 +1053,7 @@ export default function MyOrders() {
                             </button>
                             <button
                                 className="btn btn-secondary"
-                                style={{ flex: 1 }}
+                                style={{ flex: 1, minWidth: 140 }}
                                 onClick={() => setShowEscrowModal(false)}
                             >
                                 View Orders
@@ -1464,6 +1464,20 @@ export default function MyOrders() {
                     background: #fef2f2;
                     border: 1px solid #fecaca;
                     color: #991b1b;
+                }
+
+                @media (max-width: 768px) {
+                    .mo-hero { padding: 16px; }
+                    .mo-card { padding: 14px; }
+                    .mo-card-title { white-space: normal; font-size: 15px; }
+                    .mo-actions { flex-direction: column; align-items: stretch; }
+                    .mo-actions .btn,
+                    .mo-actions .btn-danger,
+                    .mo-actions .btn-outline-danger { width: 100%; }
+                    .mo-success-note { width: 100%; box-sizing: border-box; }
+                    .confirm-modal { padding: 24px 16px 20px; }
+                    .confirm-modal-actions { flex-direction: column-reverse; }
+                    .confirm-modal-actions .btn { width: 100%; min-width: unset; }
                 }
             `}</style>
         </>

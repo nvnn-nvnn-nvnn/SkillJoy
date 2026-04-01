@@ -3,6 +3,45 @@ const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
 
+const SERVICE_FEES_CENTS = 600;
+
+// Process any released orders past clearance_date for a newly-onboarded seller
+async function processReleasedOrders(providerId, stripeAccountId) {
+    const { data: orders } = await supabase
+        .from('gig_requests')
+        .select('id, payment_amount, clearance_date, gig:gigs(title)')
+        .eq('provider_id', providerId)
+        .eq('payment_status', 'released')
+        .lte('clearance_date', new Date().toISOString());
+
+    if (!orders?.length) return;
+
+    for (const order of orders) {
+        try {
+            const transferAmount = Math.round(order.payment_amount * 100) - SERVICE_FEES_CENTS;
+            await stripe.transfers.create({
+                amount: transferAmount,
+                currency: 'usd',
+                destination: stripeAccountId,
+                transfer_group: order.id,
+            });
+            await supabase.from('gig_requests').update({ payment_status: 'cleared' }).eq('id', order.id);
+            const gigTitle = order.gig?.title ?? 'your order';
+            await supabase.from('notifications').insert({
+                user_id: providerId,
+                type: 'order_update',
+                title: 'Funds cleared!',
+                message: `Your earnings for "${gigTitle}" have cleared and are on their way to your Stripe account.`,
+                related_id: order.id,
+                related_type: 'gig',
+            });
+            console.log(`✅ Cleared order ${order.id} after Stripe onboarding`);
+        } catch (err) {
+            console.error(`Failed to clear order ${order.id} after onboarding:`, err.message);
+        }
+    }
+}
+
 
 router.post("/onboard", async (req, res) => {
     try{
@@ -66,10 +105,11 @@ router.get('/status', async (req, res)=>{
 
 
         if (onboarded && !profile.stripe_onboarded) {
-                await supabase
-                    .from('profiles')
-                    .update({ stripe_onboarded: true })
-                    .eq('id', req.user.id)
+            await supabase.from('profiles').update({ stripe_onboarded: true }).eq('id', req.user.id);
+            // Process any released orders that were waiting on this seller's Stripe setup
+            processReleasedOrders(req.user.id, profile.stripe_account_id).catch(err =>
+                console.error('processReleasedOrders error:', err.message)
+            );
         };
 
 

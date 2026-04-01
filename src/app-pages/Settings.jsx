@@ -100,7 +100,13 @@ export default function SettingsPage() {
         <div className="sj-settings-page">
             <div className="sj-settings-header">
                 <h1>Settings</h1>
-                <p>Manage your account preferences</p>
+                <p
+                style={
+                    {
+                        color: '#fff'
+                    }
+                }
+                >Manage your account preferences</p>
             </div>
 
             {/* Account */}

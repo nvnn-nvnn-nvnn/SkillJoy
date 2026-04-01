@@ -3,7 +3,24 @@ import { Link } from 'react-router-dom';
 export default function AboutPage() {
     return (
         <div className="page" style={{ maxWidth: 800 }}>
-            <Link to="/" style={{ fontSize: 14, color: 'var(--text-muted)', textDecoration: 'none', display: 'inline-block', marginBottom: 24 }}>← Back to Home</Link>
+            <Link to="/" 
+                style={{ 
+                fontSize: 14, 
+                textDecoration: 'none', display: 'inline-block',
+                marginBottom: 24,
+                color: '#000',
+                backgroundColor: "#fff",
+                padding: '7px',
+                borderRadius: '10px',
+                border: '1px solid #000'
+
+                
+
+                
+                
+                }}
+            
+            >← Back to Home</Link>
 
             <h1 style={{ fontSize: 36, fontWeight: 700, marginBottom: 8 }}>About SkillJoy</h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: 16, marginBottom: 40, lineHeight: 1.7 }}>
@@ -51,8 +68,18 @@ export default function AboutPage() {
 
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <Link to="/gigs" className="btn btn-primary">Browse Gigs</Link>
-                <Link to="/how-it-works" className="btn btn-secondary">How It Works</Link>
-                <Link to="/contact" className="btn btn-secondary">Contact</Link>
+                <Link to="/how-it-works" className="btn btn-secondary"
+                style={{
+                    backgroundColor: "#fff",
+                    color: "#000"
+                }}
+                >How It Works</Link>
+                <Link to="/contact" className="btn btn-secondary"
+                style={{
+                    backgroundColor: "#fff",
+                    color: "#000"
+                }}
+                >Contact</Link>
             </div>
         </div>
     );
