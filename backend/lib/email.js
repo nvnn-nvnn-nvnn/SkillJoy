@@ -3,9 +3,9 @@ const supabase = require('../config/supabase');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 // Switch to 'SkillJoy <noreply@skilljoy.app>' once skilljoy.app is verified in Resend dashboard
-const FROM = process.env.NODE_ENV === 'production'
-    ? 'SkillJoy <noreply@skilljoy.app>'
-    : 'SkillJoy <onboarding@resend.dev>';
+// Set RESEND_FROM in Railway env vars once skilljoy.app is verified in Resend dashboard.
+// Until then, leave it unset and it falls back to onboarding@resend.dev (Resend's shared domain).
+const FROM = process.env.RESEND_FROM || 'SkillJoy <onboarding@resend.dev>';
 
 // Fetch a user's email from Supabase auth
 async function getUserEmail(userId) {

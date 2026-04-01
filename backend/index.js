@@ -24,7 +24,12 @@ const strictLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHea
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+app.use(cors({
+    origin: process.env.NODE_ENV === 'production'
+        ? process.env.FRONTEND_URL
+        : '*',
+    credentials: true,
+}));
 app.use(globalLimiter);
 
 // Webhook must be BEFORE express.json() to receive raw body
