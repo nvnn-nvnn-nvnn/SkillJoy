@@ -75,7 +75,11 @@ export default function MatchesPage() {
         if (!user) { navigate('/login'); return; }
         if (profile && !profile.full_name) { navigate('/onboarding'); return; }
         (async () => {
-            const { data, error: e } = await supabase.from('profiles').select('*').neq('id', user.id);
+            let q = supabase.from('profiles').select('*').neq('id', user.id);
+            if (profile?.college_verified && profile?.university_domain) {
+                q = q.eq('university_domain', profile.university_domain);
+            }
+            const { data, error: e } = await q;
             if (e) setError(e.message);
             else setAllUsers(data ?? []);
             setBusy(false);

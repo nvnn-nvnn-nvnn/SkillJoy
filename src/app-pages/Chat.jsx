@@ -677,7 +677,7 @@ export default function ChatPage() {
         <>
             <title>Chat — SkillJoy</title>
 
-            <div className="chat-shell">
+            <div className={`chat-shell${activeConvo ? ' has-active' : ''}`}>
                 {/* ── Sidebar ── */}
                 <aside className="sidebar">
                     <div className="sidebar-header">
@@ -785,6 +785,7 @@ export default function ChatPage() {
                     ) : (
                         <>
                             <header className="chat-header">
+                                <button className="chat-back-btn" onClick={() => chatMode === 'swaps' ? setActiveSwapId(null) : setActiveGigReqId(null)}>←</button>
                                 <div className="avatar">{initials(activeConvo.other?.full_name)}</div>
                                 <div style={{ flex: 1 }}>
                                     {chatMode === 'swaps' ? (
@@ -1493,11 +1494,51 @@ export default function ChatPage() {
             .rating-comment:focus { border-color: var(--primary); }
 
             /* Responsive */
-            @media (max-width: 600px) {
-              .sidebar { width: 72px; }
-              .convo-info, .convo-time { display: none; }
-              .sidebar-title { font-size: 14px; }
-              .convo-item { justify-content: center; padding: 10px; }
+            .chat-back-btn { display: none; }
+            @media (max-width: 768px) {
+              /* Shell */
+              .chat-shell { height: calc(100vh - 64px); }
+
+              /* Sidebar takes full width, main hidden by default */
+              .sidebar { width: 100%; border-right: none; }
+              .chat-main { display: none; width: 100%; }
+
+              /* When convo selected: hide sidebar, show chat full screen */
+              .chat-shell.has-active .sidebar { display: none; }
+              .chat-shell.has-active .chat-main { display: flex; }
+
+              /* Back button */
+              .chat-back-btn { display: flex; align-items: center; justify-content: center; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--r); width: 34px; height: 34px; font-size: 16px; cursor: pointer; flex-shrink: 0; }
+
+              /* Header */
+              .chat-header { padding: 10px 14px; gap: 8px; }
+              .chat-header-sub { font-size: 12px; }
+              .chat-name-btn { font-size: 14px; }
+
+              /* Messages */
+              .messages-area { padding: 12px 12px; }
+              .bubble { max-width: 82%; font-size: 14px; }
+
+              /* Composer */
+              .composer { padding: 10px 12px; gap: 8px; }
+
+              /* Escrow banner — stack vertically */
+              .escrow-banner { flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px 14px; }
+              .escrow-banner-actions { width: 100%; display: flex; gap: 8px; }
+              .escrow-banner-actions button { flex: 1; }
+
+              /* Modal actions — stack */
+              .modal-actions { flex-direction: column-reverse; }
+              .modal-actions button { width: 100%; }
+
+              /* Star rating smaller on mobile */
+              .star-btn { font-size: 36px; }
+
+              /* Sidebar header tighter */
+              .sidebar-header { padding: 14px 14px 12px; }
+              .sidebar-title { font-size: 16px; margin-bottom: 10px; }
+              .convo-list { padding: 6px; }
+              .convo-item { padding: 10px 10px; }
             }
           `}</style>
         </>

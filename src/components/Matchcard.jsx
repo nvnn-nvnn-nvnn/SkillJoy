@@ -87,6 +87,10 @@ export default function MatchCard({ match, maxScore, index, onPropose }) {
         .exchange-arrow { font-size: 18px; color: var(--text-muted); padding-top: 20px; flex-shrink: 0; }
         .rated-tag-list { display: flex; flex-direction: column; gap: 6px; }
         .rated-tag-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        @media (max-width: 480px) {
+            .skills-exchange { flex-direction: column; gap: 6px; }
+            .exchange-arrow { padding-top: 0; align-self: center; font-size: 22px; }
+        }
       `}</style>
         </>
     );

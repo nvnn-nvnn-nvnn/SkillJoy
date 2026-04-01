@@ -2,7 +2,7 @@ export default function TermsPage() {
     return (
         <div className="page" style={{ maxWidth: 760 }}>
             <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>Terms of Service</h1>
-            <p style={{ color: 'var(--text-muted)', marginBottom: 40 }}>Last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            <p style={{ color: '#000', marginBottom: 40 }}>Last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
 
             <Section title="1. Acceptance of Terms">
                 By accessing or using SkillJoy, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use the platform.

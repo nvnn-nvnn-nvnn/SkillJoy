@@ -63,13 +63,17 @@ export default function Swaps() {
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
         (async () => {
-            const { data, error } = await supabase.from('profiles').select('*').neq('id', user.id);
+            let q = supabase.from('profiles').select('*').neq('id', user.id);
+            if (profile?.college_verified && profile?.university_domain) {
+                q = q.eq('university_domain', profile.university_domain);
+            }
+            const { data, error } = await q;
             if (!error && data) setAllUsers(data);
             setBusy(false);
         })();
-        loadFavorites();
-        loadRecentSearches();
-    }, [user]);
+        loadFavorites(); // eslint-disable-line react-hooks/immutability
+        loadRecentSearches(); // eslint-disable-line react-hooks/immutability
+    }, [user, profile?.university_domain]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // measure inner panel so slide animation has accurate target height
     useEffect(() => {
@@ -221,7 +225,7 @@ export default function Swaps() {
 
                     {/* Search row */}
                     <div style={{ marginBottom: '24px' }}>
-                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
+                        <div className="gigs-search-row" style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
                             <div className="search-box" style={{ flex: 1 }}>
                                 <input
                                     type="text"
@@ -240,11 +244,11 @@ export default function Swaps() {
                                 <span className={`sj-chevron ${showFilters ? 'sj-chevron-up' : ''}`}>▾</span>
                             </button>
                             <button
-                                className={`btn ${showFavoritesOnly ? 'btn-primary' : 'btn-secondary'}`}
+                                className={`btn swaps-fav-btn ${showFavoritesOnly ? 'btn-primary' : 'btn-secondary'}`}
                                 onClick={() => setShowFavoritesOnly(v => !v)}
                                 style={{ padding: '10px 16px' }}
                             >
-                                ⭐ Favorites {showFavoritesOnly ? '✓' : ''}
+                                ⭐ {showFavoritesOnly ? 'Saved ✓' : 'Saved'}
                             </button>
                         </div>
 
@@ -542,6 +546,34 @@ export default function Swaps() {
                 .sj-filter-input:focus {
                     outline: none;
                     border-color: var(--primary);
+                }
+
+                /* ── Mobile ── */
+                @media (max-width: 768px) {
+                    .swaps-hero-section {
+                        padding: 16px;
+                        border-radius: 12px;
+                    }
+
+.sj-filter-inner {
+                        padding: 14px;
+                        gap: 14px;
+                    }
+
+                    .sj-chip {
+                        padding: 5px 10px;
+                        font-size: 12px;
+                    }
+
+                    .users-grid {
+                        grid-template-columns: 1fr;
+                        gap: 14px;
+                        margin-top: 16px;
+                    }
+
+                    .user-card {
+                        padding: 16px;
+                    }
                 }
             `}</style>
         </>

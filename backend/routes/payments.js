@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
+const { sendEmail, getUserEmail, templates } = require('../lib/email');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CREATE PAYMENT INTENT - Called when buyer clicks "Accept & Pay"
@@ -16,7 +17,7 @@ router.post('/create-intent', async (req, res) => {
 
         const { data: order, error: orderError } = await supabase
             .from('gig_requests')
-            .select('*, gig:gigs!gig_id(price)')
+            .select('*, provider_id, gig:gigs!gig_id(price)')
             .eq('id', orderId)
             .single();
 
@@ -30,6 +31,17 @@ router.post('/create-intent', async (req, res) => {
 
         if (!order.gig?.price) {
             return res.status(400).json({ error: 'Could not determine gig price' });
+        }
+
+        // Block payment if seller hasn't completed Stripe onboarding
+        const { data: providerProfile } = await supabase
+            .from('profiles')
+            .select('stripe_account_id, stripe_onboarded')
+            .eq('id', order.provider_id)
+            .single();
+
+        if (!providerProfile?.stripe_account_id || !providerProfile?.stripe_onboarded) {
+            return res.status(402).json({ error: 'This seller has not set up payouts yet. Payment cannot proceed.' });
         }
 
         const SERVICE_FEE = 6.00;
@@ -116,6 +128,20 @@ router.post('/confirm', async (req, res) => {
             ]);
         }
 
+        // Email seller: payment received
+        if (fullOrder) {
+            const sellerEmail = await getUserEmail(fullOrder.provider_id);
+            if (sellerEmail) {
+                const tpl = templates.paymentEscrowedSeller({
+                    sellerName: 'there',
+                    buyerName: fullOrder.requester?.full_name ?? 'The buyer',
+                    gigTitle: fullOrder.gig?.title ?? 'your order',
+                    amount: (paymentIntent.amount / 100).toFixed(2),
+                });
+                sendEmail({ to: sellerEmail, ...tpl });
+            }
+        }
+
         res.json({ success: true, message: 'Payment escrowed successfully', order: updateData[0] });
     } catch (err) {
         console.error('Confirm payment error:', err);
@@ -130,7 +156,7 @@ router.post('/release', async (req, res) => {
     try {
         const { orderId } = req.body;
 
-        if (!orderId) {
+        if (!orderId) { 
             return res.status(400).json({ error: 'Missing orderId' });
         }
 
@@ -170,43 +196,7 @@ router.post('/release', async (req, res) => {
             return res.status(500).json({ error: error.message });
         }
 
-
-        const { data: providerProfile } = await supabase
-            .from('profiles')
-            .select('stripe_account_id, stripe_onboarded')
-            .eq('id', order.provider_id)
-            .single();
-
-        
-        if (!providerProfile?.stripe_account_id || !providerProfile?.stripe_onboarded) {
-            console.warn(`Provider ${order.provider_id} has no Stripe account. Funds Held`)
-        } else {
-            
-            const SERVICE_FEE_CENTS = 600;
-            const transferAmount = Math.round(order.payment_amount * 100) - SERVICE_FEE_CENTS;
-
-            await stripe.transfers.create({
-                amount: transferAmount,
-                currency: 'usd',
-                destination: providerProfile.stripe_account_id,
-                transfer_group: orderId,
-            });
-
-
-        };
-
-
-
-
-
-
-
-
-
-
-        // stripe release
-
-
+        // Stripe transfer happens after the 14-day clearance window via the clearance cron in index.js
 
         // Notify seller
         const { data: fullOrder } = await supabase
@@ -231,6 +221,19 @@ router.post('/release', async (req, res) => {
                     related_id: orderId, related_type: 'gig',
                 },
             ]);
+        }
+
+        // Email seller: funds released
+        if (fullOrder) {
+            const sellerEmail = await getUserEmail(fullOrder.provider_id);
+            if (sellerEmail) {
+                const tpl = templates.fundsReleasedSeller({
+                    sellerName: 'there',
+                    gigTitle: fullOrder.gig?.title ?? 'your order',
+                    amount: order.payment_amount?.toFixed(2) ?? '—',
+                });
+                sendEmail({ to: sellerEmail, ...tpl });
+            }
         }
 
         res.json({ success: true, message: 'Payment released to provider' });
@@ -405,6 +408,20 @@ router.post('/respond', async (req, res) => {
             related_id: orderId,
             related_type: 'gig',
         });
+
+        // Email buyer if accepted
+        if (status === 'accepted') {
+            const buyerEmail = await getUserEmail(order.requester_id);
+            if (buyerEmail) {
+                const tpl = templates.orderAcceptedBuyer({
+                    buyerName: 'there',
+                    sellerName: order.provider?.full_name ?? 'The seller',
+                    gigTitle: order.gig?.title ?? 'your order',
+                    orderId,
+                });
+                sendEmail({ to: buyerEmail, ...tpl });
+            }
+        }
 
         res.json({ success: true, status });
     } catch (err) {
@@ -660,6 +677,20 @@ router.post('/deliver', async (req, res) => {
                 related_id: orderId,
                 related_type: 'gig',
             });
+        }
+
+        // Email buyer: work delivered
+        if (fullOrder) {
+            const buyerEmail = await getUserEmail(fullOrder.requester_id);
+            if (buyerEmail) {
+                const tpl = templates.workDeliveredBuyer({
+                    buyerName: 'there',
+                    sellerName: fullOrder.provider?.full_name ?? 'The seller',
+                    gigTitle: fullOrder.gig?.title ?? 'your order',
+                    orderId,
+                });
+                sendEmail({ to: buyerEmail, ...tpl });
+            }
         }
 
         res.json({ success: true, message: 'Order marked as delivered' });
