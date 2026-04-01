@@ -190,8 +190,8 @@ export default function ChatPage() {
                 .limit(1);
 
 
-                // Profile Ratings
-            const {data: ratings} = await supabase
+            // Profile Ratings
+            const { data: ratings } = await supabase
                 .from("ratings")
                 .select('rating')
                 .eq('rated_id', other.id)
@@ -199,11 +199,11 @@ export default function ChatPage() {
             const avgRating = ratings?.length
                 ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1)
                 : null;
-                
+
             const ratingCount = ratings?.length ?? 0;
 
 
-        
+
 
             return {
                 gig_request_id: req.id, status: req.status,
@@ -222,7 +222,7 @@ export default function ChatPage() {
 
 
 
-            
+
         }));
 
         setGigConversations(enriched);
@@ -255,7 +255,15 @@ export default function ChatPage() {
                         setConversations(prev => prev.map(c => c.swap_id === id ? { ...c, lastMsg: payload.new } : c));
                     }
                 }
-            ).subscribe();
+            ).subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('[Realtime] Subscribed to messages:', id);
+                } else if (status === 'CHANNEL_ERROR') {
+                    console.error('[Realtime] Channel error for messages:', id);
+                } else if (status === 'TIMED_OUT') {
+                    console.error('[Realtime] Subscription timed out:', id);
+                }
+            });
         realtimeSub.current = channel;
     }
 
@@ -275,7 +283,15 @@ export default function ChatPage() {
                         if (updatedProfile) setProfile(updatedProfile);
                     }
                 }
-            ).subscribe();
+            ).subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('[Realtime] Subscribed to messages:', id);
+                } else if (status === 'CHANNEL_ERROR') {
+                    console.error('[Realtime] Channel error for messages:', id);
+                } else if (status === 'TIMED_OUT') {
+                    console.error('[Realtime] Subscription timed out:', id);
+                }
+            });
         swapSub.current = channel;
     }
 
@@ -291,7 +307,15 @@ export default function ChatPage() {
                             : c
                     ));
                 }
-            ).subscribe();
+            ).subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('[Realtime] Subscribed to messages:', id);
+                } else if (status === 'CHANNEL_ERROR') {
+                    console.error('[Realtime] Channel error for messages:', id);
+                } else if (status === 'TIMED_OUT') {
+                    console.error('[Realtime] Subscription timed out:', id);
+                }
+            });
         swapSub.current = channel;
     }
 
@@ -984,7 +1008,7 @@ export default function ChatPage() {
                                     <h3>Gig Details</h3>
 
                                     <p style={{ fontWeight: 600, fontSize: 16 }}>{activeConvo.gig.title}</p>
-                                
+
                                     <p style={{ color: 'var(--text-secondary)', marginTop: 4 }}>
                                         ${activeConvo.gig.price?.toFixed(2)} · {activeConvo.gig.category ?? 'No category'}
                                     </p>
@@ -1057,13 +1081,13 @@ export default function ChatPage() {
                                         )}
 
 
-                                        {activeConvo.isProvider && activeConvo.payment_status == 'escrowed' && activeConvo.status == "delivered"&& (
-                                            
+                                        {activeConvo.isProvider && activeConvo.payment_status == 'escrowed' && activeConvo.status == "delivered" && (
+
                                             <button
                                                 className='btn btn-primary'
-                                                style={{ width: '100%', marginBottom: 10 }} 
-                                                onClick={() => { revertMarkAsDelivered(activeConvo.gig_request_id); setShowProfileModal(false); }} 
-                                                
+                                                style={{ width: '100%', marginBottom: 10 }}
+                                                onClick={() => { revertMarkAsDelivered(activeConvo.gig_request_id); setShowProfileModal(false); }}
+
                                             >
                                                 📦 Revert Delivered
                                             </button>
