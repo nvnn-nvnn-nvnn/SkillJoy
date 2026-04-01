@@ -117,7 +117,7 @@ export default function GigsPage() {
             .from('gigs')
             .select('*, profile:profiles!user_id(id, full_name, bio, service_type, availability)')
             .order('created_at', { ascending: false });
-        if (universityDomain) query = query.eq('university_domain', universityDomain);
+        if (profile?.college_verified && universityDomain) query = query.eq('university_domain', universityDomain);
         const { data, error } = await query;
 
         if (!error && data) {
@@ -146,7 +146,7 @@ export default function GigsPage() {
         loadGigs(profile?.university_domain); // eslint-disable-line react-hooks/set-state-in-effect
         loadFavorites();
         loadRecentSearches();
-    }, [user, profile?.university_domain]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [user, profile?.university_domain, profile?.college_verified]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleCategorySelect = (category) => {
         setSearchQuery(category);

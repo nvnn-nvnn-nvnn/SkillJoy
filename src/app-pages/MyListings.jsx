@@ -65,8 +65,8 @@ export default function MyListingsPage() {
 
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
-        loadData();
-    }, [user]);
+        loadData(); // eslint-disable-line react-hooks/immutability
+    }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
     async function loadData() {
         setBusy(true);
@@ -170,7 +170,7 @@ export default function MyListingsPage() {
             tags: tags.length > 0 ? tags : null,
         };
 
-        const universityDomain = profile?.university_domain ?? null;
+        const universityDomain = (profile?.college_verified && profile?.university_domain) ? profile.university_domain : null;
         const payloadWithDomain = { ...payload, university_domain: universityDomain };
 
         if (editingGig) {

@@ -96,7 +96,6 @@ export default function OnboardingPage() {
         if (!skillsLearn.length) { setError('Add at least one skill you want to learn.'); setStep(3); return; }
 
         setError(''); setBusy(true);
-        const universityDomain = user.email?.split('@')[1]?.toLowerCase() ?? null;
         const { error: e } = await supabase.from('profiles').upsert({
             id: user.id,
             email: user.email,
@@ -106,7 +105,6 @@ export default function OnboardingPage() {
             skills_learn: skillsLearn,
             availability,
             service_type: serviceType,
-            university_domain: universityDomain,
         });
         setBusy(false);
         if (e) { setError(e.message); return; }
