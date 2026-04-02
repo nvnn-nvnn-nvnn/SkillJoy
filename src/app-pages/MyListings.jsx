@@ -65,8 +65,8 @@ export default function MyListingsPage() {
 
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
-        loadData();
-    }, [user]);
+        loadData(); // eslint-disable-line react-hooks/immutability
+    }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
     async function loadData() {
         setBusy(true);
@@ -170,14 +170,17 @@ export default function MyListingsPage() {
             tags: tags.length > 0 ? tags : null,
         };
 
+        const universityDomain = (profile?.college_verified && profile?.university_domain) ? profile.university_domain : null;
+        const payloadWithDomain = { ...payload, university_domain: universityDomain };
+
         if (editingGig) {
-            const { error } = await supabase.from('gigs').update(payload)
+            const { error } = await supabase.from('gigs').update(payloadWithDomain)
                 .eq('id', editingGig.id).eq('user_id', user.id);
             setSubmitting(false);
             if (error) { showToast(error.message, 'error'); return; }
             showToast('Gig updated!', 'success');
         } else {
-            const { error } = await supabase.from('gigs').insert({ user_id: user.id, ...payload });
+            const { error } = await supabase.from('gigs').insert({ user_id: user.id, ...payloadWithDomain });
             setSubmitting(false);
             if (error) { showToast(error.message, 'error'); return; }
             showToast('Gig listed!', 'success');
@@ -512,7 +515,7 @@ export default function MyListingsPage() {
                                 </div>
 
                                 <div className="field">
-                                    <label htmlFor="gig-desc">Description <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+                                    <label htmlFor="gig-desc">Description <span style={{ color: '#000', fontWeight: 400 }}>(optional)</span></label>
                                     <textarea
                                         id="gig-desc"
                                         value={description}
@@ -537,7 +540,7 @@ export default function MyListingsPage() {
                                 </div>
 
                                 <div className="field">
-                                    <label htmlFor="gig-commitments">What I Commit To <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+                                    <label htmlFor="gig-commitments">What I Commit To <span style={{ color: '#000', fontWeight: 400 }}>(optional)</span></label>
                                     <textarea
                                         id="gig-commitments"
                                         value={commitments}
@@ -549,7 +552,7 @@ export default function MyListingsPage() {
                                 </div>
 
                                 <div className="field">
-                                    <label htmlFor="gig-requirements">Requirements <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+                                    <label htmlFor="gig-requirements">Requirements <span style={{ color: '#000', fontWeight: 400 }}>(optional)</span></label>
                                     <textarea
                                         id="gig-requirements"
                                         value={requirements}
@@ -561,7 +564,7 @@ export default function MyListingsPage() {
                                 </div>
 
                                 <div className="field">
-                                    <label>Portfolio Images <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+                                    <label>Portfolio Images <span style={{ color: '#000', fontWeight: 400 }}>(optional)</span></label>
 
                                     {/* Thumbnails */}
                                     {images.length > 0 && (
@@ -598,7 +601,7 @@ export default function MyListingsPage() {
                                     </label>
 
                                     {/* Add by URL */}
-                                    <div style={{ display: 'flex', gap: 8 }}>
+                                    <div className="input-add-row" style={{ display: 'flex', gap: 8 }}>
                                         <input
                                             type="text"
                                             value={urlInput}
@@ -607,7 +610,15 @@ export default function MyListingsPage() {
                                             placeholder="Or paste an image URL..."
                                             style={{ flex: 1 }}
                                         />
-                                        <button type="button" className="btn btn-secondary btn-sm" onClick={addImageUrl}>
+                                        <button 
+                                        type="button" 
+                                        className="btn btn-secondary btn-sm" 
+                                        style= {{ 
+                                            background: '#fff',
+                                            border: "solid 1px #000"
+                                        }}
+                                        onClick={addImageUrl}
+                                        >
                                             Add
                                         </button>
                                     </div>
@@ -615,7 +626,7 @@ export default function MyListingsPage() {
 
 
                                 <div className="field">
-                                    <label>FAQs <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+                                    <label>FAQs <span style={{ color: '#000', fontWeight: 400 }}>(optional)</span></label>
 
                                     {/* FAQ List */}
                                     <div style={{ marginBottom: '12px' }}>
@@ -631,7 +642,7 @@ export default function MyListingsPage() {
                                                 background: 'var(--surface-alt)'
                                             }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>
+                                                    <span style={{ fontSize: '12px', fontWeight: '600', color: '#000' }}>
                                                         FAQ {index + 1}
                                                     </span>
                                                     <button
@@ -709,22 +720,22 @@ export default function MyListingsPage() {
                                         Add FAQ
                                     </button>
 
-                                    <small style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '8px', display: 'block' }}>
+                                    <small style={{ color: '#fff', fontSize: '0.875rem', marginTop: '8px', display: 'block' }}>
                                         Add frequently asked questions about your gig
                                     </small>
                                 </div>
 
                                 <div className="field">
-                                    <label>Tags <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+                                    <label>Tags <span style={{ color: '#000', fontWeight: 400 }}>(optional)</span></label>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                                         {tags.map(tag => (
                                             <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: 20, padding: '3px 10px', fontSize: 13 }}>
                                                 {tag}
-                                                <button type="button" onClick={() => setTags(tags.filter(t => t !== tag))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1, padding: 0 }}>×</button>
+                                                <button type="button" onClick={() => setTags(tags.filter(t => t !== tag))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#000', lineHeight: 1, padding: 0 }}>×</button>
                                             </span>
                                         ))}
                                     </div>
-                                    <div style={{ display: 'flex', gap: 8 }}>
+                                    <div className="input-add-row" style={{ display: 'flex', gap: 8 }}>
                                         <input
                                             type="text"
                                             value={tagInput}
@@ -740,20 +751,36 @@ export default function MyListingsPage() {
                                             placeholder="e.g. fast delivery, remote, beginner-friendly"
                                             style={{ flex: 1 }}
                                         />
-                                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => {
+                                        <button type="button" 
+                                        className="btn btn-secondary btn-sm" 
+                                        style= {{ 
+                                            backgroundColor: "#fff",
+                                            color: "#000",
+                                            border: "solid 1px #000"
+
+                                         }}
+                                        
+                                        onClick={() => {
                                             const t = tagInput.trim().toLowerCase().replace(/,/g, '');
                                             if (t && !tags.includes(t) && tags.length < 8) { setTags([...tags, t]); setTagInput(''); }
                                         }}>Add</button>
                                     </div>
-                                    <small style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>Press Enter or comma to add. Max 8 tags.</small>
+                                    <small style={{ color: '#000', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>Press Enter or comma to add. Max 8 tags.</small>
                                 </div>
 
-                                <div style={{ display: 'flex', gap: 10 }}>
+                                <div className="form-submit-row" style={{ display: 'flex', gap: 10 }}>
                                     <button className="btn btn-primary" type="submit" disabled={submitting || !title.trim() || !price}>
                                         {submitting ? (editingGig ? 'Saving...' : 'Listing...') : (editingGig ? 'Save Changes' : 'List Gig')}
                                     </button>
                                     {editingGig && (
-                                        <button type="button" className="btn btn-secondary" onClick={() => { resetForm(); setTab('listings'); }}>
+                                        <button type="button" 
+                                        className="btn btn-secondary" 
+                                        style={{
+                                            backgroundColor: "#fff",
+                                            color: "000",
+                                            border: "1px solid #000"
+                                        }}
+                                        onClick={() => { resetForm(); setTab('listings'); }}>
                                             Cancel
                                         </button>
                                     )}
@@ -791,7 +818,7 @@ export default function MyListingsPage() {
                                 </div>
                             ) : (
                                 <div className="modal-section">
-                                    <p style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No description provided.</p>
+                                    <p style={{ color: '#000', fontStyle: 'italic' }}>No description provided.</p>
                                 </div>
                             )}
                             {gigDetailModal.commitments && (
@@ -964,11 +991,42 @@ export default function MyListingsPage() {
         .payment-disputed { background: var(--accent-light); color: var(--accent); border: 1px solid var(--accent-mid); }
         .gig-title-link { cursor: pointer; color: var(--primary); transition: color 0.15s; }
         .gig-title-link:hover { color: var(--accent); text-decoration: underline; }
-        .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 500; }
-        .modal { position: relative; background: var(--surface); border-radius: var(--r-lg); padding: 32px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 500; padding: 16px; }
+        .modal { position: relative; background: var(--surface); border-radius: var(--r-lg); padding: 32px; max-width: 500px; width: 100%; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
         .modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary); }
         .modal-section { margin-bottom: 20px; }
         .modal-section h3 { font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+
+        @media (max-width: 768px) {
+          .swaps-hero-section { padding: 16px; border-radius: 12px; }
+
+          /* Page header stack */
+          .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+          .page-header .btn { width: 100%; text-align: center; }
+
+          /* Tabs scroll horizontally */
+          .tabs { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
+          .tab { white-space: nowrap; }
+
+          /* Form full width */
+          .gig-form { max-width: 100%; }
+
+          /* URL/tag input + Add button rows */
+          .input-add-row { flex-direction: column; }
+          .input-add-row .btn { width: 100%; }
+
+          /* Submit buttons stack */
+          .form-submit-row { flex-direction: column; }
+          .form-submit-row .btn { width: 100%; }
+
+          /* Request cards */
+          .request-card { padding: 14px; }
+          .request-gig { flex-direction: column; align-items: flex-start; gap: 8px; }
+          .request-actions { flex-wrap: wrap; }
+
+          /* Modal */
+          .modal { padding: 20px 16px; }
+        }
       `}</style>
         </>
     );

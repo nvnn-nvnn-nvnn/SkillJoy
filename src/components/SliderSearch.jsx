@@ -54,58 +54,46 @@ export default function SliderSearch({ onCategorySelect, categories = DEFAULT_CA
 
 
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '1rem',
-            padding: '0.5rem',
-            maxWidth: '100%',
-        }}
-        >
-            <span style={{ fontWeight: 'bold', fontSize: '1.25rem', color: "var(--text)" }}>Categories</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '100%' }}>
+            <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'var(--text)', paddingLeft: 2 }}>Categories</span>
 
-            <div
-
-                style={{
-                    display: 'flex',
-                    gap: '1rem',
-                    overflowX: 'auto',
-                    padding: '1rem',
-                }}
-            >
-
-                {
-                    categories.map(category => (
-                        <div
-                            key={category.label}
-                            style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                padding: '0.5rem 1rem',
-                                border: '2px solid #c99772',
-                                backgroundColor: '#fff',
-                                borderRadius: '18px',
-                                cursor: 'pointer',
-                                minWidth: 'fit-content',
-                                flexShrink: 0,
-                                fontFamily: 'inherit',
-                                fontSize: '0.875rem',
-
-                            }}
-                            onClick={() => onCategorySelect(category.query)}
-                        >
-                            <span style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>{category.emoji}</span>
-                            <span>{category.label}</span>
-                        </div>
-                    ))
-
-                }
-
-
+            <div className="slider-scroll" style={{
+                display: 'flex',
+                gap: '8px',
+                overflowX: 'auto',
+                paddingBottom: '4px',
+                WebkitOverflowScrolling: 'touch',
+            }}>
+                {categories.map(category => (
+                    <div
+                        key={category.label}
+                        style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            padding: '8px 14px',
+                            border: `2px solid ${selectedCategory === category.label ? '#000' : '#c99772'}`,
+                            backgroundColor: selectedCategory === category.label ? '#000' : '#fff',
+                            color: selectedCategory === category.label ? '#fff' : 'inherit',
+                            borderRadius: '16px',
+                            cursor: 'pointer',
+                            minWidth: 'fit-content',
+                            flexShrink: 0,
+                            fontFamily: 'inherit',
+                            fontSize: '0.8125rem',
+                            transition: 'all 0.15s',
+                        }}
+                        onClick={() => {
+                            const next = selectedCategory === category.label ? null : category.label;
+                            setSelectedCategory(next);
+                            onCategorySelect(next ? category.query : '');
+                        }}
+                    >
+                        <span style={{ fontSize: '1.375rem', marginBottom: '2px' }}>{category.emoji}</span>
+                        <span>{category.label}</span>
+                    </div>
+                ))}
             </div>
-
-
         </div>
     );
 }

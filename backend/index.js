@@ -10,7 +10,10 @@ const userRoutes = require('./routes/users.js');
 const webhookRoutes = require('./routes/webhooks.js');
 const adminRoutes = require('./routes/admin.js');
 const stripeConnectRoutes = require('./routes/stripe-connect.js');
+const contactRoutes = require('./routes/contact.js');
+const verifyCollegeRoutes = require('./routes/verify-college.js');
 const rateLimit = require('express-rate-limit');
+const { sendEmail, getUserEmail, templates } = require('./lib/email');
 
 // Global limiter: 200 req per 15 min per IP
 const globalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
@@ -19,9 +22,15 @@ const globalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHe
 const strictLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many requests, please try again later.' } });
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+app.use(cors({
+    origin: process.env.NODE_ENV === 'production'
+        ? process.env.FRONTEND_URL
+        : '*',
+    credentials: true,
+}));
 app.use(globalLimiter);
 
 // Webhook must be BEFORE express.json() to receive raw body
@@ -43,8 +52,9 @@ app.use('/api/users', userRoutes);
 
 // Stripe Connect
 
-app.use('/api/stripe-connect' , authMiddleware,
-     stripeConnectRoutes);
+app.use('/api/stripe-connect', authMiddleware, stripeConnectRoutes);
+app.use('/api/contact', contactRoutes);
+app.use('/api/verify-college', authMiddleware, verifyCollegeRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -64,7 +74,7 @@ cron.schedule('0 0 * * *', async () => {
 
     const { data: overdueOrders, error } = await supabase
         .from('gig_requests')
-        .select('id, requester_id, provider_id, gig:gigs(title)')
+        .select('id, requester_id, provider_id, payment_amount, gig:gigs(title)')
         .eq('payment_status', 'escrowed')
         .eq('status', 'delivered')
         .lte('auto_release_date', new Date().toISOString());
@@ -74,9 +84,8 @@ cron.schedule('0 0 * * *', async () => {
 
     for (const order of overdueOrders) {
         const clearanceDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-        
-        // Edgecases
 
+<<<<<<< HEAD
         if (!order){
             console.error(`There is no order to return`)
             return
@@ -105,6 +114,8 @@ cron.schedule('0 0 * * *', async () => {
 
 
         
+=======
+>>>>>>> 19fa40f8d21b2f96b196a75c62a727113c4ccd2d
         const { error: releaseError } = await supabase
             .from('gig_requests')
             .update({
@@ -169,6 +180,15 @@ cron.schedule('0 1 * * *', async () => {
 
         if (!provider?.stripe_account_id || !provider?.stripe_onboarded) {
             console.warn(`Clearance: provider ${order.provider_id} has no Stripe account. Skipping.`);
+            const gigTitle = order.gig?.title ?? 'your order';
+            await supabase.from('notifications').insert({
+                user_id: order.provider_id,
+                type: 'payout_setup_required',
+                title: 'Action required: Set up payouts to receive funds',
+                message: `Funds for "${gigTitle}" are ready to be transferred but your Stripe payout account isn't connected. Visit your profile to set up payouts or you will not receive payment.`,
+                related_id: order.id,
+                related_type: 'gig',
+            });
             continue;
         }
 
@@ -191,6 +211,18 @@ cron.schedule('0 1 * * *', async () => {
                 message: `Your earnings for "${gigTitle}" have cleared and are on their way to your Stripe account.`,
                 related_id: order.id, related_type: 'gig',
             });
+
+            const sellerEmail = await getUserEmail(order.provider_id);
+            if (sellerEmail) {
+                sendEmail({
+                    to: sellerEmail,
+                    ...templates.fundsCleared({
+                        sellerName: 'there',
+                        gigTitle,
+                        amount: ((order.payment_amount * 100 - SERVICE_FEES_CENTS) / 100).toFixed(2),
+                    }),
+                });
+            }
 
             console.log(`✅ Cleared order ${order.id}`);
         } catch (err) {

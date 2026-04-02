@@ -38,6 +38,12 @@ export default function ProfilePage() {
     const [stripeStatus, setStripeStatus] = useState(null);
     const [stripeBalance, setStripeBalance] = useState(null);
 
+    // College verification
+    const [collegeEmail, setCollegeEmail] = useState('');
+    const [collegeSending, setCollegeSending] = useState(false);
+    const [collegeSent, setCollegeSent] = useState(false);
+    const [collegeError, setCollegeError] = useState('');
+
 
 
 
@@ -45,11 +51,6 @@ export default function ProfilePage() {
     const isOwnProfile = !userId || userId === user?.id;
 
 
-    useEffect(() => {
-        if (!user) { navigate('/login'); return; }
-        loadProfile();
-        loadGigs();
-    }, [user, userId]);
 
 
 
@@ -126,7 +127,7 @@ export default function ProfilePage() {
         if (params.get('stripe') === 'success' || params.get('stripe') === 'refresh') {
             window.history.replaceState({}, '', '/profile');
         }
-        checkStripeStatus();
+        checkStripeStatus(); // eslint-disable-line react-hooks/set-state-in-effect
     }, [isOwnProfile]);
 
     async function handleStripeOnboard() {
@@ -165,6 +166,26 @@ export default function ProfilePage() {
         setBusy(false);
     }
 
+    useEffect(() => {
+        if (!user) { navigate('/login'); return; }
+        loadProfile(); // eslint-disable-line react-hooks/set-state-in-effect
+        loadGigs();
+    }, [user, userId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    async function handleSendCollegeVerification() {
+        setCollegeError('');
+        if (!collegeEmail.trim()) { setCollegeError('Enter your .edu email.'); return; }
+        if (!collegeEmail.toLowerCase().endsWith('.edu')) { setCollegeError('Must be a .edu email address.'); return; }
+        setCollegeSending(true);
+        const res = await apiFetch('/api/verify-college/send', {
+            method: 'POST',
+            body: JSON.stringify({ collegeEmail }),
+        });
+        const data = await res.json();
+        setCollegeSending(false);
+        if (!res.ok) { setCollegeError(data.error || 'Failed to send.'); return; }
+        setCollegeSent(true);
+    }
 
     async function handleSave() {
         if (!fullName.trim()) { setError('Name is required'); return; }
@@ -190,7 +211,7 @@ export default function ProfilePage() {
 
         setSaving(false);
 
-        if (e) { setError(e.message); return; }
+        if (e) { setError('Could not save profile. Please try again.'); return; }
 
         const { data: updated } = await supabase.from('profiles').select('*').eq('id', user.id).single();
         if (updated) {
@@ -351,18 +372,16 @@ export default function ProfilePage() {
                                 <span className="stat-value">{stats.gigsCompleted}</span>
                                 <span className="stat-label">Gigs</span>
                             </div>
-                            <div className="stat" 
-                                style={{display: "flex", }}
-                            >
+                            <div className="stat">
                                 <span className="stat-value">
-                                    {stats.avgRating > 0 ? `⭐ ${stats.avgRating.toFixed(1)}` : 'N/A'}
+                                    {stats.avgRating > 0 ? stats.avgRating.toFixed(1) : 'N/A'}
                                 </span>
-                                <span className="stat-label">{stats.totalRatings} ratings</span>
+                                <span className="stat-label">⭐ {stats.totalRatings} ratings</span>
                             </div>
                         </div>
                     </div>
                     {isOwnProfile && !editMode && (
-                        <div style={{ display: 'flex', gap: '12px' }}>
+                        <div className="profile-header-actions" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                             <button className="btn btn-secondary" onClick={() => setEditMode(true)}>
                                 Edit Profile
                             </button>
@@ -396,7 +415,7 @@ export default function ProfilePage() {
                                     ✅ Payouts active — you'll receive funds when buyers release payment.
                                 </p>
                                 {stripeBalance && (
-                                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                                    <div style={{ display: 'flex', flexDirection:"column", gap: '16px', flexWrap: 'wrap' }}>
                                         <div style={{ background: '#fff', border: '1px solid #86efac', borderRadius: 8, padding: '10px 16px' }}>
                                             <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>AVAILABLE</div>
                                             <div style={{ fontSize: '20px', fontWeight: 700, color: '#15803d' }}>${stripeBalance.available.toFixed(2)}</div>
@@ -416,6 +435,46 @@ export default function ProfilePage() {
                                 <button className="btn btn-primary" onClick={handleStripeOnboard}>
                                     Set Up Payouts with Stripe
                                 </button>
+                            </>
+                        )}
+                    </div>
+                )}
+
+                {isOwnProfile && (
+                    <div style={{
+                        padding: '16px 20px',
+                        background: profile?.college_verified ? '#f0fdf4' : '#fff7ed',
+                        border: `1px solid ${profile?.college_verified ? '#86efac' : '#fdba74'}`,
+                        borderRadius: 10,
+                        marginBottom: 20,
+                    }}>
+                        {profile?.college_verified ? (
+                            <p style={{ color: '#15803d', fontWeight: 600, margin: 0 }}>
+                                🎓 College verified — {profile.university_domain}. You're seeing students at your school.
+                            </p>
+                        ) : collegeSent ? (
+                            <div>
+                                <p style={{ color: '#92400e', fontWeight: 600, margin: '0 0 4px' }}>📧 Verification email sent!</p>
+                                <p style={{ color: '#92400e', fontSize: 13, margin: 0 }}>Check your .edu inbox and click the link to verify.</p>
+                            </div>
+                        ) : (
+                            <>
+                                <p style={{ color: '#92400e', fontWeight: 600, margin: '0 0 10px' }}>
+                                    🎓 Verify your college email to connect with students at your university.
+                                </p>
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                    <input
+                                        type="email"
+                                        value={collegeEmail}
+                                        onChange={e => setCollegeEmail(e.target.value)}
+                                        placeholder="you@university.edu"
+                                        style={{ flex: 1, minWidth: 200, padding: '8px 12px', borderRadius: 8, border: '1px solid #fdba74', fontSize: 14 }}
+                                    />
+                                    <button className="btn btn-primary" onClick={handleSendCollegeVerification} disabled={collegeSending}>
+                                        {collegeSending ? 'Sending…' : 'Send verification'}
+                                    </button>
+                                </div>
+                                {collegeError && <p style={{ color: '#ef4444', fontSize: 13, margin: '8px 0 0' }}>{collegeError}</p>}
                             </>
                         )}
                     </div>
@@ -617,6 +676,7 @@ export default function ProfilePage() {
             <style>{`
                 .profile-header {
                     display: flex;
+                    flex-direction: row;
                     align-items: flex-start;
                     gap: 24px;
                     margin-bottom: 40px;
@@ -819,10 +879,26 @@ export default function ProfilePage() {
                         flex-direction: column;
                         align-items: center;
                         text-align: center;
+                        padding: 16px;
                     }
+                    .profile-name { font-size: 22px; }
+                    .profile-name-input { font-size: 20px; max-width: 100%; }
                     .profile-stats {
                         justify-content: center;
+                        gap: 16px;
                     }
+                    .stat-value { font-size: 18px; }
+                    .profile-header-actions {
+                        width: 100%;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                    }
+                    .profile-section { padding: 16px; }
+                    .profile-actions {
+                        flex-direction: column-reverse;
+                    }
+                    .profile-actions .btn { width: 100%; }
                     .profile-gigs-grid {
                         grid-template-columns: 1fr;
                     }

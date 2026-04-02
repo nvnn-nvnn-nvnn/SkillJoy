@@ -3,7 +3,11 @@
     "allow": [
       "Bash(npm install:*)",
       "Bash(\"c:\\\\Users\\\\Devan Chuyen:*)",
-      "Bash(grep -n \"clearance_date\\\\|select\\\\`\" \"c:/Users/Devan Chuyen Lee/Documents/Skill-Swap/src/app-pages/MyOrders.jsx\")"
+      "Bash(grep -n \"clearance_date\\\\|select\\\\`\" \"c:/Users/Devan Chuyen Lee/Documents/Skill-Swap/src/app-pages/MyOrders.jsx\")",
+      "Bash(head -10 grep -n \"className\\\\|class=\" \"c:/Users/Devan Chuyen Lee/Documents/Skill-Swap/src/app-pages/Swaps.jsx\")",
+      "Bash(head -10 grep -n \"className\\\\|class=\" \"c:/Users/Devan Chuyen Lee/Documents/Skill-Swap/src/app-pages/MyListings.jsx\")",
+      "Bash(head -10 grep -n \"className\\\\|class=\" \"c:/Users/Devan Chuyen Lee/Documents/Skill-Swap/src/app-pages/MainSearch.jsx\")",
+      "Bash(del \"c:\\\\Users\\\\Devan Chuyen Lee\\\\Documents\\\\Skill-Swap\\\\src\\\\app-pages\\\\Swaps.jsx.backup\")"
     ]
   }
 }

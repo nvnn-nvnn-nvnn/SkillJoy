@@ -133,11 +133,11 @@ export default function AdminPage() {
                         <span style={{ fontSize: 22 }}>🛡️</span>
                         <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em' }}>Admin Panel</h1>
                     </div>
-                    <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>SkillJoy Platform Management</p>
+                    <p style={{ margin: 0, fontSize: 13, color: '#000' }}>SkillJoy Platform Management</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ textAlign: 'right' }}>
-                        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>Signed in as</p>
+                        <p style={{ margin: 0, fontSize: 12, color: '#000' }}>Signed in as</p>
                         <p style={{ margin: 0, fontSize: 13, fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)' }}>{ADMIN_EMAIL}</p>
                     </div>
                     <div style={{ width: 38, height: 38, borderRadius: '50%', background: '#1a1a1a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700 }}>A</div>
