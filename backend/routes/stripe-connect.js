@@ -2,8 +2,7 @@ const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
-
-const SERVICE_FEES_CENTS = 600;
+const { SERVICE_FEE_CENTS } = require('../config/fees');
 
 // Process any released orders past clearance_date for a newly-onboarded seller
 async function processReleasedOrders(providerId, stripeAccountId) {
@@ -18,7 +17,7 @@ async function processReleasedOrders(providerId, stripeAccountId) {
 
     for (const order of orders) {
         try {
-            const transferAmount = Math.round(order.payment_amount * 100) - SERVICE_FEES_CENTS;
+            const transferAmount = Math.round(order.payment_amount * 100) - SERVICE_FEE_CENTS;
             await stripe.transfers.create({
                 amount: transferAmount,
                 currency: 'usd',

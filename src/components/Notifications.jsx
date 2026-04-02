@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/stores';
@@ -10,13 +11,32 @@ export default function Notifications() {
     const [unreadCount, setUnreadCount] = useState(0);
     const [showDropdown, setShowDropdown] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [expandedIds, setExpandedIds] = useState(new Set());
     const dropdownRef = useRef(null);
+    const panelRef = useRef(null);
+    const bellRef = useRef(null);
+    const [dropdownStyle, setDropdownStyle] = useState({});
+
+    async function loadNotifications() {
+        if (!user) return;
+        setLoading(true);
+        const { data, error } = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(20);
+        if (!error && data) {
+            setNotifications(data);
+            setUnreadCount(data.filter(n => !n.read).length);
+        }
+        setLoading(false);
+    }
 
     useEffect(() => {
         if (!user) return;
-        loadNotifications();
-        
-        // Subscribe to new notifications
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        void loadNotifications();
         const channel = supabase
             .channel('notifications')
             .on('postgres_changes', {
@@ -29,40 +49,18 @@ export default function Notifications() {
                 setUnreadCount(prev => prev + 1);
             })
             .subscribe();
-
-        return () => {
-            channel.unsubscribe();
-        };
+        return () => { channel.unsubscribe(); };
     }, [user]);
 
-    // Close dropdown when clicking outside
     useEffect(() => {
         function handleClickOutside(event) {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                setShowDropdown(false);
-            }
+            const inBell = dropdownRef.current?.contains(event.target);
+            const inPanel = panelRef.current?.contains(event.target);
+            if (!inBell && !inPanel) setShowDropdown(false);
         }
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
-
-    async function loadNotifications() {
-        if (!user) return;
-        setLoading(true);
-        
-        const { data, error } = await supabase
-            .from('notifications')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(20);
-
-        if (!error && data) {
-            setNotifications(data);
-            setUnreadCount(data.filter(n => !n.read).length);
-        }
-        setLoading(false);
-    }
 
     async function markAsRead(notificationId) {
         const { error } = await supabase
@@ -141,9 +139,16 @@ export default function Notifications() {
 
     return (
         <div className="notifications-container" ref={dropdownRef}>
-            <button 
+            <button
                 className="notifications-bell"
-                onClick={() => setShowDropdown(!showDropdown)}
+                ref={bellRef}
+                onClick={() => {
+                    if (!showDropdown && bellRef.current) {
+                        const r = bellRef.current.getBoundingClientRect();
+                        setDropdownStyle({ top: r.bottom + 8, right: window.innerWidth - r.right });
+                    }
+                    setShowDropdown(s => !s);
+                }}
                 aria-label="Notifications"
             >
                 🔔
@@ -152,51 +157,83 @@ export default function Notifications() {
                 )}
             </button>
 
-            {showDropdown && (
-                <div className="notifications-dropdown">
-                    <div className="notifications-header">
-                        <h3>Notifications</h3>
-                        {unreadCount > 0 && (
-                            <button 
-                                className="mark-all-read-btn"
-                                onClick={markAllAsRead}
-                            >
-                                Mark all read
-                            </button>
-                        )}
-                    </div>
+            {showDropdown && createPortal(
+                <>
+                    {/* Mobile drawer backdrop */}
+                    <div className="notif-mobile-backdrop" onClick={() => setShowDropdown(false)} />
 
-                    <div className="notifications-list">
-                        {loading ? (
-                            <div className="notifications-loading">
-                                <div className="spinner" style={{ width: 24, height: 24, borderWidth: 2 }} />
+                    <div className="notifications-dropdown" ref={panelRef} style={window.innerWidth > 480 ? dropdownStyle : undefined}>
+                        <div className="notifications-header">
+                            <h3>Notifications</h3>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                {unreadCount > 0 && (
+                                    <button
+                                        className="mark-all-read-btn"
+                                        onClick={markAllAsRead}
+                                    >
+                                        Mark all read
+                                    </button>
+                                )}
+                                <button className="notif-close-btn" onClick={() => setShowDropdown(false)} aria-label="Close">✕</button>
                             </div>
-                        ) : notifications.length === 0 ? (
-                            <div className="notifications-empty">
-                                <span style={{ fontSize: 32 }}>🔔</span>
-                                <p>No notifications yet</p>
-                            </div>
-                        ) : (
-                            notifications.map(notification => (
-                                <button
-                                    key={notification.id}
-                                    className={`notification-item ${!notification.read ? 'unread' : ''}`}
-                                    onClick={() => handleNotificationClick(notification)}
-                                >
-                                    <div className="notification-icon">
-                                        {getNotificationIcon(notification.type)}
-                                    </div>
-                                    <div className="notification-content">
-                                        <p className="notification-title">{notification.title}</p>
-                                        <p className="notification-message">{notification.message}</p>
-                                        <span className="notification-time">{formatTime(notification.created_at)}</span>
-                                    </div>
-                                    {!notification.read && <div className="notification-dot" />}
-                                </button>
-                            ))
-                        )}
+                        </div>
+
+                        <div className="notifications-list">
+                            {loading ? (
+                                <div className="notifications-loading">
+                                    <div className="spinner" style={{ width: 24, height: 24, borderWidth: 2 }} />
+                                </div>
+                            ) : notifications.length === 0 ? (
+                                <div className="notifications-empty">
+                                    <span style={{ fontSize: 32 }}>🔔</span>
+                                    <p>No notifications yet</p>
+                                </div>
+                            ) : (
+                                notifications.map(notification => {
+                                    const isExpanded = expandedIds.has(notification.id);
+                                    return (
+                                        <div
+                                            key={notification.id}
+                                            className={`notification-item ${!notification.read ? 'unread' : ''} ${isExpanded ? 'expanded' : ''}`}
+                                        >
+                                            <button
+                                                className="notification-item-main"
+                                                onClick={() => handleNotificationClick(notification)}
+                                            >
+                                                <div className="notification-icon">
+                                                    {getNotificationIcon(notification.type)}
+                                                </div>
+                                                <div className="notification-content">
+                                                    <p className="notification-title">{notification.title}</p>
+                                                    <p className={`notification-message ${isExpanded ? 'expanded' : ''}`}>{notification.message}</p>
+                                                    <span className="notification-time">{formatTime(notification.created_at)}</span>
+                                                </div>
+                                                {!notification.read && <div className="notification-dot" />}
+                                            </button>
+                                            {notification.message && notification.message.length > 60 && (
+                                                <button
+                                                    className="notif-expand-btn"
+                                                    onClick={e => {
+                                                        e.stopPropagation();
+                                                        setExpandedIds(prev => {
+                                                            const next = new Set(prev);
+                                                            if (next.has(notification.id)) next.delete(notification.id);
+                                                            else next.add(notification.id);
+                                                            return next;
+                                                        });
+                                                    }}
+                                                >
+                                                    {isExpanded ? 'less' : '···'}
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
                     </div>
-                </div>
+                </>,
+                document.body
             )}
 
             <style>{`
@@ -234,11 +271,9 @@ export default function Notifications() {
                 }
 
                 .notifications-dropdown {
-                    position: absolute;
-                    top: calc(100% + 8px);
-                    right: 0;
+                    position: fixed;
                     width: 380px;
-                    max-height: 500px;
+                    max-height: 640px;
                     background: var(--surface);
                     border: 1px solid var(--border);
                     border-radius: 12px;
@@ -246,6 +281,7 @@ export default function Notifications() {
                     z-index: 1000;
                     display: flex;
                     flex-direction: column;
+                    overflow: hidden;
                 }
 
                 .notifications-header {
@@ -280,7 +316,8 @@ export default function Notifications() {
 
                 .notifications-list {
                     overflow-y: auto;
-                    max-height: 420px;
+                    flex: 1;
+                    min-height: 0;
                 }
 
                 .notifications-loading,
@@ -299,6 +336,30 @@ export default function Notifications() {
                 }
 
                 .notification-item {
+                    border: none;
+                    background: transparent;
+                    width: 100%;
+                    transition: background 0.15s, padding 0.2s;
+                    border-bottom: 1px solid var(--border);
+                    position: relative;
+                }
+
+                .notification-item:last-child {
+                    border-bottom: none;
+                }
+
+                .notification-item.expanded .notification-item-main {
+                    padding-top: 20px;
+                    padding-bottom: 20px;
+                    flex-direction: column;
+                    align-items: flex-start;
+                }
+
+                .notification-item.unread {
+                    background: var(--primary-light);
+                }
+
+                .notification-item-main {
                     display: flex;
                     align-items: flex-start;
                     gap: 12px;
@@ -309,24 +370,36 @@ export default function Notifications() {
                     text-align: left;
                     cursor: pointer;
                     transition: background 0.15s;
-                    border-bottom: 1px solid var(--border);
-                    position: relative;
                 }
 
-                .notification-item:last-child {
-                    border-bottom: none;
-                }
-
-                .notification-item:hover {
+                .notification-item-main:hover {
                     background: var(--surface-alt);
                 }
 
-                .notification-item.unread {
-                    background: var(--primary-light);
+                .notification-item.unread .notification-item-main:hover {
+                    background: var(--primary-mid);
                 }
 
-                .notification-item.unread:hover {
-                    background: var(--primary-mid);
+                .notif-expand-btn {
+                    display: block;
+                    margin: 0 20px 10px auto;
+                    background: transparent;
+                    border: 1px solid var(--border);
+                    border-radius: 6px;
+                    padding: 4px 0;
+                    width: 40px;
+                    text-align: center;
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: var(--text-muted);
+                    cursor: pointer;
+                    letter-spacing: 0.05em;
+                    transition: background 0.15s, color 0.15s;
+                }
+
+                .notif-expand-btn:hover {
+                    background: var(--surface-alt);
+                    color: var(--text-primary);
                 }
 
                 .notification-icon {
@@ -357,6 +430,12 @@ export default function Notifications() {
                     -webkit-box-orient: vertical;
                 }
 
+                .notification-message.expanded {
+                    -webkit-line-clamp: unset;
+                    overflow: visible;
+                    display: block;
+                }
+
                 .notification-time {
                     font-size: 12px;
                     color: var(--text-muted);
@@ -371,10 +450,56 @@ export default function Notifications() {
                     margin-top: 6px;
                 }
 
+                .notif-mobile-backdrop {
+                    display: none;
+                }
+
+                .notif-close-btn {
+                    display: none;
+                    background: transparent;
+                    border: none;
+                    font-size: 16px;
+                    color: var(--text-secondary);
+                    cursor: pointer;
+                    padding: 4px 6px;
+                    border-radius: 6px;
+                    line-height: 1;
+                }
+
+                @keyframes notifSlideIn {
+                    from { transform: translateX(-100%); }
+                    to   { transform: translateX(0); }
+                }
+
                 @media (max-width: 480px) {
+                    .notif-mobile-backdrop {
+                        display: block;
+                        position: fixed;
+                        inset: 0;
+                        background: rgba(0, 0, 0, 0.4);
+                        z-index: 999;
+                    }
+
+                    .notif-close-btn {
+                        display: block;
+                    }
+
                     .notifications-dropdown {
-                        width: calc(100vw - 32px);
-                        right: -16px;
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        bottom: 0;
+                        width: 100vw;
+                        height: 100dvh;
+                        max-height: 100dvh;
+                        border-radius: 0;
+                        border: none;
+                        z-index: 1000;
+                        animation: notifSlideIn 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+                    }
+
+                    .notifications-list {
+                        -webkit-overflow-scrolling: touch;
                     }
                 }
             `}</style>

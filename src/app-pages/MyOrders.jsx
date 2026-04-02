@@ -25,7 +25,7 @@ function PaymentForm({ order, onSuccess, onError, onClose }) {
     const [cardName, setCardName] = useState('');
     const [zipCode, setZipCode] = useState('');
 
-    const SERVICE_FEE = 6.00;
+    const SERVICE_FEE = 6.00; // Keep in sync with backend/config/fees.js
     const total = (parseFloat(order.gig.price) || 0) + SERVICE_FEE;
 
     async function handleSubmit(e) {
@@ -402,6 +402,23 @@ export default function MyOrders() {
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
         loadOrders();
+    }, [user, tab]);
+
+    useEffect(() => {
+        if (!user) return;
+        const column = tab === 'buying' ? 'requester_id' : 'provider_id';
+        const channel = supabase
+            .channel(`my-orders-${user.id}-${tab}`)
+            .on('postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'gig_requests', filter: `${column}=eq.${user.id}` },
+                (payload) => {
+                    setOrders(prev => prev.map(o =>
+                        o.id === payload.new.id ? { ...o, ...payload.new } : o
+                    ));
+                }
+            )
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
     }, [user, tab]);
 
     async function loadOrders() {

@@ -54,22 +54,34 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Message notification trigger
 CREATE OR REPLACE FUNCTION notify_new_message() RETURNS TRIGGER AS $$
-DECLARE v_recipient_id UUID; v_sender_name TEXT; v_related_type TEXT;
+DECLARE v_recipient_id UUID; v_sender_name TEXT; v_related_type TEXT; v_convo_id UUID;
 BEGIN
     IF NEW.swap_id IS NOT NULL THEN
         SELECT CASE WHEN requester_id = NEW.sender_id THEN receiver_id ELSE requester_id END
         INTO v_recipient_id FROM swaps WHERE id = NEW.swap_id;
         v_related_type := 'swap';
+        v_convo_id := NEW.swap_id;
     ELSIF NEW.gig_request_id IS NOT NULL THEN
         SELECT CASE WHEN requester_id = NEW.sender_id THEN provider_id ELSE requester_id END
         INTO v_recipient_id FROM gig_requests WHERE id = NEW.gig_request_id;
         v_related_type := 'gig';
+        v_convo_id := NEW.gig_request_id;
     ELSE RETURN NEW;
     END IF;
-    SELECT full_name INTO v_sender_name FROM profiles WHERE id = NEW.sender_id;
-    PERFORM create_notification(v_recipient_id, 'message',
-        'New message from ' || COALESCE(v_sender_name, 'Someone'),
-        LEFT(NEW.content, 100), COALESCE(NEW.swap_id, NEW.gig_request_id), v_related_type);
+    -- Only notify if there is no existing unread message notification for this conversation.
+    -- This prevents a flood of notifications for every message in a thread.
+    IF NOT EXISTS (
+        SELECT 1 FROM notifications
+        WHERE user_id = v_recipient_id
+          AND type = 'message'
+          AND related_id = v_convo_id
+          AND read = false
+    ) THEN
+        SELECT full_name INTO v_sender_name FROM profiles WHERE id = NEW.sender_id;
+        PERFORM create_notification(v_recipient_id, 'message',
+            'New message from ' || COALESCE(v_sender_name, 'Someone'),
+            LEFT(NEW.content, 100), v_convo_id, v_related_type);
+    END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

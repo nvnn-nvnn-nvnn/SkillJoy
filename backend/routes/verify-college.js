@@ -28,19 +28,23 @@ router.post('/send', async (req, res) => {
 
     const verifyUrl = `${process.env.FRONTEND_URL}/verify-college?token=${token}`;
 
-    await sendEmail({
-        to: collegeEmail,
-        subject: 'Verify your college email — SkillJoy',
-        html: `
-            <p>Hi there,</p>
-            <p>Click the button below to verify your university email and connect with students at your school.</p>
-            <a href="${verifyUrl}" style="display:inline-block;padding:12px 24px;background:#ec9146;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;margin:16px 0;">
-                Verify College Email
-            </a>
-            <p style="color:#6b7280;font-size:13px;">This link expires in 24 hours. If you didn't request this, ignore this email.</p>
-            <p style="color:#6b7280;font-size:13px;">SkillJoy — the student skill marketplace</p>
-        `,
-    });
+    try {
+        await sendEmail({
+            to: collegeEmail,
+            subject: 'Verify your college email — SkillJoy',
+            html: `
+                <p>Hi there,</p>
+                <p>Click the button below to verify your university email and connect with students at your school.</p>
+                <a href="${verifyUrl}" style="display:inline-block;padding:12px 24px;background:#ec9146;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;margin:16px 0;">
+                    Verify College Email
+                </a>
+                <p style="color:#6b7280;font-size:13px;">This link expires in 24 hours. If you didn't request this, ignore this email.</p>
+                <p style="color:#6b7280;font-size:13px;">SkillJoy — the student skill marketplace</p>
+            `,
+        });
+    } catch (err) {
+        return res.status(500).json({ error: `Email delivery failed: ${err.message}` });
+    }
 
     res.json({ success: true });
 });
