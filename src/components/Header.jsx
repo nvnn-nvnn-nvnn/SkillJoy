@@ -41,7 +41,7 @@ export default function Header() {
         <Link to="/my-orders" className={`nav-link${currentPath === '/my-orders' ? ' active' : ''}`}>Orders</Link>
         <Link to="/disputes" className={`nav-link${currentPath === '/disputes' ? ' active' : ''}`}>Disputes</Link>
         <Link to="/chat" className={`nav-link${currentPath === '/chat' ? ' active' : ''}`}>Chat</Link>
-        <Link to="/rewards" className={`nav-link${currentPath === '/rewards' ? ' active' : ''}`}>Rewards</Link>
+        {/* <Link to="/rewards" className={`nav-link${currentPath === '/rewards' ? ' active' : ''}`}>Rewards</Link> */}
         {user.email === 'techkage@proton.me' && (
           <Link to="/admin" className={`nav-link${currentPath === '/admin' ? ' active' : ''}`} style={{ color: '#ec9146', fontWeight: 700 }}>Admin</Link>
         )}
