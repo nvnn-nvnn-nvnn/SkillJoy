@@ -43,6 +43,7 @@ export default function ProfilePage() {
     const [collegeSending, setCollegeSending] = useState(false);
     const [collegeSent, setCollegeSent] = useState(false);
     const [collegeError, setCollegeError] = useState('');
+    const [showDisconnectModal, setShowDisconnectModal] = useState(false);
 
 
 
@@ -186,6 +187,35 @@ export default function ProfilePage() {
         if (!res.ok) { setCollegeError(data.error || 'Failed to send.'); return; }
         setCollegeSent(true);
     }
+
+
+    // Remove College info
+
+    async function disconnectCollegeEmail() {
+        const { error } = await supabase
+            .from('profiles')
+            .update({
+                college_email: null,
+                college_verified: false,
+                university_domain: null,
+                college_verify_token: null,
+                college_verify_expires_at: null,
+            })
+            .eq('id', user.id);
+
+        if (error) { console.error('Could not disconnect College Email'); return; }
+
+        const updated = { ...profile, college_email: null, college_verified: false, university_domain: null, college_verify_token: null, college_verify_expires_at: null };
+        setProfile(updated);
+        setProfileData(updated);
+        setCollegeSent(false);
+        setCollegeEmail('');
+    }
+
+
+
+
+
 
     async function handleSave() {
         if (!fullName.trim()) { setError('Name is required'); return; }
@@ -449,9 +479,22 @@ export default function ProfilePage() {
                         marginBottom: 20,
                     }}>
                         {profile?.college_verified ? (
-                            <p style={{ color: '#15803d', fontWeight: 600, margin: 0 }}>
-                                🎓 College verified — {profile.university_domain}. You're seeing students at your school.
-                            </p>
+                            <div>
+                                <p style={{ color: '#15803d', fontWeight: 600, margin: 0 }}>
+                                    🎓 College verified — {profile.university_domain}. You're seeing students at your school.
+                                </p>
+                                <button
+                                    className='btn btn-secondary'
+                                    style={{ marginTop: 10, fontSize: 13, color: '#dc2626', borderColor: '#fca5a5' }}
+                                    onClick={() => setShowDisconnectModal(true)}
+                                >
+                                    Disconnect university email
+                                </button>
+
+                            </div>
+                         
+                                
+                            
                         ) : collegeSent ? (
                             <div>
                                 <p style={{ color: '#92400e', fontWeight: 600, margin: '0 0 4px' }}>📧 Verification email sent!</p>
@@ -904,6 +947,22 @@ export default function ProfilePage() {
                     }
                 }
             `}</style>
+
+            {showDisconnectModal && (
+                <div className="modal-backdrop" onClick={() => setShowDisconnectModal(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 16, padding: '32px 28px 24px', maxWidth: 420, width: '90%', textAlign: 'center', boxShadow: 'var(--shadow-lg)', position: 'relative' }}>
+                        <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+                        <h3 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700 }}>Disconnect university email?</h3>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6, margin: '0 0 24px' }}>
+                            You'll lose access to university-only matching and will need to re-verify to reconnect.
+                        </p>
+                        <div style={{ display: 'flex', gap: 10 }}>
+                            <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowDisconnectModal(false)}>Cancel</button>
+                            <button className="btn" style={{ flex: 1, background: '#dc2626', color: '#fff', border: 'none' }} onClick={() => { setShowDisconnectModal(false); disconnectCollegeEmail(); }}>Disconnect</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }
