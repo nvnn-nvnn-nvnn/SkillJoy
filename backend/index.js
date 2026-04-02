@@ -94,6 +94,10 @@ cron.schedule('0 0 * * *', async () => {
             console.warn(`Provider ${order.provider_id} has no Stripe account. Funds Held`)
             } else{
 
+                // Find Payment Status
+                
+
+
             }
 
             
