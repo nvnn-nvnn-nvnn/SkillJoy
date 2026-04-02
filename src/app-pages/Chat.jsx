@@ -703,6 +703,12 @@ export default function ChatPage() {
     }
 
 
+    // Lock body scroll on mobile so the footer doesn't create a scrollable gap
+    useEffect(() => {
+        document.body.style.overflow = 'hidden';
+        return () => { document.body.style.overflow = ''; };
+    }, []);
+
     // Tab information
     useEffect(() => {
         localStorage.setItem('chat_mode', chatMode);
@@ -1613,8 +1619,8 @@ export default function ChatPage() {
             /* Responsive */
             .chat-back-btn { display: none; }
             @media (max-width: 768px) {
-              /* Shell — use dvh so keyboard doesn't overlap content */
-              .chat-shell { height: calc(100dvh - 64px); }
+              /* Shell — fixed so it never scrolls with the page */
+              .chat-shell { position: fixed; top: 64px; left: 0; right: 0; bottom: 0; height: auto; }
 
               /* Sidebar full width, main hidden by default */
               .sidebar { width: 100%; border-right: none; }
