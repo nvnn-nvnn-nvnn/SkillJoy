@@ -106,6 +106,17 @@ export default function ChatPage() {
         setTimeout(() => setError(''), 3000);
     }
 
+    // Auto-resize composer textarea — max 3 lines
+    useEffect(() => {
+        const el = inputRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        const lineHeight = 21; // 14px font * 1.5
+        const padding = 20;    // 10px top + 10px bottom
+        const maxHeight = lineHeight * 3 + padding;
+        el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px';
+    }, [newMessage]);
+
     // ── Load conversations ────────────────────────────────────────────────────
 
     const loadConversations = useCallback(async (silent = false) => {
@@ -523,6 +534,45 @@ export default function ChatPage() {
         showToast('Dispute filed. Payment is on hold for review.');
     }
 
+    // ── Swap: Mark as Complete ────────────────────────────────────────────────
+
+    async function markSwapComplete(swapId) {
+        if (!activeConvo) return;
+        const isRequester = activeConvo.requester_id === user.id;
+        const fieldToUpdate = isRequester ? 'requester_completed' : 'receiver_completed';
+        const otherDone = isRequester ? activeConvo.receiver_completed : activeConvo.requester_completed;
+        const updates = { [fieldToUpdate]: true };
+        if (otherDone) {
+            updates.status = 'completed';
+            await Promise.all([
+                supabase.rpc('increment_points', { user_id: activeConvo.requester_id, points: 50 }),
+                supabase.rpc('increment_points', { user_id: activeConvo.receiver_id, points: 50 }),
+            ]);
+        }
+        const { error } = await supabase.from('swaps').update(updates).eq('id', swapId);
+        if (error) { showToast('Failed to mark complete.'); return; }
+        setConversations(prev => prev.map(c =>
+            c.swap_id === swapId
+                ? { ...c, [fieldToUpdate]: true, ...(otherDone ? { status: 'completed' } : {}) }
+                : c
+        ));
+        setShowProfileModal(false);
+        showToast(otherDone ? 'Swap completed! Points awarded.' : 'Marked complete — waiting for the other party. (1/2)');
+    }
+
+    async function unmarkSwapComplete(swapId) {
+        if (!activeConvo) return;
+        const isRequester = activeConvo.requester_id === user.id;
+        const fieldToUpdate = isRequester ? 'requester_completed' : 'receiver_completed';
+        const { error } = await supabase.from('swaps').update({ [fieldToUpdate]: false }).eq('id', swapId);
+        if (error) { showToast('Failed to revert.'); return; }
+        setConversations(prev => prev.map(c =>
+            c.swap_id === swapId ? { ...c, [fieldToUpdate]: false } : c
+        ));
+        setShowProfileModal(false);
+        showToast('Completion reverted.');
+    }
+
     // ── Seller: Mark as Delivered ─────────────────────────────────────────────
 
     async function markAsDelivered(gigReqId) {
@@ -934,7 +984,7 @@ export default function ChatPage() {
                                         value={newMessage}
                                         onChange={e => setNewMessage(e.target.value)}
                                         onKeyDown={handleKeydown}
-                                        placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
+                                        placeholder="Type a message… "
                                         rows={1}
                                         className="composer-input"
                                     />
@@ -982,26 +1032,33 @@ export default function ChatPage() {
 
 
 
-                            {/* {(chatMode === 'swaps' || chatMode === 'gigs') && (
-                                <div className="complete-swap">
-                                    <div className="complete-swap-header">
-                                        <h3>{chatMode === 'swaps' ? 'Complete Swap' : 'Complete Gig'}</h3>
-                                        {activeConvo && (() => {
-                                            const completionCount = chatMode === 'swaps' ? (activeConvo.requester_completed ? 1 : 0) + (activeConvo.receiver_completed ? 1 : 0) : (activeConvo.requester_completed ? 1 : 0) + (activeConvo.provider_completed ? 1 : 0);
-                                            return <span className="completion-badge-large">Complete {completionCount}/2</span>;
-                                        })()}
-                                    </div>
-                                    {activeConvo && (() => {
-                                        const isRequester = chatMode === 'swaps' ? activeConvo.requester_id === user?.id : activeConvo.requester_id === user?.id;
-                                        const hasVoted = chatMode === 'swaps' ? (isRequester ? activeConvo.requester_completed : activeConvo.receiver_completed) : (isRequester ? activeConvo.requester_completed : activeConvo.provider_completed);
-                                        return hasVoted ? (
-                                            <button className="btn-unvote-swap" onClick={() => chatMode === 'swaps' ? unmarkSwapComplete(activeConvo.swap_id) : unmarkGigComplete(activeConvo.gig_request_id)}>Remove Vote</button>
+                            {chatMode === 'swaps' && activeConvo?.status === 'accepted' && (() => {
+                                const isReq = activeConvo.requester_id === user?.id;
+                                const done = isReq ? activeConvo.requester_completed : activeConvo.receiver_completed;
+                                const count = (activeConvo.requester_completed ? 1 : 0) + (activeConvo.receiver_completed ? 1 : 0);
+                                return (
+                                    <div style={{ marginBottom: 20 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                                            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Complete Swap</h3>
+                                            <span style={{ fontSize: 13, color: 'var(--green)', background: 'var(--green-light)', border: '1px solid var(--green-mid)', borderRadius: 6, padding: '3px 10px' }}>{count}/2</span>
+                                        </div>
+                                        {done ? (
+                                            <>
+                                                <div style={{ fontSize: 13, color: 'var(--green)', background: 'var(--green-light)', border: '1px solid var(--green-mid)', borderRadius: 8, padding: '10px 14px', marginBottom: 8 }}>
+                                                    ✓ You've marked this swap as complete
+                                                </div>
+                                                <button className="btn btn-secondary" style={{ width: '100%' }} onClick={() => unmarkSwapComplete(activeConvo.swap_id)}>
+                                                    Revert Complete
+                                                </button>
+                                            </>
                                         ) : (
-                                            <button className="btn-complete-swap" onClick={() => chatMode === 'swaps' ? markSwapComplete(activeConvo.swap_id) : markGigComplete(activeConvo.gig_request_id)}>{chatMode === 'swaps' ? 'Vote to Complete Swap' : 'Vote to Complete Gig'}</button>
-                                        );
-                                    })()}
-                                </div>
-                            )} */}
+                                            <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => markSwapComplete(activeConvo.swap_id)}>
+                                                Mark Swap as Complete
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            })()}
 
                             {chatMode === 'gigs' && activeConvo?.gig && (
                                 <div className="modal-section">
@@ -1460,7 +1517,7 @@ export default function ChatPage() {
 
             /* Composer */
             .composer { display: flex; align-items: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); background: #a06840; flex-shrink: 0; position: sticky; bottom: 0; z-index: 10; }
-            .composer-input { flex: 1; resize: none; border: 1px solid var(--border); border-radius: var(--r-lg); padding: 10px 16px; font-size: 14px; font-family: var(--font-body); color: var(--text); background: white; outline: none; max-height: 120px; overflow-y: auto; line-height: 1.5; transition: border-color 0.15s; }
+            .composer-input { flex: 1; resize: none; border: 1px solid var(--border); border-radius: var(--r-lg); padding: 10px 16px; font-size: 14px; font-family: var(--font-body); color: var(--text); background: white; outline: none; overflow-y: hidden; line-height: 1.5; transition: border-color 0.15s, height 0.1s ease; }
             .composer-input:focus { border-color: var(--primary); }
             .composer-send { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: var(--r-full); flex-shrink: 0; }
             .composer-send:disabled { opacity: 0.45; }
@@ -1520,36 +1577,38 @@ export default function ChatPage() {
             /* Responsive */
             .chat-back-btn { display: none; }
             @media (max-width: 768px) {
-              /* Shell */
-              .chat-shell { height: calc(100vh - 64px); }
+              /* Shell — use dvh so keyboard doesn't overlap content */
+              .chat-shell { height: calc(100dvh - 64px); }
 
-              /* Sidebar takes full width, main hidden by default */
+              /* Sidebar full width, main hidden by default */
               .sidebar { width: 100%; border-right: none; }
               .chat-main { display: none; width: 100%; }
 
-              /* When convo selected: hide sidebar, show chat full screen */
+              /* When convo selected: hide sidebar, show chat */
               .chat-shell.has-active .sidebar { display: none; }
               .chat-shell.has-active .chat-main { display: flex; }
 
               /* Back button */
-              .chat-back-btn { display: flex; align-items: center; justify-content: center; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--r); width: 34px; height: 34px; font-size: 16px; cursor: pointer; flex-shrink: 0; }
+              .chat-back-btn { display: flex; align-items: center; justify-content: center; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--r); width: 36px; height: 36px; font-size: 18px; cursor: pointer; flex-shrink: 0; }
 
               /* Header */
-              .chat-header { padding: 10px 14px; gap: 8px; }
+              .chat-header { padding: 10px 12px; gap: 8px; }
               .chat-header-sub { font-size: 12px; }
               .chat-name-btn { font-size: 14px; }
 
-              /* Messages */
-              .messages-area { padding: 12px 12px; }
-              .bubble { max-width: 82%; font-size: 14px; }
+              /* Messages — more padding room, wider bubbles */
+              .messages-area { padding: 10px; }
+              .bubble { max-width: 88%; font-size: 14px; padding: 9px 13px; }
 
-              /* Composer */
-              .composer { padding: 10px 12px; gap: 8px; }
+              /* Composer — tighter, full width input */
+              .composer { padding: 8px 10px; gap: 8px; }
+              .composer-input { font-size: 15px; padding: 9px 14px; }
+              .composer-send { width: 38px; height: 38px; }
 
               /* Escrow banner — stack vertically */
-              .escrow-banner { flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px 14px; }
+              .escrow-banner { flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px 12px; }
               .escrow-banner-actions { width: 100%; display: flex; gap: 8px; }
-              .escrow-banner-actions button { flex: 1; }
+              .escrow-banner-actions button { flex: 1; font-size: 13px; padding: 8px 10px; }
 
               /* Modal actions — stack */
               .modal-actions { flex-direction: column-reverse; }
@@ -1559,10 +1618,14 @@ export default function ChatPage() {
               .star-btn { font-size: 36px; }
 
               /* Sidebar header tighter */
-              .sidebar-header { padding: 14px 14px 12px; }
-              .sidebar-title { font-size: 16px; margin-bottom: 10px; }
-              .convo-list { padding: 6px; }
-              .convo-item { padding: 10px 10px; }
+              .sidebar-header { padding: 12px 12px 10px; }
+              .sidebar-title { font-size: 15px; margin-bottom: 8px; }
+              .chat-tabs { margin-top: 8px; gap: 6px; }
+              .chat-tab { font-size: 12px; padding: 7px 10px; }
+              .convo-list { padding: 4px; }
+              .convo-item { padding: 9px 10px; gap: 8px; }
+              .convo-name { font-size: 13px; }
+              .convo-preview { font-size: 11px; }
             }
           `}</style>
         </>

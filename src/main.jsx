@@ -24,7 +24,7 @@ import MatchesPage from './app-pages/Matches'
 import DiscoverPage from './app-pages/MainSearch'
 import Swaps from './app-pages/Swaps'
 import MySwaps from './app-pages/MySwaps'
-import Rewards from './app-pages/Rewards'
+// import Rewards from './app-pages/Rewards'
 import Gigs from './app-pages/Gigs'
 import GigDetails from './app-pages/GigDetails'
 import MyListings from './app-pages/MyListings'
@@ -53,7 +53,7 @@ function App() {
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/swaps" element={<Swaps />} />
           <Route path="/my-swaps" element={<MySwaps />} />
-          <Route path="/rewards" element={<Rewards />} />
+          {/* <Route path="/rewards" element={<Rewards />} /> */}
           <Route path="/gigs" element={<Gigs />} />
           <Route path="/gigs/:gigId" element={<GigDetails />} />
           <Route path="/my-listings" element={<MyListings />} />
