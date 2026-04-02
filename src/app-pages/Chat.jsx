@@ -1423,7 +1423,7 @@ export default function ChatPage() {
             .role-providing { background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; }
 
             /* Messages */
-            .messages-area { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+            .messages-area { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 4px; min-height: 0; overscroll-behavior: contain; }
             .msgs-loading, .msgs-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 14px; }
             .time-divider { text-align: center; font-size: 11px; color: var(--text-muted); margin: 12px 0 8px; }
             .msg-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 2px; }
