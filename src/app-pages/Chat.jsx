@@ -1507,16 +1507,7 @@ export default function ChatPage() {
             .avatar-sm { width: 34px !important; height: 34px !important; font-size: 12px !important; flex-shrink: 0; }
 
             /* Main */
-            .chat-main { 
-            flex: 1;
-             display: flex; 
-             flex-direction: 
-             column; 
-             min-width: 0; 
-             overflow: hidden; 
-
-             
-             }
+            .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
             .chat-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-secondary); }
             .chat-empty h3 { font-size: 20px; color: var(--text); }
             .chat-empty p { font-size: 14px; }
@@ -1536,19 +1527,7 @@ export default function ChatPage() {
             .role-providing { background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; }
 
             /* Messages */
-<<<<<<< HEAD
-            .messages-area { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 4px; min-height: 0; overscroll-behavior: contain; }
-=======
-            .messages-area { 
-            flex: 1;
-            overflow-y: auto;
-            touch-action: pan-y;
-            padding: 20px 24px; 
-            display: flex; flex-direction: 
-            column; gap: 4px;
-            min-height: 0; }
-            
->>>>>>> 19fa40f8d21b2f96b196a75c62a727113c4ccd2d
+            .messages-area { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 4px; min-height: 0; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
             .msgs-loading, .msgs-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 14px; }
             .time-divider { text-align: center; font-size: 11px; color: var(--text-muted); margin: 12px 0 8px; }
             .msg-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 2px; }
@@ -1559,7 +1538,7 @@ export default function ChatPage() {
             .bubble-theirs { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 4px; }
 
             /* Composer */
-            .composer { display: flex; align-items: flex-end; gap: 10px; padding: 14px 20px; padding-bottom: max(14px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: #a06840; flex-shrink: 0; }
+            .composer { display: flex; align-items: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); background: #a06840; flex-shrink: 0; }
             .composer-input { flex: 1; resize: none; border: 1px solid var(--border); border-radius: var(--r-lg); padding: 10px 16px; font-size: 14px; font-family: var(--font-body); color: var(--text); background: white; outline: none; overflow-y: hidden; line-height: 1.5; transition: border-color 0.15s, height 0.1s ease; }
             .composer-input:focus { border-color: var(--primary); }
             .composer-send { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: var(--r-full); flex-shrink: 0; }
