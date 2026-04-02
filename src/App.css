@@ -139,11 +139,11 @@ label {
   padding: 0 32px;
   height: 90px;
   border-bottom: 1px solid #c99772;
-  background: rgba(241, 197, 160, 0.92);
-  backdrop-filter: blur(8px);
+  background: rgb(241, 197, 160);
   position: sticky;
   top: 0;
   z-index: 200;
+  overflow: visible;
 }
 
 .nav-logo {
@@ -710,13 +710,13 @@ label {
   z-index: 999;
   padding: 20px 16px 32px;
   gap: 2px;
-  transform: translateX(-100%);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  left: -100%;
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow-y: auto;
   visibility: hidden;
 }
 .nav-drawer.open {
-  transform: translateX(0);
+  left: 0;
   visibility: visible;
 }
 
@@ -795,13 +795,16 @@ label {
 
   .modal-backdrop {
     padding: 16px;
-    align-items: center;
+    align-items: flex-start;
+    padding-top: 24px;
+    overflow-y: auto;
   }
 
   .modal {
     border-radius: 16px;
-    max-height: 90vh;
+    max-height: none;
     padding: 24px 20px;
+    -webkit-overflow-scrolling: touch;
   }
 
   .tabs {

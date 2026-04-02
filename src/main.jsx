@@ -35,6 +35,7 @@ import Profile from './app-pages/Profile'
 import Settings from './app-pages/Settings'
 import Admin from './app-pages/Admin'
 import VerifyCollege from './app-pages/VerifyCollege'
+import NotFound from './app-pages/NotFound'
 
 function App() {
   return (
@@ -70,6 +71,7 @@ function App() {
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/refund-policy" element={<RefundPolicy />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
         </div>
         <Footer />

@@ -125,7 +125,7 @@ export default function ChatPage() {
             .order('created_at', { ascending: false });
 
         setLoadingConvos(false);
-        if (e) { setError(e.message); return; }
+        if (e) { setError('Could not load conversations. Please refresh.'); return; }
 
         const enriched = await Promise.all((data ?? []).map(async swap => {
             const iAmRequester = swap.requester_id === user.id;
@@ -176,7 +176,7 @@ export default function ChatPage() {
             .order('created_at', { ascending: false });
 
         setLoadingConvos(false);
-        if (e) { setError(e.message); return; }
+        if (e) { setError('Could not load conversations. Please refresh.'); return; }
 
         const enriched = await Promise.all((data ?? []).map(async req => {
             const isProvider = req.provider_id === user.id;
@@ -236,7 +236,7 @@ export default function ChatPage() {
         const { data, error: e } = await supabase
             .from('messages').select('id, content, sender_id, created_at')
             .eq(col, id).order('created_at', { ascending: true });
-        if (e) { setError(e.message); return; }
+        if (e) { setError('Could not load messages. Please try again.'); return; }
         setMessages(data ?? []);
     }
 
@@ -285,11 +285,11 @@ export default function ChatPage() {
                 }
             ).subscribe((status) => {
                 if (status === 'SUBSCRIBED') {
-                    console.log('[Realtime] Subscribed to messages:', id);
+                    console.log('[Realtime] Subscribed to swap:', swapId);
                 } else if (status === 'CHANNEL_ERROR') {
-                    console.error('[Realtime] Channel error for messages:', id);
+                    console.error('[Realtime] Channel error for swap:', swapId);
                 } else if (status === 'TIMED_OUT') {
-                    console.error('[Realtime] Subscription timed out:', id);
+                    console.error('[Realtime] Subscription timed out for swap:', swapId);
                 }
             });
         swapSub.current = channel;
@@ -309,11 +309,11 @@ export default function ChatPage() {
                 }
             ).subscribe((status) => {
                 if (status === 'SUBSCRIBED') {
-                    console.log('[Realtime] Subscribed to messages:', id);
+                    console.log('[Realtime] Subscribed to gig_request:', gigReqId);
                 } else if (status === 'CHANNEL_ERROR') {
-                    console.error('[Realtime] Channel error for messages:', id);
+                    console.error('[Realtime] Channel error for gig_request:', gigReqId);
                 } else if (status === 'TIMED_OUT') {
-                    console.error('[Realtime] Subscription timed out:', id);
+                    console.error('[Realtime] Subscription timed out for gig_request:', gigReqId);
                 }
             });
         swapSub.current = channel;
@@ -372,7 +372,7 @@ export default function ChatPage() {
         setSending(false);
         if (e) {
             setMessages(prev => prev.filter(m => m.id !== tempId));
-            setError(e.message);
+            setError('Failed to send message. Please try again.');
             setNewMessage(content);
             return;
         }
@@ -396,10 +396,10 @@ export default function ChatPage() {
             ? (activeConvo.requester_id === user.id ? activeConvo.receiver_id : activeConvo.requester_id)
             : (activeConvo.requester_id === user.id ? activeConvo.provider_id : activeConvo.requester_id);
 
-        // FIXED: Check if rating already exists to prevent duplicate key constraint violation
-        const checkQuery = supabase.from('ratings').select('id').eq('rater_id', user.id).eq('rated_id', otherUserId);
-        if (chatMode === 'swaps') checkQuery.eq('swap_id', activeSwapId);
-        else checkQuery.eq('gig_request_id', activeGigReqId);
+        // Check if rating already exists to prevent duplicate key constraint violation
+        let checkQuery = supabase.from('ratings').select('id').eq('rater_id', user.id).eq('rated_id', otherUserId);
+        if (chatMode === 'swaps') checkQuery = checkQuery.eq('swap_id', activeSwapId);
+        else checkQuery = checkQuery.eq('gig_request_id', activeGigReqId);
         const { data: existingRating } = await checkQuery.maybeSingle();
 
         if (existingRating) {

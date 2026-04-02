@@ -18,11 +18,12 @@ async function getUserEmail(userId) {
 }
 
 async function sendEmail({ to, subject, html }) {
-    try {
-        await resend.emails.send({ from: FROM, to, subject, html });
-    } catch (err) {
-        console.error('Resend error:', err.message);
+    const { data, error } = await resend.emails.send({ from: FROM, to, subject, html });
+    if (error) {
+        console.error('Resend error:', error);
+        throw new Error(error.message || 'Failed to send email');
     }
+    return data;
 }
 
 // ── Templates ─────────────────────────────────────────────────────────────────

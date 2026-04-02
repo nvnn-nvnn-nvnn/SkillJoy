@@ -3,6 +3,7 @@ const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
 const { sendEmail, getUserEmail, templates } = require('../lib/email');
+const { SERVICE_FEE_DOLLARS } = require('../config/fees');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CREATE PAYMENT INTENT - Called when buyer clicks "Accept & Pay"
@@ -44,8 +45,7 @@ router.post('/create-intent', async (req, res) => {
             return res.status(402).json({ error: 'This seller has not set up payouts yet. Payment cannot proceed.' });
         }
 
-        const SERVICE_FEE = 6.00;
-        const amount = parseFloat(order.gig.price) + SERVICE_FEE;
+        const amount = parseFloat(order.gig.price) + SERVICE_FEE_DOLLARS;
 
         const paymentIntent = await stripe.paymentIntents.create({
             amount: Math.round(amount * 100),
@@ -138,7 +138,7 @@ router.post('/confirm', async (req, res) => {
                     gigTitle: fullOrder.gig?.title ?? 'your order',
                     amount: (paymentIntent.amount / 100).toFixed(2),
                 });
-                sendEmail({ to: sellerEmail, ...tpl });
+                sendEmail({ to: sellerEmail, ...tpl }).catch(err => console.error('Email failed:', err.message));
             }
         }
 
@@ -232,7 +232,7 @@ router.post('/release', async (req, res) => {
                     gigTitle: fullOrder.gig?.title ?? 'your order',
                     amount: order.payment_amount?.toFixed(2) ?? '—',
                 });
-                sendEmail({ to: sellerEmail, ...tpl });
+                sendEmail({ to: sellerEmail, ...tpl }).catch(err => console.error('Email failed:', err.message));
             }
         }
 
@@ -419,7 +419,7 @@ router.post('/respond', async (req, res) => {
                     gigTitle: order.gig?.title ?? 'your order',
                     orderId,
                 });
-                sendEmail({ to: buyerEmail, ...tpl });
+                sendEmail({ to: buyerEmail, ...tpl }).catch(err => console.error('Email failed:', err.message));
             }
         }
 
@@ -689,7 +689,7 @@ router.post('/deliver', async (req, res) => {
                     gigTitle: fullOrder.gig?.title ?? 'your order',
                     orderId,
                 });
-                sendEmail({ to: buyerEmail, ...tpl });
+                sendEmail({ to: buyerEmail, ...tpl }).catch(err => console.error('Email failed:', err.message));
             }
         }
 

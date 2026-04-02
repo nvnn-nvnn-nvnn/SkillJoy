@@ -211,7 +211,7 @@ export default function ProfilePage() {
 
         setSaving(false);
 
-        if (e) { setError(e.message); return; }
+        if (e) { setError('Could not save profile. Please try again.'); return; }
 
         const { data: updated } = await supabase.from('profiles').select('*').eq('id', user.id).single();
         if (updated) {

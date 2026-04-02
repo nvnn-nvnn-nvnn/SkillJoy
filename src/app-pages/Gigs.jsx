@@ -85,13 +85,13 @@ export default function GigsPage() {
     async function toggleFavorite(odId) {
         if (!user) return;
         const isFav = favorites.includes(odId);
-        if (isFav) {
-            await supabase.from('favorites').delete().eq('user_id', user.id).eq('favorited_id', odId).eq('type', 'gig');
-            setFavorites(favorites.filter(id => id !== odId));
-        } else {
-            await supabase.from('favorites').insert({ user_id: user.id, favorited_id: odId, type: 'gig' });
-            setFavorites([...favorites, odId]);
-        }
+        // Optimistic update
+        setFavorites(isFav ? favorites.filter(id => id !== odId) : [...favorites, odId]);
+        const { error } = isFav
+            ? await supabase.from('favorites').delete().eq('user_id', user.id).eq('favorited_id', odId).eq('type', 'gig')
+            : await supabase.from('favorites').insert({ user_id: user.id, favorited_id: odId, type: 'gig' });
+        // Rollback on failure
+        if (error) setFavorites(isFav ? [...favorites, odId] : favorites.filter(id => id !== odId));
     }
 
     function loadRecentSearches() {

@@ -52,7 +52,7 @@ export default function OnboardingPage() {
     }
 
     function addCustomTeach() {
-        const val = customTeach.trim();
+        const val = customTeach.trim().slice(0, 50);
         if (!val) return;
         if (!hasSkill(skillsTeach, val)) setSkillsTeach(prev => setSkillStars(prev, val, 3));
         setCustomTeach('');
@@ -67,7 +67,7 @@ export default function OnboardingPage() {
     }
 
     function addCustomLearn() {
-        const val = customLearn.trim();
+        const val = customLearn.trim().slice(0, 50);
         if (!val || skillsLearn.includes(val)) return;
         setSkillsLearn(prev => [...prev, val]);
         setCustomLearn('');
@@ -108,7 +108,8 @@ export default function OnboardingPage() {
         });
         setBusy(false);
         if (e) { setError(e.message); return; }
-        setProfile({ ...profile, full_name: fullName, bio, skills_teach: skillsTeach, skills_learn: skillsLearn, availability, service_type: serviceType });
+        const { data: updated } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        if (updated) setProfile(updated);
         navigate('/matches');
     }
 
