@@ -1113,6 +1113,21 @@ export default function ChatPage() {
                                             </button>
                                         )}
 
+                                        {!activeConvo.isProvider && ['unpaid', 'pending'].includes(activeConvo.payment_status) && activeConvo.status === "accepted" && (
+                                            <button
+                                                className='btn btn-danger'
+                                                style={{ width: '100%', marginBottom: 10 }}
+                                                onClick={() => {
+                                                    setPendingCancelId(activeConvo.gig_request_id);
+                                                    setShowProfileModal(false);
+                                                    setShowCancelConfirm(true);
+
+                                                }}
+                                            >
+                                                 ✕ Cancel Order
+                                            </button>
+                                        )}
+
                                         {/* Provider: Cancel Order */}
                                         {activeConvo.isProvider && ['pending', 'accepted', 'in_progress'].includes(activeConvo.status) && ['unpaid', 'escrowed'].includes(activeConvo.payment_status) && (
                                             <button
