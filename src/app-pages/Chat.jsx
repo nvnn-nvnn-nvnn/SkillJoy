@@ -1113,6 +1113,7 @@ export default function ChatPage() {
                                             </button>
                                         )}
 
+                                            {/* Buyer: Cancel Order */}
                                         {!activeConvo.isProvider && ['unpaid', 'pending'].includes(activeConvo.payment_status) && activeConvo.status === "accepted" && (
                                             <button
                                                 className='btn btn-danger'
@@ -1500,7 +1501,16 @@ export default function ChatPage() {
             .avatar-sm { width: 34px !important; height: 34px !important; font-size: 12px !important; flex-shrink: 0; }
 
             /* Main */
-            .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+            .chat-main { 
+            flex: 1;
+             display: flex; 
+             flex-direction: 
+             column; 
+             min-width: 0; 
+             overflow: hidden; 
+
+             
+             }
             .chat-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-secondary); }
             .chat-empty h3 { font-size: 20px; color: var(--text); }
             .chat-empty p { font-size: 14px; }
@@ -1520,7 +1530,14 @@ export default function ChatPage() {
             .role-providing { background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; }
 
             /* Messages */
-            .messages-area { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+            .messages-area { 
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 24px; 
+            display: flex; flex-direction: 
+            column; gap: 4px;
+            min-height: 0; }
+            
             .msgs-loading, .msgs-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 14px; }
             .time-divider { text-align: center; font-size: 11px; color: var(--text-muted); margin: 12px 0 8px; }
             .msg-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 2px; }

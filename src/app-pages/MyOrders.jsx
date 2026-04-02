@@ -421,6 +421,13 @@ export default function MyOrders() {
         return () => { supabase.removeChannel(channel); };
     }, [user, tab]);
 
+
+    useEffect(() => {
+        if (!user) return;
+
+
+    }, []);
+
     async function loadOrders() {
         setLoading(true);
         const column = tab === 'buying' ? 'requester_id' : 'provider_id';
