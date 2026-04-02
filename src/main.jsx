@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { AuthProvider } from './lib/stores'
 import './index.css'
 import './App.css'
@@ -37,13 +37,19 @@ import Admin from './app-pages/Admin'
 import VerifyCollege from './app-pages/VerifyCollege'
 import NotFound from './app-pages/NotFound'
 
-function App() {
+function AppRoutes() {
+  const location = useLocation();
+  const isChat = location.pathname === '/chat';
+
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-        <Header />
-        <div style={{ flex: 1 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <Header />
+      <div style={{
+        flex: 1,
+        overflow: isChat ? 'hidden' : undefined,
+        display: isChat ? 'flex' : undefined,
+        flexDirection: isChat ? 'column' : undefined,
+      }}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -73,12 +79,20 @@ function App() {
           <Route path="/refund-policy" element={<RefundPolicy />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
-        </div>
-        <Footer />
-        </div>
+      </div>
+      <Footer />
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <AppRoutes />
       </BrowserRouter>
     </AuthProvider>
-  )
+  );
 }
 
 createRoot(document.getElementById('root')).render(
