@@ -5,6 +5,7 @@ import { Link, useLocation } from 'react-router-dom';
 import Notifications from './Notifications';
 import SkillJoyLogo from '../assets/SkillJoy-Logo.svg'
 import SkillJoyLogo2 from '../assets/SkillJoy-Logo2.svg'
+import SkillJoyLogo3 from '../assets/skilljoy-logo3.svg'
 
 
 export default function Header() {
@@ -23,7 +24,7 @@ export default function Header() {
     <>
     <nav className="nav">
       <Link to="/" className="nav-logo" onClick={closeMenu}>
-        <img src={SkillJoyLogo2} alt="SkillJoy Logo" style={{ height: 35, width: 'auto' }} />
+        <img src={SkillJoyLogo3} alt="SkillJoy Logo" style={{ height: 35, width: 'auto' }} />
       </Link>
 
       <button className={`nav-hamburger${menuOpen ? ' open' : ''}`} onClick={() => setMenuOpen(o => !o)} aria-label="Toggle menu">

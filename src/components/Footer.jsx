@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import SkillJoyLogo from '../assets/skilljoy-logo3.svg'
 
 export default function Footer() {
     const { pathname } = useLocation();
@@ -16,9 +17,10 @@ export default function Footer() {
 
                     {/* Brand */}
                     <div>
-                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 10 }}>
+                        {/* <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 10 }}>
                             Skill<span style={{ color: '#ec9146' }}>Joy</span>
-                        </div>
+                        </div> */}
+                        <img src={SkillJoyLogo} alt="" style={{width: "150px"}} />
                         <p style={{ fontSize: 13, lineHeight: 1.6, color: '#a3a3a3', margin: 0 }}>
                             The campus marketplace for skill swaps and paid gigs. Learn, earn, and connect.
                         </p>

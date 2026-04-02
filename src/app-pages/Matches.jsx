@@ -141,7 +141,9 @@ export default function MatchesPage() {
                     <div className="empty-state">
                         <span className="empty-icon">🤝</span>
                         <h3>No matches yet</h3>
-                        <p>As more students join and fill out their profiles,<br />mutual matches will appear here.</p>
+                        <p
+                            style={{color: "#fff"}}
+                        >As more students join and fill out their profiles,<br />mutual matches will appear here.</p>
                         <Link to="/onboarding" className="btn btn-secondary" style={{ marginTop: 24 }}>
                             Update your skills
                         </Link>

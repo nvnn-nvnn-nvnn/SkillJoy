@@ -341,7 +341,9 @@ export default function Swaps() {
                     <div className="empty-state">
                         <span className="empty-icon">🔍</span>
                         <h3>No users found</h3>
-                        <p>Try adjusting your search or check back later.</p>
+                        <p
+                            style={{color: "#fff"}}
+                        >Try adjusting your search or check back later.</p>
                     </div>
                 ) : (
                     <div className="users-grid">
