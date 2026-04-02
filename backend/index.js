@@ -22,6 +22,7 @@ const globalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHe
 const strictLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many requests, please try again later.' } });
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
 app.use(cors({
