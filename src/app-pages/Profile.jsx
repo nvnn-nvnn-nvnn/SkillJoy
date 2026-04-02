@@ -106,7 +106,9 @@ export default function ProfilePage() {
         const { error: uploadErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
         if (uploadErr) { setError(uploadErr.message); setUploadingAvatar(false); return; }
         const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
-        setAvatarUrl(publicUrl);
+        const bustUrl = `${publicUrl}?t=${Date.now()}`;
+        await supabase.from('profiles').update({ avatar_url: bustUrl }).eq('id', user.id);
+        setAvatarUrl(bustUrl);
         setUploadingAvatar(false);
     }
 
