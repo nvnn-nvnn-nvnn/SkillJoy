@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './lib/stores'
 import './index.css'
 import './App.css'
@@ -38,18 +38,10 @@ import VerifyCollege from './app-pages/VerifyCollege'
 import NotFound from './app-pages/NotFound'
 
 function AppRoutes() {
-  const location = useLocation();
-  const isChat = location.pathname === '/chat';
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <Header />
-      <div style={{
-        flex: 1,
-        overflow: isChat ? 'hidden' : undefined,
-        display: isChat ? 'flex' : undefined,
-        flexDirection: isChat ? 'column' : undefined,
-      }}>
+      <div style={{ flex: 1 }}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
