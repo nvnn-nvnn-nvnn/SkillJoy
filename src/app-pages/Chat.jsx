@@ -1542,6 +1542,7 @@ export default function ChatPage() {
             .messages-area { 
             flex: 1;
             overflow-y: auto;
+            touch-action: pan-y;
             padding: 20px 24px; 
             display: flex; flex-direction: 
             column; gap: 4px;
