@@ -8,15 +8,78 @@ export default function ContactPage() {
     const [message, setMessage] = useState('');
     const [sent, setSent] = useState(false);
 
-    function handleSubmit(e) {
+    const [error, setError] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+
+    async function handleSubmit(e) {
         e.preventDefault();
-        // Placeholder — wire to email service (Resend) later
-        setSent(true);
+        setSubmitting(true);
+        setError('');
+
+        let success = false;
+
+        // Primary: Web3Forms
+        try {
+            const res = await fetch('https://api.web3forms.com/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    access_key: import.meta.env.VITE_WEB3_PUBLIC_KEY,
+                    name,
+                    email,
+                    subject: subject ? `${subject} | SkillJoy` : 'SkillJoy',
+                    message,
+                }),
+            });
+            const data = await res.json();
+            if (data.success) success = true;
+        } catch {
+            // fall through to backend
+        }
+
+        // Fallback: our backend saves to Supabase
+        if (!success) {
+            try {
+                const res = await fetch(`${import.meta.env.VITE_API_URL}/api/contact`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, subject, message }),
+                });
+                const data = await res.json();
+                if (res.ok && data.success) success = true;
+            } catch {
+                // both failed
+            }
+        }
+
+        if (success) {
+            setSent(true);
+        } else {
+            setError('Failed to send. Please try again or email us directly.');
+        }
+
+        setSubmitting(false);
     }
 
     return (
         <div className="page" style={{ maxWidth: 680 }}>
-            <Link to="/" style={{ fontSize: 14, color: 'var(--text-muted)', textDecoration: 'none', display: 'inline-block', marginBottom: 24 }}>← Back to Home</Link>
+            <Link to="/" 
+            style={{ 
+                fontSize: 14, 
+                textDecoration: 'none', display: 'inline-block',
+                marginBottom: 24,
+                color: '#000',
+                backgroundColor: "#fff",
+                padding: '7px',
+                borderRadius: '10px',
+                border: '1px solid #000'
+
+                
+
+                
+                
+                }}
+            >← Back to Home</Link>
 
             <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 6 }}>Contact Us</h1>
             <p style={{ color: 'var(--text-secondary)', marginBottom: 32 }}>
@@ -67,17 +130,16 @@ export default function ContactPage() {
                         />
                     </div>
 
-                    <button className="btn btn-primary" type="submit" style={{ alignSelf: 'flex-start', padding: '10px 28px' }}>
-                        Send Message
+                    {error && <p style={{ color: '#ef4444', margin: 0, fontSize: 14 }}>{error}</p>}
+                    <button className="btn btn-primary" type="submit" disabled={submitting} style={{ alignSelf: 'flex-start', padding: '10px 28px' }}>
+                        {submitting ? 'Sending…' : 'Send Message'}
                     </button>
                 </form>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginTop: 40 }}>
+            {/* <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginTop: 40 }}>
                 {[
                     { icon: '📧', label: 'Email', value: 'support@skilljoy.app' },
-                    { icon: '⚖️', label: 'Legal', value: 'legal@skilljoy.app' },
-                    { icon: '🔒', label: 'Privacy', value: 'privacy@skilljoy.app' },
                 ].map(c => (
                     <div key={c.label} style={{ background: '#f0ede8', borderRadius: 14, padding: '18px 20px' }}>
                         <div style={{ fontSize: 22, marginBottom: 6 }}>{c.icon}</div>
@@ -85,7 +147,7 @@ export default function ContactPage() {
                         <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{c.value}</div>
                     </div>
                 ))}
-            </div>
+            </div> */}
         </div>
     );
 }

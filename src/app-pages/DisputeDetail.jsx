@@ -137,7 +137,17 @@ export default function DisputeDetail() {
             <div className="page dd-page">
 
                 {/* Back */}
-                <button className="dd-back" onClick={() => navigate('/disputes')}>
+                <button 
+                className="dd-back" 
+                style={{
+                    color: '#000',
+                    backgroundColor: "#fff"
+
+
+
+                }}
+                onClick={() => navigate('/disputes')}
+                >
                     ← Back to Disputes
                 </button>
 

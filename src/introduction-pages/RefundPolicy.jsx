@@ -4,7 +4,7 @@ export default function RefundPolicyPage() {
     return (
         <div className="page" style={{ maxWidth: 760 }}>
             <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>Refund Policy</h1>
-            <p style={{ color: 'var(--text-muted)', marginBottom: 40 }}>Last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            <p style={{ color: '#000', marginBottom: 40 }}>Last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
 
             <Section title="Overview">
                 SkillJoy uses an escrow payment system to protect both buyers and sellers. This policy explains when refunds are issued and how the process works.

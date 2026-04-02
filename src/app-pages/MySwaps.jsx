@@ -239,7 +239,17 @@ export default function MySwaps() {
                                             <div className="accepted-row">
                                                 <div className="accepted-note">✓ Swap accepted — Start chatting!</div>
                                                 <button className="btn btn-primary" onClick={() => openChat(swap.id)}>Open Chat</button>
-                                            </div>
+                                                {(() => {
+                                                    const isReq = swap.requester_id === user.id;
+                                                    const done = isReq ? swap.requester_completed : swap.receiver_completed;
+                                                    return !done ? (
+                                                        <button className="btn btn-secondary" onClick={() => markSwapComplete(swap.id)}>
+                                                            Complete Swap
+                                                        </button>
+                                                    ) : (
+                                                        <span className="completed-message" style={{ fontSize: 13, padding: '8px 12px' }}>✓ Marked complete</span>
+                                                    );
+                                                })()}</div>
                                         ) : tab === 'sent' && swap.status === 'pending' ? (
                                             <button className="btn btn-secondary" onClick={() => handleRemoveSwap(swap.id)}>Remove</button>
                                         ) : null}
