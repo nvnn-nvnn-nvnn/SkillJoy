@@ -106,9 +106,17 @@ router.get('/status', async (req, res)=>{
         if (onboarded && !profile.stripe_onboarded) {
             await supabase.from('profiles').update({ stripe_onboarded: true }).eq('id', req.user.id);
             // Process any released orders that were waiting on this seller's Stripe setup
-            processReleasedOrders(req.user.id, profile.stripe_account_id).catch(err =>
-                console.error('processReleasedOrders error:', err.message)
-            );
+            // processReleasedOrders(req.user.id, profile.stripe_account_id).catch(err =>
+            //     console.error('processReleasedOrders error:', err.message)
+            // );
+
+
+            try {
+                await processReleasedOrders(req.user.id, profile.stripe_account_id);
+            } catch (err) {
+                console.error('processReleasedOrders error:', err.message);
+            }
+
         };
 
 
