@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/stores';
 import { useNavigate } from 'react-router-dom';
+import SkillJoyLogo3 from '../../assets/SkillJoy-Logo2.svg'
 
 export default function LoginPage() {
     const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
@@ -56,9 +57,12 @@ export default function LoginPage() {
 
             <div className="login-bg">
                 <div className="login-card fade-up">
-                    <a href="/" className="login-logo">
+                    {/* <a href="/" className="login-logo">
                         Skill<span>Joy</span>
-                    </a>
+                    </a> */}
+                    <img 
+                    style={{ height: '45px'}}
+                    src={SkillJoyLogo3} alt="" />
 
                     <h1 className="login-title">
                         {mode === 'signup' ? 'Create your account' : 'Welcome back'}
