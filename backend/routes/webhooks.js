@@ -6,7 +6,7 @@ const supabase = require('../config/supabase');
 // ═══════════════════════════════════════════════════════════════════════════
 // STRIPE WEBHOOK ENDPOINT
 // ═══════════════════════════════════════════════════════════════════════════
-router.post('/', express.raw({ type: 'application/json' }), async (req, res) => {
+router.post('/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
     console.log('\n📨 WEBHOOK RECEIVED:', new Date().toISOString());
     console.log('Headers:', req.headers['stripe-signature'] ? 'Has signature' : 'No signature');
 
@@ -81,8 +81,8 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
 });
 
 // Simple GET test endpoint
-router.get('/test', (req, res) => {
-    console.log('\n✅ GET /webhooks/test HIT!');
+router.get('/stripe/test', (req, res) => {
+    console.log('\n✅ GET /webhooks/stripe/test HIT!');
     res.json({ status: 'webhook route working', timestamp: new Date().toISOString() });
 });
 

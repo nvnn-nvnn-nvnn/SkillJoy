@@ -191,6 +191,23 @@ label {
   background: var(--surface-alt);
 }
 
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  margin-left: 5px;
+  line-height: 1;
+  vertical-align: middle;
+}
+
 .points-badge {
   background: #FEF9EC;
   color: #A07020;
