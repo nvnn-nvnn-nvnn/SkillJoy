@@ -230,3 +230,43 @@ export function useProfile() {
   const { profile } = useAuth()
   return profile
 }
+
+export function useUnreadCounts() {
+  const user = useUser();
+  const [counts, setCounts] = useState({ gig: 0, swap: 0 });
+
+  useEffect(() => {
+    if (!user) return;
+
+    async function load() {
+      const { data } = await supabase
+        .from('notifications')
+        .select('related_type')
+        .eq('user_id', user.id)
+        .eq('type', 'message')
+        .eq('read', false);
+      if (data) {
+        setCounts({
+          gig: data.filter(n => n.related_type === 'gig').length,
+          swap: data.filter(n => n.related_type === 'swap').length,
+        });
+      }
+    }
+
+    load();
+
+    const channel = supabase
+      .channel(`unread-counts-${user.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${user.id}`,
+      }, () => { load(); })
+      .subscribe();
+
+    return () => { channel.unsubscribe(); };
+  }, [user]);
+
+  return counts;
+}

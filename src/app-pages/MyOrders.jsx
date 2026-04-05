@@ -412,22 +412,11 @@ export default function MyOrders() {
             .channel(`my-orders-${user.id}-${tab}`)
             .on('postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'gig_requests', filter: `${column}=eq.${user.id}` },
-                (payload) => {
-                    setOrders(prev => prev.map(o =>
-                        o.id === payload.new.id ? { ...o, ...payload.new } : o
-                    ));
-                }
+                () => { loadOrders(); }
             )
             .subscribe();
-        return () => { supabase.removeChannel(channel); };
+        return () => { channel.unsubscribe(); };
     }, [user, tab]);
-
-
-    useEffect(() => {
-        if (!user) return;
-
-
-    }, []);
 
     async function loadOrders() {
         setLoading(true);
