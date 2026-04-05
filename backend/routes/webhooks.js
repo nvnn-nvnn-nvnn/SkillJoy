@@ -81,6 +81,10 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
 });
 
 // Simple GET test endpoint
+router.get('/stripe', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 router.get('/stripe/test', (req, res) => {
     console.log('\n✅ GET /webhooks/stripe/test HIT!');
     res.json({ status: 'webhook route working', timestamp: new Date().toISOString() });
