@@ -53,6 +53,20 @@ router.post("/onboard", async (req, res) => {
 
         let accountId = profile?.stripe_account_id;
 
+        if (accountId) {
+            // Verify the saved account still belongs to this platform key
+            try {
+                await stripe.accounts.retrieve(accountId);
+            } catch (err) {
+                console.warn(`Stale Stripe account ${accountId} — creating a new one:`, err.message);
+                accountId = null;
+                await supabase
+                    .from('profiles')
+                    .update({ stripe_account_id: null, stripe_onboarded: false })
+                    .eq('id', req.user.id);
+            }
+        }
+
         if (!accountId) {
             const account = await stripe.accounts.create({ type: 'express' });
             accountId = account.id;
