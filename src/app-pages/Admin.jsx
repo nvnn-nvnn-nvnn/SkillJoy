@@ -87,6 +87,21 @@ export default function AdminPage() {
         setLoading(false);
     }
 
+    async function runClearance() {
+        try {
+            const res = await apiFetch('/api/admin/run-clearance', { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) { showToast('Error: ' + (data.error || 'Failed'), 'error'); return; }
+            const msg = data.processed === 0
+                ? 'No orders ready for clearance.'
+                : `Cleared ${data.processed} order(s).`;
+            showToast(msg);
+            loadAll();
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        }
+    }
+
     async function resolveDispute(orderId, resolution) {
         try {
             const res = await apiFetch('/api/admin/resolve-dispute', {
@@ -136,6 +151,17 @@ export default function AdminPage() {
                     <p style={{ margin: 0, fontSize: 13, color: '#000' }}>SkillJoy Platform Management</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <button
+                        onClick={runClearance}
+                        style={{
+                            background: '#f0fdf4', border: '1.5px solid #86efac', color: '#15803d',
+                            padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                            cursor: 'pointer', whiteSpace: 'nowrap',
+                        }}
+                        onMouseOver={e => e.currentTarget.style.background = '#dcfce7'}
+                        onMouseOut={e => e.currentTarget.style.background = '#f0fdf4'}>
+                        ⚡ Run Clearance
+                    </button>
                     <div style={{ textAlign: 'right' }}>
                         <p style={{ margin: 0, fontSize: 12, color: '#000' }}>Signed in as</p>
                         <p style={{ margin: 0, fontSize: 13, fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)' }}>{ADMIN_EMAIL}</p>

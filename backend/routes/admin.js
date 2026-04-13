@@ -96,4 +96,59 @@ router.post('/resolve-dispute', async (req, res) => {
     }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// MANUAL CLEARANCE TRIGGER - Admin only, for testing
+// ═══════════════════════════════════════════════════════════════════════════
+router.post('/run-clearance', async (req, res) => {
+    try {
+        if (req.user.email !== ADMIN_EMAIL) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        const { SERVICE_FEE_CENTS } = require('../config/fees');
+
+        const { data: readyOrders, error } = await supabase
+            .from('gig_requests')
+            .select('id, provider_id, payment_amount, gig:gigs(title)')
+            .eq('payment_status', 'released')
+            .lte('clearance_date', new Date().toISOString());
+
+        if (error) return res.status(500).json({ error: error.message });
+        if (!readyOrders?.length) return res.json({ message: 'No orders ready for clearance.', processed: 0 });
+
+        const results = [];
+
+        for (const order of readyOrders) {
+            const { data: provider } = await supabase
+                .from('profiles')
+                .select('stripe_account_id, stripe_onboarded')
+                .eq('id', order.provider_id)
+                .single();
+
+            if (!provider?.stripe_account_id || !provider?.stripe_onboarded) {
+                results.push({ id: order.id, status: 'skipped', reason: 'No Stripe account' });
+                continue;
+            }
+
+            try {
+                const transferAmount = Math.round(order.payment_amount * 100) - SERVICE_FEE_CENTS;
+                await stripe.transfers.create({
+                    amount: transferAmount,
+                    currency: 'usd',
+                    destination: provider.stripe_account_id,
+                    transfer_group: order.id,
+                });
+                await supabase.from('gig_requests').update({ payment_status: 'cleared' }).eq('id', order.id);
+                results.push({ id: order.id, status: 'cleared', amount: transferAmount / 100 });
+            } catch (err) {
+                results.push({ id: order.id, status: 'failed', reason: err.message });
+            }
+        }
+
+        res.json({ processed: readyOrders.length, results });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

@@ -736,20 +736,22 @@ export default function ChatPage() {
                 await selectConversation(convos[0].swap_id, 'swaps');
             }
         })();
-        // Global subscriptions so the list updates when any gig_request changes
-        // (e.g. order approved → status becomes 'accepted'). Two channels because
-        // Supabase realtime can't OR across different columns in one filter.
-        const chReq = supabase
-            .channel(`gig-list-req-${user.id}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'gig_requests', filter: `requester_id=eq.${user.id}` },
-                () => loadGigConversations(true))
+        // Subscribe to notifications INSERT events for this user.
+        // Supabase Realtime column filters on UPDATE events require REPLICA IDENTITY FULL;
+        // gig_requests uses the default so filtering by requester_id/provider_id on UPDATEs
+        // silently drops every event. Notifications are always INSERT and user_id filtering
+        // on INSERT is reliable — this fires whenever order status changes.
+        const chNotif = supabase
+            .channel(`gig-list-notif-${user.id}`)
+            .on('postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+                (payload) => {
+                    if (payload.new?.type === 'order_update') {
+                        loadGigConversations(true);
+                    }
+                })
             .subscribe();
-        const chProv = supabase
-            .channel(`gig-list-prov-${user.id}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'gig_requests', filter: `provider_id=eq.${user.id}` },
-                () => loadGigConversations(true))
-            .subscribe();
-        gigListSubs.current = [chReq, chProv];
+        gigListSubs.current = [chNotif];
 
         return () => {
             cleanupSubs();
