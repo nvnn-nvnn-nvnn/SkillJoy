@@ -168,6 +168,26 @@ router.get('/balance', async (req, res) => {
 });
 
 
+// ── Stripe Express dashboard login link ────────────────────────────────────────
+router.post('/dashboard-link', async (req, res) => {
+    try {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('stripe_account_id, stripe_onboarded')
+            .eq('id', req.user.id)
+            .single();
+
+        if (!profile?.stripe_account_id || !profile?.stripe_onboarded) {
+            return res.status(400).json({ error: 'Stripe account not set up' });
+        }
+
+        const loginLink = await stripe.accounts.createLoginLink(profile.stripe_account_id);
+        res.json({ url: loginLink.url });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ── Earnings breakdown: pending (DB) + available (Stripe Connect balance) ──────
 router.get('/earnings', async (req, res) => {
     try {

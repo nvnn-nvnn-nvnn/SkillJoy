@@ -101,6 +101,7 @@ router.post('/resolve-dispute', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════
 router.post('/run-clearance', async (req, res) => {
     try {
+        console.log('run-clearance: user email:', req.user.email, '| expected:', ADMIN_EMAIL);
         if (req.user.email !== ADMIN_EMAIL) {
             return res.status(403).json({ error: 'Forbidden' });
         }

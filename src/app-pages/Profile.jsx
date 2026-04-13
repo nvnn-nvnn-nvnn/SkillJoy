@@ -443,9 +443,9 @@ export default function ProfilePage() {
                     }}>
                         {stripeStatus?.onboarded ? (
                             <div>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                                     <p style={{ color: '#15803d', fontWeight: 600, margin: 0 }}>
-                                        ✅ Payouts active — you'll receive funds when buyers release payment.
+                                        ✅ Payouts active
                                     </p>
                                     <button
                                         onClick={checkStripeStatus}
@@ -454,6 +454,24 @@ export default function ProfilePage() {
                                         ↻
                                     </button>
                                 </div>
+                                <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 12px', lineHeight: 1.5 }}>
+                                    Earnings are transferred to your Stripe account after a short clearance period. Stripe then pays out to your linked bank account automatically.
+                                </p>
+                                <button
+                                    onClick={async () => {
+                                        const res = await apiFetch('/api/stripe-connect/dashboard-link', { method: 'POST' });
+                                        const data = await res.json();
+                                        if (data.url) window.open(data.url, '_blank');
+                                    }}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', gap: 8,
+                                        background: '#635bff', color: '#fff', border: 'none',
+                                        padding: '9px 16px', borderRadius: 8, fontSize: 13,
+                                        fontWeight: 600, cursor: 'pointer', marginBottom: 14,
+                                    }}>
+                                    <span>Go to Stripe Dashboard</span>
+                                    <span style={{ fontSize: 12 }}>↗</span>
+                                </button>
                                 {stripeEarnings && (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flexWrap: 'wrap' }}>
                                         <div style={{ background: '#fff', border: '1px solid #fbbf24', borderRadius: 8, padding: '10px 16px' }}>
