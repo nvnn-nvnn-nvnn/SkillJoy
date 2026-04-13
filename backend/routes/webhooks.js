@@ -24,7 +24,7 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
 
     // Handle the event
     switch (event.type) {
-        case 'payment_intent.succeeded':
+        case 'payment_intent.succeeded': {
             const paymentIntent = event.data.object;
             console.log(`\n✅ STRIPE WEBHOOK: PaymentIntent succeeded: ${paymentIntent.id}`);
             console.log(`📦 OrderId from metadata: ${paymentIntent.metadata?.orderId}`);
@@ -47,7 +47,8 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
                     escrow_date: new Date().toISOString(),
                     status: 'accepted'
                 })
-                .eq('id', orderId);
+                .eq('id', orderId)
+                .neq('payment_status', 'escrowed'); // idempotency guard
 
             if (error) {
                 console.error('❌ Failed to update order to escrowed:', error);
@@ -55,6 +56,7 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
                 console.log(`✅ Order ${orderId} escrowed. Amount: $${paymentIntent.amount / 100}`);
             }
             break;
+        }
 
         case 'payment_intent.payment_failed':
         case 'payment_intent.canceled': {
@@ -66,7 +68,7 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
                     .from('gig_requests')
                     .update({ payment_status: 'unpaid' })
                     .eq('id', failedOrderId)
-                    .eq('payment_status', 'paid'); // only revert if stuck in 'paid'
+                    .in('payment_status', ['unpaid', 'escrowed']); // only revert if not yet released/cleared
                 console.log(`↩️ Order ${failedOrderId} reverted to unpaid`);
             }
             break;

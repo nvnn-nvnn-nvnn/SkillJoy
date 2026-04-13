@@ -14,6 +14,7 @@ const contactRoutes = require('./routes/contact.js');
 const verifyCollegeRoutes = require('./routes/verify-college.js');
 const rateLimit = require('express-rate-limit');
 const { sendEmail, getUserEmail, templates } = require('./lib/email');
+const { SERVICE_FEE_CENTS } = require('./config/fees');
 
 // Global limiter: 200 req per 15 min per IP
 const globalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
@@ -138,7 +139,6 @@ cron.schedule('0 1 * * *', async () => {
     if (!readyOrders?.length) { console.log('No orders ready for clearance.'); return; }
 
     const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    const SERVICE_FEES_CENTS = 600;
 
     for (const order of readyOrders) {
         const { data: provider } = await supabase
@@ -162,7 +162,7 @@ cron.schedule('0 1 * * *', async () => {
         }
 
         try {
-            const transferAmount = Math.round(order.payment_amount * 100) - SERVICE_FEES_CENTS;
+            const transferAmount = Math.round(order.payment_amount * 100) - SERVICE_FEE_CENTS;
             await stripe.transfers.create({
                 amount: transferAmount,
                 currency: 'usd',
@@ -188,7 +188,7 @@ cron.schedule('0 1 * * *', async () => {
                     ...templates.fundsCleared({
                         sellerName: 'there',
                         gigTitle,
-                        amount: ((order.payment_amount * 100 - SERVICE_FEES_CENTS) / 100).toFixed(2),
+                        amount: ((order.payment_amount * 100 - SERVICE_FEE_CENTS) / 100).toFixed(2),
                     }),
                 });
             }
