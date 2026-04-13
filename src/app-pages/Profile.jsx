@@ -36,7 +36,7 @@ export default function ProfilePage() {
 
     // Stripe Status
     const [stripeStatus, setStripeStatus] = useState(null);
-    const [stripeBalance, setStripeBalance] = useState(null);
+    const [stripeEarnings, setStripeEarnings] = useState(null);
 
     // College verification
     const [collegeEmail, setCollegeEmail] = useState('');
@@ -118,9 +118,9 @@ export default function ProfilePage() {
         if (!res.ok) { console.error(data.error); return; }
         setStripeStatus(data);
         if (data.onboarded) {
-            const balRes = await apiFetch('/api/stripe-connect/balance');
+            const balRes = await apiFetch('/api/stripe-connect/earnings');
             const balData = await balRes.json();
-            if (balRes.ok) setStripeBalance(balData);
+            if (balRes.ok) setStripeEarnings(balData);
         }
     }
 
@@ -446,15 +446,22 @@ export default function ProfilePage() {
                                 <p style={{ color: '#15803d', fontWeight: 600, margin: '0 0 10px' }}>
                                     ✅ Payouts active — you'll receive funds when buyers release payment.
                                 </p>
-                                {stripeBalance && (
-                                    <div style={{ display: 'flex', flexDirection:"column", gap: '16px', flexWrap: 'wrap' }}>
+                                {stripeEarnings && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flexWrap: 'wrap' }}>
+                                        <div style={{ background: '#fff', border: '1px solid #fbbf24', borderRadius: 8, padding: '10px 16px' }}>
+                                            <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>IN ESCROW</div>
+                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#92400e' }}>${stripeEarnings.pendingEarnings.toFixed(2)}</div>
+                                            <div style={{ fontSize: '11px', color: '#9ca3af' }}>held until buyer releases</div>
+                                        </div>
                                         <div style={{ background: '#fff', border: '1px solid #86efac', borderRadius: 8, padding: '10px 16px' }}>
                                             <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>AVAILABLE</div>
-                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#15803d' }}>${stripeBalance.available.toFixed(2)}</div>
+                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#15803d' }}>${stripeEarnings.stripeAvailable.toFixed(2)}</div>
+                                            <div style={{ fontSize: '11px', color: '#9ca3af' }}>ready to pay out</div>
                                         </div>
                                         <div style={{ background: '#fff', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 16px' }}>
-                                            <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>PENDING</div>
-                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#374151' }}>${stripeBalance.pending.toFixed(2)}</div>
+                                            <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>CLEARING</div>
+                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#374151' }}>${stripeEarnings.stripePending.toFixed(2)}</div>
+                                            <div style={{ fontSize: '11px', color: '#9ca3af' }}>transferred, arriving soon</div>
                                         </div>
                                     </div>
                                 )}
