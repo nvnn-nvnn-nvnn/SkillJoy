@@ -177,16 +177,22 @@ router.get('/earnings', async (req, res) => {
             .eq('id', req.user.id)
             .single();
 
-        // Pending = escrowed or released orders not yet transferred
-        const { data: pendingOrders } = await supabase
+        // Split escrowed (waiting for release) vs released (waiting for clearance)
+        const { data: escrowedOrders } = await supabase
             .from('gig_requests')
             .select('payment_amount')
             .eq('provider_id', req.user.id)
-            .in('payment_status', ['escrowed', 'released']);
+            .eq('payment_status', 'escrowed');
 
-                const pendingEarnings = (pendingOrders || []).reduce((sum, o) => {
-            return sum + (parseFloat(o.payment_amount) - SERVICE_FEE_DOLLARS);
-        }, 0);
+        const { data: releasedOrders } = await supabase
+            .from('gig_requests')
+            .select('payment_amount')
+            .eq('provider_id', req.user.id)
+            .eq('payment_status', 'released');
+
+        const calc = (orders) => (orders || []).reduce((sum, o) => sum + (parseFloat(o.payment_amount) - SERVICE_FEE_DOLLARS), 0);
+        const inEscrow         = Math.max(0, parseFloat(calc(escrowedOrders).toFixed(2)));
+        const pendingClearance = Math.max(0, parseFloat(calc(releasedOrders).toFixed(2)));
 
         // Available = Stripe Connect balance (post-transfer)
         let stripeAvailable = 0;
@@ -198,9 +204,10 @@ router.get('/earnings', async (req, res) => {
         }
 
         res.json({
-            pendingEarnings: Math.max(0, parseFloat(pendingEarnings.toFixed(2))), // in escrow/released, not yet transferred
-            stripeAvailable,  // transferred, available to pay out
-            stripePending,    // transferred but still clearing on Stripe's side
+            inEscrow,          // buyer hasn't released yet
+            pendingClearance,  // released, waiting for 14-day clearance
+            stripeAvailable,   // transferred, available to pay out
+            stripePending,     // transferred but still clearing on Stripe's side
         });
     } catch (err) {
         res.status(500).json({ error: err.message });

@@ -443,15 +443,28 @@ export default function ProfilePage() {
                     }}>
                         {stripeStatus?.onboarded ? (
                             <div>
-                                <p style={{ color: '#15803d', fontWeight: 600, margin: '0 0 10px' }}>
-                                    ✅ Payouts active — you'll receive funds when buyers release payment.
-                                </p>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                                    <p style={{ color: '#15803d', fontWeight: 600, margin: 0 }}>
+                                        ✅ Payouts active — you'll receive funds when buyers release payment.
+                                    </p>
+                                    <button
+                                        onClick={checkStripeStatus}
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: '2px 6px', color: '#6b7280' }}
+                                        title="Refresh earnings">
+                                        ↻
+                                    </button>
+                                </div>
                                 {stripeEarnings && (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flexWrap: 'wrap' }}>
                                         <div style={{ background: '#fff', border: '1px solid #fbbf24', borderRadius: 8, padding: '10px 16px' }}>
                                             <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>IN ESCROW</div>
-                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#92400e' }}>${stripeEarnings.pendingEarnings.toFixed(2)}</div>
+                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#92400e' }}>${stripeEarnings.inEscrow.toFixed(2)}</div>
                                             <div style={{ fontSize: '11px', color: '#9ca3af' }}>held until buyer releases</div>
+                                        </div>
+                                        <div style={{ background: '#fff', border: '1px solid #a5b4fc', borderRadius: 8, padding: '10px 16px' }}>
+                                            <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>PENDING CLEARANCE</div>
+                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#3730a3' }}>${stripeEarnings.pendingClearance.toFixed(2)}</div>
+                                            <div style={{ fontSize: '11px', color: '#9ca3af' }}>released, clearing in 14 days</div>
                                         </div>
                                         <div style={{ background: '#fff', border: '1px solid #86efac', borderRadius: 8, padding: '10px 16px' }}>
                                             <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>AVAILABLE</div>
