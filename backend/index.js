@@ -140,6 +140,11 @@ cron.schedule('0 1 * * *', async () => {
 
     const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
+    if (process.env.PAUSE_CLEARANCE === 'true') {
+        console.log('⏸️ Clearance paused via PAUSE_CLEARANCE env var. Skipping transfers.');
+        return;
+    }
+
     for (const order of readyOrders) {
         const { data: provider } = await supabase
             .from('profiles')

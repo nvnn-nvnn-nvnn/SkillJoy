@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
-const { SERVICE_FEE_CENTS } = require('../config/fees');
+const { SERVICE_FEE_CENTS, SERVICE_FEE_DOLLARS } = require('../config/fees');
 
 // Process any released orders past clearance_date for a newly-onboarded seller
 async function processReleasedOrders(providerId, stripeAccountId) {
@@ -167,5 +167,44 @@ router.get('/balance', async (req, res) => {
     }
 });
 
+
+// ── Earnings breakdown: pending (DB) + available (Stripe Connect balance) ──────
+router.get('/earnings', async (req, res) => {
+    try {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('stripe_account_id, stripe_onboarded')
+            .eq('id', req.user.id)
+            .single();
+
+        // Pending = escrowed or released orders not yet transferred
+        const { data: pendingOrders } = await supabase
+            .from('gig_requests')
+            .select('payment_amount')
+            .eq('provider_id', req.user.id)
+            .in('payment_status', ['escrowed', 'released']);
+
+                const pendingEarnings = (pendingOrders || []).reduce((sum, o) => {
+            return sum + (parseFloat(o.payment_amount) - SERVICE_FEE_DOLLARS);
+        }, 0);
+
+        // Available = Stripe Connect balance (post-transfer)
+        let stripeAvailable = 0;
+        let stripePending = 0;
+        if (profile?.stripe_account_id && profile?.stripe_onboarded) {
+            const balance = await stripe.balance.retrieve({ stripeAccount: profile.stripe_account_id });
+            stripeAvailable = balance.available.reduce((sum, b) => sum + b.amount, 0) / 100;
+            stripePending  = balance.pending.reduce((sum, b) => sum + b.amount, 0) / 100;
+        }
+
+        res.json({
+            pendingEarnings: Math.max(0, parseFloat(pendingEarnings.toFixed(2))), // in escrow/released, not yet transferred
+            stripeAvailable,  // transferred, available to pay out
+            stripePending,    // transferred but still clearing on Stripe's side
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 module.exports = router;

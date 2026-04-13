@@ -76,6 +76,7 @@ export default function ChatPage() {
     const inputRef = useRef(null);
     const realtimeSub = useRef(null);
     const swapSub = useRef(null);
+    const gigListSubs = useRef([]);
     const hasMounted = useRef(false);
 
     // Derived
@@ -735,7 +736,26 @@ export default function ChatPage() {
                 await selectConversation(convos[0].swap_id, 'swaps');
             }
         })();
-        return () => cleanupSubs();
+        // Global subscriptions so the list updates when any gig_request changes
+        // (e.g. order approved → status becomes 'accepted'). Two channels because
+        // Supabase realtime can't OR across different columns in one filter.
+        const chReq = supabase
+            .channel(`gig-list-req-${user.id}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'gig_requests', filter: `requester_id=eq.${user.id}` },
+                () => loadGigConversations(true))
+            .subscribe();
+        const chProv = supabase
+            .channel(`gig-list-prov-${user.id}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'gig_requests', filter: `provider_id=eq.${user.id}` },
+                () => loadGigConversations(true))
+            .subscribe();
+        gigListSubs.current = [chReq, chProv];
+
+        return () => {
+            cleanupSubs();
+            gigListSubs.current.forEach(ch => supabase.removeChannel(ch));
+            gigListSubs.current = [];
+        };
     }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
