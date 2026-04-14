@@ -150,6 +150,7 @@ router.post('/run-clearance', async (req, res) => {
 
             try {
                 const transferAmount = Math.round(order.payment_amount * 100) - SERVICE_FEE_CENTS;
+                console.log(`Attempting transfer: $${transferAmount / 100} to ${provider.stripe_account_id} for order ${order.id}`);
                 await stripe.transfers.create({
                     amount: transferAmount,
                     currency: 'usd',
@@ -157,8 +158,10 @@ router.post('/run-clearance', async (req, res) => {
                     transfer_group: order.id,
                 });
                 await supabase.from('gig_requests').update({ payment_status: 'cleared' }).eq('id', order.id);
+                console.log(`✅ Transfer succeeded for order ${order.id}`);
                 results.push({ id: order.id, status: 'cleared', amount: transferAmount / 100 });
             } catch (err) {
+                console.error(`❌ Transfer failed for order ${order.id}:`, err.message);
                 results.push({ id: order.id, status: 'failed', reason: err.message });
             }
         }

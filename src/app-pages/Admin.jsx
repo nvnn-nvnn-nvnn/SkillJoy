@@ -95,10 +95,17 @@ export default function AdminPage() {
             });
             const data = await res.json();
             if (!res.ok) { showToast('Error: ' + (data.error || 'Failed'), 'error'); return; }
-            const msg = data.processed === 0
-                ? 'No orders ready for clearance.'
-                : `Cleared ${data.processed} order(s).`;
-            showToast(msg);
+            if (data.processed === 0) {
+                showToast('No orders ready for clearance.', 'error');
+            } else {
+                const failed = data.results?.filter(r => r.status === 'failed') ?? [];
+                const succeeded = data.results?.filter(r => r.status === 'cleared') ?? [];
+                if (failed.length > 0) {
+                    showToast(`${succeeded.length} cleared, ${failed.length} failed: ${failed[0].reason}`, 'error');
+                } else {
+                    showToast(`✅ Cleared ${succeeded.length} order(s).`);
+                }
+            }
             loadAll();
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
