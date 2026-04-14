@@ -179,10 +179,15 @@ router.post('/release', async (req, res) => {
             return res.status(400).json({ error: 'Payment is not in escrow' });
         }
 
+        if (order.status === 'disputed') {
+            return res.status(400).json({ error: 'Cannot release payment while order is disputed' });
+        }
+
         const clearanceDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
 
         // Update database - mark as released, start 14-day clearance
-        const { error } = await supabase
+        // The .eq('payment_status', 'escrowed') on the UPDATE guards against race conditions
+        const { data: released, error } = await supabase
             .from('gig_requests')
             .update({
                 payment_status: 'released',
@@ -190,10 +195,17 @@ router.post('/release', async (req, res) => {
                 clearance_date: clearanceDate,
                 status: 'completed'
             })
-            .eq('id', orderId);
+            .eq('id', orderId)
+            .eq('payment_status', 'escrowed')
+            .select('id')
+            .single();
 
         if (error) {
             return res.status(500).json({ error: error.message });
+        }
+
+        if (!released) {
+            return res.status(409).json({ error: 'Order state changed. Refresh and try again.' });
         }
 
         // Stripe transfer happens after the 14-day clearance window via the clearance cron in index.js
@@ -713,6 +725,21 @@ router.post('/submit-evidence', async (req, res) => {
 
         if (!orderId || !content?.trim()) {
             return res.status(400).json({ error: 'Missing orderId or content' });
+        }
+
+        if (content.trim().length > 5000) {
+            return res.status(400).json({ error: 'Evidence content exceeds 5000 character limit' });
+        }
+
+        if (imageUrl) {
+            try {
+                const parsed = new URL(imageUrl);
+                if (!['https:'].includes(parsed.protocol)) {
+                    return res.status(400).json({ error: 'Image URL must use HTTPS' });
+                }
+            } catch {
+                return res.status(400).json({ error: 'Invalid image URL' });
+            }
         }
 
         // Verify user is a party to this dispute

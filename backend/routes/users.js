@@ -4,13 +4,16 @@ const supabase = require('../config/supabase');
 
 // Placeholder user routes - add as needed
 
+const PUBLIC_FIELDS = 'id, full_name, bio, avatar_url, service_type, availability, college, college_verified';
+
 router.get('/profile/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
+        const isOwnProfile = req.user.id === userId;
 
         const { data: profile, error } = await supabase
             .from('profiles')
-            .select('*')
+            .select(isOwnProfile ? '*' : PUBLIC_FIELDS)
             .eq('id', userId)
             .single();
 

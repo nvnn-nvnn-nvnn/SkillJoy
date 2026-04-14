@@ -3,7 +3,8 @@ const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'techkage@proton.me';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+if (!ADMIN_EMAIL) throw new Error('ADMIN_EMAIL env var is not set');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // RESOLVE DISPUTE - Admin only
