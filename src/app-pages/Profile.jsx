@@ -443,13 +443,13 @@ export default function ProfilePage() {
                     }}>
                         {stripeStatus?.onboarded ? (
                             <div>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
                                     <p style={{ color: '#15803d', fontWeight: 600, margin: 0 }}>
                                         ✅ Payouts active
                                     </p>
                                     <button
                                         onClick={checkStripeStatus}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: '2px 6px', color: '#6b7280' }}
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: '2px 6px', color: '#6b7280', flexShrink: 0 }}
                                         title="Refresh earnings">
                                         ↻
                                     </button>
@@ -464,34 +464,35 @@ export default function ProfilePage() {
                                         if (data.url) window.open(data.url, '_blank');
                                     }}
                                     style={{
-                                        display: 'flex', alignItems: 'center', gap: 8,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                                         background: '#635bff', color: '#fff', border: 'none',
                                         padding: '9px 16px', borderRadius: 8, fontSize: 13,
                                         fontWeight: 600, cursor: 'pointer', marginBottom: 14,
+                                        width: '100%', boxSizing: 'border-box',
                                     }}>
                                     <span>Go to Stripe Dashboard</span>
                                     <span style={{ fontSize: 12 }}>↗</span>
                                 </button>
                                 {stripeEarnings && (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flexWrap: 'wrap' }}>
-                                        <div style={{ background: '#fff', border: '1px solid #fbbf24', borderRadius: 8, padding: '10px 16px' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: 12 }}>
+                                        <div style={{ background: '#fff', border: '1px solid #fbbf24', borderRadius: 8, padding: '10px 12px' }}>
                                             <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>IN ESCROW</div>
-                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#92400e' }}>${stripeEarnings.inEscrow.toFixed(2)}</div>
+                                            <div style={{ fontSize: '18px', fontWeight: 700, color: '#92400e' }}>${stripeEarnings.inEscrow.toFixed(2)}</div>
                                             <div style={{ fontSize: '11px', color: '#9ca3af' }}>held until buyer releases</div>
                                         </div>
-                                        <div style={{ background: '#fff', border: '1px solid #a5b4fc', borderRadius: 8, padding: '10px 16px' }}>
+                                        <div style={{ background: '#fff', border: '1px solid #a5b4fc', borderRadius: 8, padding: '10px 12px' }}>
                                             <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>PENDING CLEARANCE</div>
-                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#3730a3' }}>${stripeEarnings.pendingClearance.toFixed(2)}</div>
-                                            <div style={{ fontSize: '11px', color: '#9ca3af' }}>released, clearing in 14 days</div>
+                                            <div style={{ fontSize: '18px', fontWeight: 700, color: '#3730a3' }}>${stripeEarnings.pendingClearance.toFixed(2)}</div>
+                                            <div style={{ fontSize: '11px', color: '#9ca3af' }}>clearing in 14 days</div>
                                         </div>
-                                        <div style={{ background: '#fff', border: '1px solid #86efac', borderRadius: 8, padding: '10px 16px' }}>
+                                        <div style={{ background: '#fff', border: '1px solid #86efac', borderRadius: 8, padding: '10px 12px' }}>
                                             <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>AVAILABLE</div>
-                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#15803d' }}>${stripeEarnings.stripeAvailable.toFixed(2)}</div>
+                                            <div style={{ fontSize: '18px', fontWeight: 700, color: '#15803d' }}>${stripeEarnings.stripeAvailable.toFixed(2)}</div>
                                             <div style={{ fontSize: '11px', color: '#9ca3af' }}>ready to pay out</div>
                                         </div>
-                                        <div style={{ background: '#fff', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 16px' }}>
+                                        <div style={{ background: '#fff', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 12px' }}>
                                             <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>CLEARING</div>
-                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#374151' }}>${stripeEarnings.stripePending.toFixed(2)}</div>
+                                            <div style={{ fontSize: '18px', fontWeight: 700, color: '#374151' }}>${stripeEarnings.stripePending.toFixed(2)}</div>
                                             <div style={{ fontSize: '11px', color: '#9ca3af' }}>transferred, arriving soon</div>
                                         </div>
                                     </div>
