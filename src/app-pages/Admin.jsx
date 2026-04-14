@@ -155,7 +155,7 @@ export default function AdminPage() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <button
-                        onClick={runClearance}
+                        onClick={() => runClearance()}
                         style={{
                             background: '#f0fdf4', border: '1.5px solid #86efac', color: '#15803d',
                             padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
@@ -354,7 +354,7 @@ export default function AdminPage() {
                                                 <td style={{ padding: '12px 16px' }}>
                                                     {o.payment_status === 'released' && (
                                                         <button
-                                                            onClick={() => runClearance(o.id)}
+                                                            onClick={(e) => { e.stopPropagation(); runClearance(o.id); }}
                                                             style={{
                                                                 background: '#f0fdf4', border: '1.5px solid #86efac',
                                                                 color: '#15803d', padding: '5px 10px', borderRadius: 6,
