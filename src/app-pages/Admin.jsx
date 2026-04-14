@@ -87,9 +87,12 @@ export default function AdminPage() {
         setLoading(false);
     }
 
-    async function runClearance() {
+    async function runClearance(orderId = null) {
         try {
-            const res = await apiFetch('/api/admin/run-clearance', { method: 'POST' });
+            const res = await apiFetch('/api/admin/run-clearance', {
+                method: 'POST',
+                body: JSON.stringify(orderId ? { orderId } : {}),
+            });
             const data = await res.json();
             if (!res.ok) { showToast('Error: ' + (data.error || 'Failed'), 'error'); return; }
             const msg = data.processed === 0
@@ -315,7 +318,7 @@ export default function AdminPage() {
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                                     <thead>
                                         <tr style={{ background: 'var(--surface-alt, #f9f8f6)' }}>
-                                            {['Gig', 'Buyer', 'Seller', 'Amount', 'Order Status', 'Payment', 'Date'].map(h => (
+                                            {['Gig', 'Buyer', 'Seller', 'Amount', 'Order Status', 'Payment', 'Date', ''].map(h => (
                                                 <th key={h} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{h}</th>
                                             ))}
                                         </tr>
@@ -348,6 +351,19 @@ export default function AdminPage() {
                                                 <td style={{ padding: '12px 16px' }}><StatusChip value={o.status} /></td>
                                                 <td style={{ padding: '12px 16px' }}><StatusChip value={o.payment_status} /></td>
                                                 <td style={{ padding: '12px 16px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(o.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                                                <td style={{ padding: '12px 16px' }}>
+                                                    {o.payment_status === 'released' && (
+                                                        <button
+                                                            onClick={() => runClearance(o.id)}
+                                                            style={{
+                                                                background: '#f0fdf4', border: '1.5px solid #86efac',
+                                                                color: '#15803d', padding: '5px 10px', borderRadius: 6,
+                                                                fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                                                            }}>
+                                                            ⚡ Force Clear
+                                                        </button>
+                                                    )}
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>

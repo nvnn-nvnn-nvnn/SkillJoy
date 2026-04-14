@@ -101,18 +101,35 @@ router.post('/resolve-dispute', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════
 router.post('/run-clearance', async (req, res) => {
     try {
-        console.log('run-clearance: user email:', req.user.email, '| expected:', ADMIN_EMAIL);
-        if (req.user.email !== ADMIN_EMAIL) {
-            return res.status(403).json({ error: 'Forbidden' });
+        // Check admin via email or profile lookup as fallback
+        const userEmail = req.user.email;
+        const userId = req.user.id;
+        console.log('run-clearance: user email:', userEmail, '| user id:', userId, '| expected:', ADMIN_EMAIL);
+
+        let isAdmin = userEmail === ADMIN_EMAIL;
+        if (!isAdmin) {
+            const { data: profile } = await supabase.from('profiles').select('email').eq('id', userId).single();
+            isAdmin = profile?.email === ADMIN_EMAIL;
+            console.log('run-clearance: profile email fallback:', profile?.email);
         }
+        if (!isAdmin) return res.status(403).json({ error: 'Forbidden' });
 
         const { SERVICE_FEE_CENTS } = require('../config/fees');
+        const { orderId } = req.body; // optional — force-clear a specific order bypassing clearance_date
 
-        const { data: readyOrders, error } = await supabase
+        let query = supabase
             .from('gig_requests')
             .select('id, provider_id, payment_amount, gig:gigs(title)')
-            .eq('payment_status', 'released')
-            .lte('clearance_date', new Date().toISOString());
+            .eq('payment_status', 'released');
+
+        if (orderId) {
+            // Force-clear a specific order regardless of clearance_date
+            query = query.eq('id', orderId);
+        } else {
+            query = query.lte('clearance_date', new Date().toISOString());
+        }
+
+        const { data: readyOrders, error } = await query;
 
         if (error) return res.status(500).json({ error: error.message });
         if (!readyOrders?.length) return res.json({ message: 'No orders ready for clearance.', processed: 0 });
