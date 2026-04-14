@@ -104,13 +104,11 @@ router.post('/run-clearance', async (req, res) => {
         // Check admin via email or profile lookup as fallback
         const userEmail = req.user.email;
         const userId = req.user.id;
-        console.log('run-clearance: user email:', userEmail, '| user id:', userId, '| expected:', ADMIN_EMAIL);
 
         let isAdmin = userEmail === ADMIN_EMAIL;
         if (!isAdmin) {
             const { data: profile } = await supabase.from('profiles').select('email').eq('id', userId).single();
             isAdmin = profile?.email === ADMIN_EMAIL;
-            console.log('run-clearance: profile email fallback:', profile?.email);
         }
         if (!isAdmin) return res.status(403).json({ error: 'Forbidden' });
 

@@ -496,6 +496,9 @@ export default function ProfilePage() {
                                         </div>
                                     </div>
                                 )}
+                                <div style={{ fontSize: '11px', color: '#6b7280', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', lineHeight: 1.5 }}>
+                                    <strong style={{ color: '#374151' }}>How earnings work:</strong> When a buyer pays, funds are held in escrow until you deliver and they approve. After release, there's a short clearance period before transfer to your Stripe account. Stripe then pays out to your bank on its own schedule. Expect 2–3 weeks total from order completion to bank deposit.
+                                </div>
                             </div>
                         ) : (
                             <>
