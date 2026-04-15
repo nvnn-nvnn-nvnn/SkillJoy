@@ -49,6 +49,8 @@ export default function AdminPage() {
     const [orders, setOrders] = useState([]);
     const [disputes, setDisputes] = useState([]);
     const [users, setUsers] = useState([]);
+    const [finances, setFinances] = useState(null);
+    const [financesLoading, setFinancesLoading] = useState(false);
     const [tab, setTab] = useState('disputes');
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState('');
@@ -110,6 +112,19 @@ export default function AdminPage() {
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
         }
+    }
+
+    async function loadFinances() {
+        setFinancesLoading(true);
+        try {
+            const res = await apiFetch('/api/admin/finances');
+            const data = await res.json();
+            if (res.ok) setFinances(data);
+            else showToast('Failed to load finances: ' + data.error, 'error');
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        }
+        setFinancesLoading(false);
     }
 
     async function resolveDispute(orderId, resolution) {
@@ -210,10 +225,11 @@ export default function AdminPage() {
                     { key: 'disputes', label: 'Disputes', count: disputes.length },
                     { key: 'orders',   label: 'Orders',   count: orders.length },
                     { key: 'users',    label: 'Users',     count: users.length },
+                    { key: 'finances', label: 'Finances',  count: null },
                 ].map(t => (
                     <button
                         key={t.key}
-                        onClick={() => setTab(t.key)}
+                        onClick={() => { setTab(t.key); if (t.key === 'finances' && !finances) loadFinances(); }}
                         style={{
                             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                             padding: '9px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
@@ -222,15 +238,17 @@ export default function AdminPage() {
                             color: tab === t.key ? '#fff' : 'var(--text-muted)',
                         }}>
                         {t.label}
-                        <span style={{
-                            fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 100,
-                            background: tab === t.key
-                                ? (t.key === 'disputes' && t.count > 0 ? '#ef4444' : 'rgba(255,255,255,0.2)')
-                                : (t.key === 'disputes' && t.count > 0 ? '#ef4444' : 'var(--border)'),
-                            color: tab === t.key ? '#fff' : (t.key === 'disputes' && t.count > 0 ? '#fff' : 'var(--text-muted)'),
-                        }}>
-                            {t.count}
-                        </span>
+                        {t.count !== null && (
+                            <span style={{
+                                fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 100,
+                                background: tab === t.key
+                                    ? (t.key === 'disputes' && t.count > 0 ? '#ef4444' : 'rgba(255,255,255,0.2)')
+                                    : (t.key === 'disputes' && t.count > 0 ? '#ef4444' : 'var(--border)'),
+                                color: tab === t.key ? '#fff' : (t.key === 'disputes' && t.count > 0 ? '#fff' : 'var(--text-muted)'),
+                            }}>
+                                {t.count}
+                            </span>
+                        )}
                     </button>
                 ))}
             </div>
@@ -376,6 +394,88 @@ export default function AdminPage() {
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+                    )}
+
+                    {/* ── Finances ── */}
+                    {tab === 'finances' && (
+                        <div>
+                            {financesLoading ? (
+                                <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
+                                    <div className="spinner" style={{ width: 36, height: 36, borderWidth: 3 }} />
+                                </div>
+                            ) : finances ? (
+                                <>
+                                    {/* Balance cards */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 24 }}>
+                                        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px', borderTop: '3px solid #6366f1' }}>
+                                            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Stripe Balance (Total)</div>
+                                            <div style={{ fontSize: 28, fontWeight: 800, color: '#6366f1' }}>${finances.stripeTotal.toFixed(2)}</div>
+                                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>${finances.stripeAvailable.toFixed(2)} available · ${finances.stripePending.toFixed(2)} pending</div>
+                                        </div>
+                                        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px', borderTop: '3px solid #f59e0b' }}>
+                                            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Owed to Sellers</div>
+                                            <div style={{ fontSize: 28, fontWeight: 800, color: '#92400e' }}>${finances.owedToSellers.toFixed(2)}</div>
+                                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{finances.pendingTransfers.length} order(s) in clearance</div>
+                                        </div>
+                                        <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 14, padding: '18px 20px', borderTop: '3px solid #10b981' }}>
+                                            <div style={{ fontSize: 11, color: '#166534', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Your Actual Profit</div>
+                                            <div style={{ fontSize: 28, fontWeight: 800, color: '#15803d' }}>${finances.actualProfit.toFixed(2)}</div>
+                                            <div style={{ fontSize: 12, color: '#166534', marginTop: 4 }}>Stripe balance minus owed to sellers</div>
+                                        </div>
+                                        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px', borderTop: '3px solid #8b5cf6' }}>
+                                            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>All-Time Fees Collected</div>
+                                            <div style={{ fontSize: 28, fontWeight: 800, color: '#6d28d9' }}>${finances.totalFeesEarned.toFixed(2)}</div>
+                                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>From cleared orders ($6 each)</div>
+                                        </div>
+                                    </div>
+
+                                    {/* How this works explanation */}
+                                    <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 18px', marginBottom: 24, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                                        <strong style={{ color: 'var(--text-primary)' }}>How to read this:</strong> Your Stripe balance holds both your profit ($6 fees) and funds reserved for sellers. <strong style={{ color: '#92400e' }}>Owed to Sellers</strong> is money that must go out once clearance windows expire. <strong style={{ color: '#15803d' }}>Actual Profit</strong> is what's truly yours right now.
+                                    </div>
+
+                                    {/* Pending transfers list */}
+                                    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
+                                        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <p style={{ margin: 0, fontWeight: 600, fontSize: 15 }}>Pending Transfers</p>
+                                            <button
+                                                onClick={loadFinances}
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text-muted)', padding: '2px 6px' }}
+                                                title="Refresh">↻</button>
+                                        </div>
+                                        {finances.pendingTransfers.length === 0 ? (
+                                            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                                                <p style={{ fontWeight: 600, margin: 0 }}>No pending transfers</p>
+                                            </div>
+                                        ) : (
+                                            finances.pendingTransfers.map((o, i) => (
+                                                <div key={o.id} style={{
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                                    padding: '12px 20px', borderTop: i === 0 ? 'none' : '1px solid var(--border)',
+                                                    gap: 12,
+                                                }}>
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <p style={{ margin: 0, fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.gig?.title ?? '—'}</p>
+                                                        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>Seller: {o.provider?.full_name ?? '—'}</p>
+                                                    </div>
+                                                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                                        <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>${((o.payment_amount ?? 0) - 6).toFixed(2)} to seller</p>
+                                                        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
+                                                            Clears {o.clearance_date ? new Date(o.clearance_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
+                                    <p>Failed to load finances.</p>
+                                    <button className="btn btn-primary" onClick={loadFinances}>Retry</button>
+                                </div>
+                            )}
                         </div>
                     )}
 

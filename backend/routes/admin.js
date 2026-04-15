@@ -171,4 +171,60 @@ router.post('/run-clearance', async (req, res) => {
     }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FINANCES - Admin only, platform balance breakdown
+// ═══════════════════════════════════════════════════════════════════════════
+router.get('/finances', async (req, res) => {
+    try {
+        if (req.user.email !== ADMIN_EMAIL) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        const { SERVICE_FEE_DOLLARS } = require('../config/fees');
+
+        // 1. Live Stripe platform balance
+        const balance = await stripe.balance.retrieve();
+        const stripeAvailable = balance.available.reduce((sum, b) => sum + b.amount, 0) / 100;
+        const stripePending   = balance.pending.reduce((sum, b) => sum + b.amount, 0) / 100;
+        const stripeTotal     = stripeAvailable + stripePending;
+
+        // 2. Orders released but not yet transferred to sellers (still in clearance window)
+        const { data: releasedOrders, error } = await supabase
+            .from('gig_requests')
+            .select('id, payment_amount, clearance_date, gig:gigs(title), provider:profiles!provider_id(full_name)')
+            .eq('payment_status', 'released')
+            .order('clearance_date', { ascending: true });
+
+        if (error) return res.status(500).json({ error: error.message });
+
+        const owedToSellers = (releasedOrders ?? []).reduce((sum, o) => {
+            return sum + Math.max(0, (o.payment_amount ?? 0) - SERVICE_FEE_DOLLARS);
+        }, 0);
+
+        // 3. All-time fees collected from cleared orders
+        const { data: clearedOrders } = await supabase
+            .from('gig_requests')
+            .select('id')
+            .eq('payment_status', 'cleared');
+
+        const totalFeesEarned = (clearedOrders?.length ?? 0) * SERVICE_FEE_DOLLARS;
+
+        // 4. Your actual profit sitting in Stripe right now
+        const actualProfit = stripeTotal - owedToSellers;
+
+        res.json({
+            stripeAvailable,
+            stripePending,
+            stripeTotal,
+            owedToSellers: parseFloat(owedToSellers.toFixed(2)),
+            actualProfit: parseFloat(actualProfit.toFixed(2)),
+            totalFeesEarned: parseFloat(totalFeesEarned.toFixed(2)),
+            pendingTransfers: releasedOrders ?? [],
+        });
+    } catch (err) {
+        console.error('Finances error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;
