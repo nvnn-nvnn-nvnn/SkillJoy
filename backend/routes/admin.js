@@ -172,6 +172,53 @@ router.post('/run-clearance', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// REMOVE GIG - Admin only
+// ═══════════════════════════════════════════════════════════════════════════
+router.post('/remove-gig', async (req, res) => {
+    try {
+        if (req.user.email !== ADMIN_EMAIL) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        const { gigId, reason } = req.body;
+        if (!gigId) return res.status(400).json({ error: 'Missing gigId' });
+
+        // Fetch gig + owner before deleting so we can notify them
+        const { data: gig, error: fetchErr } = await supabase
+            .from('gigs')
+            .select('id, title, user_id')
+            .eq('id', gigId)
+            .single();
+
+        if (fetchErr || !gig) return res.status(404).json({ error: 'Gig not found' });
+
+        // Delete the gig (service key bypasses RLS)
+        const { error: deleteErr } = await supabase
+            .from('gigs')
+            .delete()
+            .eq('id', gigId);
+
+        if (deleteErr) return res.status(500).json({ error: deleteErr.message });
+
+        // Notify the owner
+        await supabase.from('notifications').insert({
+            user_id: gig.user_id,
+            type: 'gig_removed',
+            title: 'Your gig was removed',
+            message: reason
+                ? `Your gig "${gig.title}" was removed by an admin. Reason: ${reason}`
+                : `Your gig "${gig.title}" was removed by an admin for violating platform guidelines.`,
+            related_type: 'gig',
+        });
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Remove gig error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // FINANCES - Admin only, platform balance breakdown
 // ═══════════════════════════════════════════════════════════════════════════
 router.get('/finances', async (req, res) => {

@@ -34,7 +34,7 @@ export default function GigDetailsPage() {
         setLoading(true);
         const { data, error } = await supabase
             .from('gigs')
-            .select('*, profile:profiles!user_id(id, full_name, bio, service_type, availability)')
+            .select('*, profile:profiles!user_id(id, full_name, bio, service_type, availability, avatar_url)')
             .eq('id', gigId)
             .single();
 
@@ -274,7 +274,12 @@ export default function GigDetailsPage() {
                         {/* Provider card */}
                         <div className="gd-card gd-provider">
                             <div className="gd-provider-top">
-                                <div className="gd-provider-avatar">{initials(gig.profile?.full_name)}</div>
+                                <div className="gd-provider-avatar">
+                                    {gig.profile?.avatar_url
+                                        ? <img src={gig.profile.avatar_url} alt={gig.profile.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                                        : initials(gig.profile?.full_name)
+                                    }
+                                </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <Link to={`/profile/${gig.profile?.id}`} className="gd-provider-name">
                                         {gig.profile?.full_name ?? 'Unknown'}

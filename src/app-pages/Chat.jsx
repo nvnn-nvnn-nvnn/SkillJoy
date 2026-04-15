@@ -129,8 +129,8 @@ export default function ChatPage() {
         id, status, teach_skill, learn_skill,
         requester_id, receiver_id,
         requester_completed, receiver_completed,
-        requester:profiles!requester_id(id, full_name, bio, skills_teach, skills_learn),
-        receiver:profiles!receiver_id(id, full_name, bio, skills_teach, skills_learn)
+        requester:profiles!requester_id(id, full_name, bio, skills_teach, skills_learn, avatar_url),
+        receiver:profiles!receiver_id(id, full_name, bio, skills_teach, skills_learn, avatar_url)
       `)
             .in('status', ['accepted', 'completed'])
             .or(`requester_id.eq.${user.id},receiver_id.eq.${user.id}`)
@@ -177,8 +177,8 @@ export default function ChatPage() {
             .select(`
                 id, status,
                 gig:gigs!gig_id(id, title, price, category),
-                requester:profiles!requester_id(id, full_name, bio),
-                provider:profiles!provider_id(id, full_name, bio),
+                requester:profiles!requester_id(id, full_name, bio, avatar_url),
+                provider:profiles!provider_id(id, full_name, bio, avatar_url),
                 requester_id, provider_id,
                 requester_completed, provider_completed,
                 payment_status, confirmation_deadline, chat_archived_at, clearance_date
@@ -1046,7 +1046,12 @@ export default function ChatPage() {
                             <button className="modal-close" onClick={() => { setShowProfileModal(false); setModalProfile(null); }}>✕</button>
 
                             <div className="modal-header">
-                                <div className="avatar avatar-lg">{initials(modalProfile.full_name)}</div>
+                                <div className="avatar avatar-lg">
+                                    {modalProfile.avatar_url
+                                        ? <img src={modalProfile.avatar_url} alt={modalProfile.full_name} />
+                                        : initials(modalProfile.full_name)
+                                    }
+                                </div>
                                 {/* <div><h2>{modalProfile.full_name}</h2></div> */}
                                 <Link to={`/profile/${modalProfile.id}`}>
                                     <h2>{modalProfile.full_name}</h2>

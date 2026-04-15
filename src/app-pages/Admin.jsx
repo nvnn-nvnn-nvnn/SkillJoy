@@ -49,9 +49,12 @@ export default function AdminPage() {
     const [orders, setOrders] = useState([]);
     const [disputes, setDisputes] = useState([]);
     const [users, setUsers] = useState([]);
+    const [gigs, setGigs] = useState([]);
     const [finances, setFinances] = useState(null);
     const [financesLoading, setFinancesLoading] = useState(false);
     const [tab, setTab] = useState('disputes');
+    const [removeGigId, setRemoveGigId] = useState(null);
+    const [removeReason, setRemoveReason] = useState('');
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState('');
     const [toastType, setToastType] = useState('success');
@@ -65,7 +68,7 @@ export default function AdminPage() {
 
     async function loadAll() {
         setLoading(true);
-        const [ordersRes, disputesRes, usersRes] = await Promise.all([
+        const [ordersRes, disputesRes, usersRes, gigsRes] = await Promise.all([
             supabase
                 .from('gig_requests')
                 .select(`*, gig:gigs(id, title, price), requester:profiles!requester_id(id, full_name), provider:profiles!provider_id(id, full_name)`)
@@ -81,11 +84,17 @@ export default function AdminPage() {
                 .select('id, full_name, created_at')
                 .order('created_at', { ascending: false })
                 .limit(100),
+            supabase
+                .from('gigs')
+                .select('id, title, category, price, created_at, profile:profiles!user_id(id, full_name)')
+                .order('created_at', { ascending: false })
+                .limit(200),
         ]);
 
         if (ordersRes.data) setOrders(ordersRes.data);
         if (disputesRes.data) setDisputes(disputesRes.data);
         if (usersRes.data) setUsers(usersRes.data);
+        if (gigsRes.data) setGigs(gigsRes.data);
         setLoading(false);
     }
 
@@ -139,6 +148,25 @@ export default function AdminPage() {
             loadAll();
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
+        }
+    }
+
+    async function removeGig() {
+        if (!removeGigId) return;
+        try {
+            const res = await apiFetch('/api/admin/remove-gig', {
+                method: 'POST',
+                body: JSON.stringify({ gigId: removeGigId, reason: removeReason.trim() || undefined }),
+            });
+            const data = await res.json();
+            if (!res.ok) { showToast('Error: ' + (data.error || 'Failed'), 'error'); return; }
+            setGigs(prev => prev.filter(g => g.id !== removeGigId));
+            showToast('Gig removed.');
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        } finally {
+            setRemoveGigId(null);
+            setRemoveReason('');
         }
     }
 
@@ -224,8 +252,9 @@ export default function AdminPage() {
                 {[
                     { key: 'disputes', label: 'Disputes', count: disputes.length },
                     { key: 'orders',   label: 'Orders',   count: orders.length },
-                    { key: 'users',    label: 'Users',     count: users.length },
-                    { key: 'finances', label: 'Finances',  count: null },
+                    { key: 'gigs',     label: 'Gigs',     count: gigs.length },
+                    { key: 'users',    label: 'Users',    count: users.length },
+                    { key: 'finances', label: 'Finances', count: null },
                 ].map(t => (
                     <button
                         key={t.key}
@@ -479,6 +508,62 @@ export default function AdminPage() {
                         </div>
                     )}
 
+                    {/* ── Gigs ── */}
+                    {tab === 'gigs' && (
+                        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
+                            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <p style={{ margin: 0, fontWeight: 600, fontSize: 15 }}>All Gigs</p>
+                                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Showing {gigs.length} gigs</span>
+                            </div>
+                            <div style={{ overflowX: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                    <thead>
+                                        <tr style={{ background: 'var(--surface-alt, #f9f8f6)' }}>
+                                            {['Title', 'Seller', 'Category', 'Price', 'Listed', ''].map(h => (
+                                                <th key={h} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {gigs.map((g) => (
+                                            <tr key={g.id} style={{ borderTop: '1px solid var(--border)' }}
+                                                onMouseOver={e => e.currentTarget.style.background = 'var(--surface-alt, #f9f8f6)'}
+                                                onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+                                                <td style={{ padding: '12px 16px', fontWeight: 500, maxWidth: 220 }}>
+                                                    <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.title}</span>
+                                                </td>
+                                                <td style={{ padding: '12px 16px' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                        <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#e0d9f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#5b21b6', flexShrink: 0 }}>
+                                                            {initials(g.profile?.full_name)}
+                                                        </div>
+                                                        {g.profile?.full_name ?? '—'}
+                                                    </div>
+                                                </td>
+                                                <td style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>{g.category ?? '—'}</td>
+                                                <td style={{ padding: '12px 16px', fontWeight: 700 }}>{g.price != null ? `$${g.price.toFixed(2)}` : '—'}</td>
+                                                <td style={{ padding: '12px 16px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                                    {new Date(g.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                </td>
+                                                <td style={{ padding: '12px 16px' }}>
+                                                    <button
+                                                        onClick={() => { setRemoveGigId(g.id); setRemoveReason(''); }}
+                                                        style={{
+                                                            background: '#fff5f5', border: '1.5px solid #fca5a5',
+                                                            color: '#dc2626', padding: '5px 12px', borderRadius: 6,
+                                                            fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                                                        }}>
+                                                        🗑 Remove
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
                     {/* ── Users ── */}
                     {tab === 'users' && (
                         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
@@ -518,6 +603,37 @@ export default function AdminPage() {
                         </div>
                     )}
                 </>
+            )}
+
+            {/* ── Remove Gig Confirm Modal ── */}
+            {removeGigId && (
+                <div className="modal-backdrop" onClick={() => { setRemoveGigId(null); setRemoveReason(''); }}>
+                    <div className="modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+                        <button className="modal-close" onClick={() => { setRemoveGigId(null); setRemoveReason(''); }}>✕</button>
+                        <h2 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 700 }}>Remove gig?</h2>
+                        <p style={{ margin: '0 0 16px', fontSize: 14, color: 'var(--text-muted)' }}>
+                            The gig will be permanently deleted and the owner will be notified.
+                        </p>
+                        <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+                            Reason <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional — sent to user)</span>
+                        </label>
+                        <textarea
+                            value={removeReason}
+                            onChange={e => setRemoveReason(e.target.value)}
+                            placeholder="e.g. Violates community guidelines"
+                            rows={3}
+                            style={{ width: '100%', borderRadius: 8, border: '1px solid var(--border)', padding: '10px 12px', fontSize: 14, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                        />
+                        <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+                            <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => { setRemoveGigId(null); setRemoveReason(''); }}>Cancel</button>
+                            <button
+                                onClick={removeGig}
+                                style={{ flex: 1, background: '#dc2626', border: 'none', color: '#fff', padding: '10px 18px', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                                Remove Gig
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {toast && <div className={`toast ${toastType}`}>{toast}</div>}
