@@ -82,6 +82,31 @@ Shows inside the chat profile modal (click on any conversation partner's name). 
 
 ---
 
+## Block enforcement — profile visibility
+
+**Problem:** Blocked users could still visit the profile of the user who blocked them by navigating directly to `/profile/:userId`. The Supabase anon key can't enforce this because RLS on `blocked_users` only lets you read your *own* block list — the blocked person can't query whether someone else blocked them.
+
+**Fix:**
+
+`backend/routes/users.js` — `GET /api/users/profile/:userId` now checks (using the service key, which bypasses RLS) if the profile owner has blocked the requesting user:
+
+```js
+const { data: block } = await supabase
+    .from('blocked_users')
+    .select('id')
+    .eq('blocker_id', userId)      // profile owner
+    .eq('blocked_id', req.user.id) // person requesting
+    .maybeSingle();
+
+if (block) return res.status(403).json({ error: 'This profile is not available.' });
+```
+
+`src/app-pages/Profile.jsx` — non-own profiles now load via `apiFetch` (hits the backend) instead of Supabase directly. A `403` sets `error = 'blocked_by_owner'`, which renders a neutral "Profile not available" screen with a Go Back button. The blocked user can't tell *why* it's unavailable.
+
+Own profiles still use Supabase directly (no block check needed).
+
+---
+
 ## What blocking does NOT do (yet)
 - Does not hide the blocked user's gigs from browse
 - Does not prevent the blocked user from sending messages in existing conversations

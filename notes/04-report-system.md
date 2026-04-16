@@ -92,6 +92,18 @@ New "Reports" tab with:
 
 ---
 
+## Admin Reports — Clickable Links
+
+The reported entity name and the reporter's name in the Admin Reports tab are both clickable links opening in a new tab:
+
+- **Reported gig** → `/gigs/:reported_id` (GigDetails page)
+- **Reported user** → `/profile/:reported_id` (Profile page)
+- **Reporter name** → `/profile/:reporter.id`
+
+`Link` was added to the `react-router-dom` import in `Admin.jsx`. The `reporter.id` field is returned by the backend `GET /api/admin/reports` via the join `reporter:profiles!reporter_id(id, full_name)`.
+
+---
+
 ## Reason Lists
 ```
 Gig:  Spam or misleading | Inappropriate content | Scam or fraud | Copyright violation | Other

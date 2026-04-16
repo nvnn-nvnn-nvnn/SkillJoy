@@ -11,6 +11,20 @@ router.get('/profile/:userId', async (req, res) => {
         const { userId } = req.params;
         const isOwnProfile = req.user.id === userId;
 
+        // If viewing someone else's profile, check if they have blocked the requester
+        if (!isOwnProfile) {
+            const { data: block } = await supabase
+                .from('blocked_users')
+                .select('id')
+                .eq('blocker_id', userId)
+                .eq('blocked_id', req.user.id)
+                .maybeSingle();
+
+            if (block) {
+                return res.status(403).json({ error: 'This profile is not available.' });
+            }
+        }
+
         const { data: profile, error } = await supabase
             .from('profiles')
             .select(isOwnProfile ? '*' : PUBLIC_FIELDS)

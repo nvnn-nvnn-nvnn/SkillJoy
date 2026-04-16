@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useAuth } from '@/lib/stores';
 import { apiFetch } from '@/lib/api';
@@ -647,7 +647,16 @@ export default function AdminPage() {
                                                     {r.status}
                                                 </span>
                                             </div>
-                                            <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: 15 }}>{r.reported_name}</p>
+                                            <Link
+                                                to={r.reported_type === 'gig' ? `/gigs/${r.reported_id}` : `/profile/${r.reported_id}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                style={{ margin: '0 0 4px', fontWeight: 700, fontSize: 15, color: 'var(--primary)', textDecoration: 'none', display: 'block' }}
+                                                onMouseOver={e => e.currentTarget.style.textDecoration = 'underline'}
+                                                onMouseOut={e => e.currentTarget.style.textDecoration = 'none'}
+                                            >
+                                                {r.reported_name} ↗
+                                            </Link>
                                             {r.reported_owner && (
                                                 <p style={{ margin: '0 0 4px', fontSize: 12, color: 'var(--text-muted)' }}>by {r.reported_owner}</p>
                                             )}
@@ -656,7 +665,18 @@ export default function AdminPage() {
                                                 <p style={{ margin: '0 0 6px', fontSize: 13, color: 'var(--text-secondary)', fontStyle: 'italic' }}>"{r.description}"</p>
                                             )}
                                             <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
-                                                Reported by <strong>{r.reporter?.full_name ?? '—'}</strong> · {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                Reported by{' '}
+                                                <Link
+                                                    to={`/profile/${r.reporter?.id}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    style={{ fontWeight: 600, color: 'var(--text-primary)', textDecoration: 'none' }}
+                                                    onMouseOver={e => e.currentTarget.style.textDecoration = 'underline'}
+                                                    onMouseOut={e => e.currentTarget.style.textDecoration = 'none'}
+                                                >
+                                                    {r.reporter?.full_name ?? '—'}
+                                                </Link>
+                                                {' '}· {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                             </p>
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>

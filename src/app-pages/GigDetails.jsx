@@ -315,13 +315,13 @@ export default function GigDetailsPage() {
                             <button
                                 onClick={() => setShowReport(true)}
                                 style={{
-                                    width: '100%', background: 'none', border: '1px solid var(--border)',
-                                    borderRadius: 8, padding: '8px 14px', fontSize: 13, color: 'var(--text-muted)',
+                                    width: '100%', background: '#1a1a1a', border: '1px solid #1a1a1a',
+                                    borderRadius: 8, padding: '8px 14px', fontSize: 13, color: '#fff',
                                     cursor: 'pointer', fontFamily: 'inherit', marginBottom: 10,
-                                    transition: 'color 0.15s, border-color 0.15s',
+                                    transition: 'background 0.15s, border-color 0.15s',
                                 }}
-                                onMouseOver={e => { e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fca5a5'; }}
-                                onMouseOut={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                                onMouseOver={e => { e.currentTarget.style.background = '#333'; e.currentTarget.style.borderColor = '#333'; }}
+                                onMouseOut={e => { e.currentTarget.style.background = '#1a1a1a'; e.currentTarget.style.borderColor = '#1a1a1a'; }}
                             >
                                 ⚑ Report this gig
                             </button>

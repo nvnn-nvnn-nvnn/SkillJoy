@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useUser, useProfile, useAuth, getSkillName, normalizeSkills, DAYS_OF_WEEK, TIME_PERIODS } from '@/lib/stores';
+import { useUser, useAuth, getSkillName, normalizeSkills, DAYS_OF_WEEK, TIME_PERIODS } from '@/lib/stores';
 import { apiFetch } from '@/lib/api';
 import SkillEditor from '@/components/Skillededitor';
 import ReportModal from '@/components/ReportModal';
@@ -9,12 +9,10 @@ import BlockButton from '@/components/BlockButton';
 
 export default function ProfilePage() {
     const user = useUser();
-    const myProfile = useProfile();
     const { setProfile } = useAuth();
     const navigate = useNavigate();
     const { userId } = useParams();
     const [AllGigs, setAllGigs] = useState([]);
-    const [busy, setBusy] = useState(false);
 
     const [profile, setProfileData] = useState(null);
     const [stats, setStats] = useState({ swapsCompleted: 0, gigsCompleted: 0, avgRating: 0, totalRatings: 0 });
@@ -63,13 +61,24 @@ export default function ProfilePage() {
         setLoading(true);
         const targetId = userId || user.id;
 
-        const { data: profileData, error: profileErr } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', targetId)
-            .single();
-
-        if (profileErr) { setError(profileErr.message); setLoading(false); return; }
+        let profileData;
+        if (isOwnProfile) {
+            // Own profile: fetch directly via Supabase (full fields, no block check needed)
+            const { data, error: profileErr } = await supabase
+                .from('profiles').select('*').eq('id', targetId).single();
+            if (profileErr) { setError(profileErr.message); setLoading(false); return; }
+            profileData = data;
+        } else {
+            // Other user's profile: go through backend which enforces block check
+            const res = await apiFetch(`/api/users/profile/${targetId}`);
+            if (res.status === 403) {
+                setError('blocked_by_owner');
+                setLoading(false);
+                return;
+            }
+            if (!res.ok) { setError('Profile not found.'); setLoading(false); return; }
+            profileData = await res.json();
+        }
 
         setProfileData(profileData);
         setFullName(profileData.full_name || '');
@@ -168,7 +177,6 @@ export default function ProfilePage() {
 // Stripe Load End
 
     async function loadGigs() {
-        setBusy(true);
         const targetId = userId || user.id;
 
         const { data, error } = await supabase
@@ -180,7 +188,6 @@ export default function ProfilePage() {
         if (!error && data) {
             setAllGigs(data);
         }
-        setBusy(false);
     }
 
     useEffect(() => {
@@ -293,6 +300,19 @@ export default function ProfilePage() {
         return (
             <div className="page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
                 <div className="spinner" style={{ width: 40, height: 40, borderWidth: 3 }} />
+            </div>
+        );
+    }
+
+    if (error === 'blocked_by_owner') {
+        return (
+            <div className="page">
+                <div className="empty-state">
+                    <span className="empty-icon">🚫</span>
+                    <h3>Profile not available</h3>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>This profile is not available.</p>
+                    <button className="btn btn-secondary" onClick={() => navigate(-1)}>Go Back</button>
+                </div>
             </div>
         );
     }
