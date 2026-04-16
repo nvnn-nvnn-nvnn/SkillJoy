@@ -270,6 +270,9 @@ export default function MyListingsPage() {
                     )}
 
                     <div className="tabs">
+                        <button className={`tab ${tab === 'create' ? 'active' : ''}`} onClick={() => { resetForm(); setTab('create'); }}>
+                            {editingGig ? '✏ Editing' : '+ New Gig'}
+                        </button>
                         <button className={`tab ${tab === 'listings' ? 'active' : ''}`} onClick={() => setTab('listings')}>
                             My Gigs ({myGigs.length})
                         </button>
@@ -282,9 +285,7 @@ export default function MyListingsPage() {
                         <button className={`tab ${tab === 'completed' ? 'active' : ''}`} onClick={() => setTab('completed')}>
                             Completed ({completed.length})
                         </button>
-                        <button className={`tab ${tab === 'create' ? 'active' : ''}`} onClick={() => { resetForm(); setTab('create'); }}>
-                            {editingGig ? '✏ Editing' : '+ New Gig'}
-                        </button>
+                  
                     </div>
 
 
