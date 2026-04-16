@@ -52,6 +52,8 @@ export default function AdminPage() {
     const [gigs, setGigs] = useState([]);
     const [finances, setFinances] = useState(null);
     const [financesLoading, setFinancesLoading] = useState(false);
+    const [reports, setReports] = useState([]);
+    const [reportsLoading, setReportsLoading] = useState(false);
     const [tab, setTab] = useState('disputes');
     const [removeGigId, setRemoveGigId] = useState(null);
     const [removeReason, setRemoveReason] = useState('');
@@ -118,6 +120,34 @@ export default function AdminPage() {
                 }
             }
             loadAll();
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        }
+    }
+
+    async function loadReports() {
+        setReportsLoading(true);
+        try {
+            const res = await apiFetch('/api/admin/reports');
+            const data = await res.json();
+            if (res.ok) setReports(data);
+            else showToast('Failed to load reports: ' + data.error, 'error');
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        }
+        setReportsLoading(false);
+    }
+
+    async function dismissReport(reportId) {
+        try {
+            const res = await apiFetch('/api/admin/dismiss-report', {
+                method: 'POST',
+                body: JSON.stringify({ reportId }),
+            });
+            const data = await res.json();
+            if (!res.ok) { showToast('Error: ' + (data.error || 'Failed'), 'error'); return; }
+            setReports(prev => prev.filter(r => r.id !== reportId));
+            showToast('Report dismissed.');
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
         }
@@ -255,10 +285,15 @@ export default function AdminPage() {
                     { key: 'gigs',     label: 'Gigs',     count: gigs.length },
                     { key: 'users',    label: 'Users',    count: users.length },
                     { key: 'finances', label: 'Finances', count: null },
+                    { key: 'reports',  label: 'Reports',  count: reports.filter(r => r.status === 'pending').length },
                 ].map(t => (
                     <button
                         key={t.key}
-                        onClick={() => { setTab(t.key); if (t.key === 'finances' && !finances) loadFinances(); }}
+                        onClick={() => {
+                            setTab(t.key);
+                            if (t.key === 'finances' && !finances) loadFinances();
+                            if (t.key === 'reports') loadReports();
+                        }}
                         style={{
                             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                             padding: '9px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
@@ -271,9 +306,9 @@ export default function AdminPage() {
                             <span style={{
                                 fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 100,
                                 background: tab === t.key
-                                    ? (t.key === 'disputes' && t.count > 0 ? '#ef4444' : 'rgba(255,255,255,0.2)')
-                                    : (t.key === 'disputes' && t.count > 0 ? '#ef4444' : 'var(--border)'),
-                                color: tab === t.key ? '#fff' : (t.key === 'disputes' && t.count > 0 ? '#fff' : 'var(--text-muted)'),
+                                    ? ((t.key === 'disputes' || t.key === 'reports') && t.count > 0 ? '#ef4444' : 'rgba(255,255,255,0.2)')
+                                    : ((t.key === 'disputes' || t.key === 'reports') && t.count > 0 ? '#ef4444' : 'var(--border)'),
+                                color: tab === t.key ? '#fff' : ((t.key === 'disputes' || t.key === 'reports') && t.count > 0 ? '#fff' : 'var(--text-muted)'),
                             }}>
                                 {t.count}
                             </span>
@@ -561,6 +596,96 @@ export default function AdminPage() {
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+                    )}
+
+                    {/* ── Reports ── */}
+                    {tab === 'reports' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
+                                    {reports.filter(r => r.status === 'pending').length} pending · {reports.filter(r => r.status === 'dismissed').length} dismissed
+                                </p>
+                                <button
+                                    onClick={loadReports}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text-muted)', padding: '2px 6px' }}
+                                    title="Refresh">↻</button>
+                            </div>
+                            {reportsLoading ? (
+                                <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
+                                    <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+                                </div>
+                            ) : reports.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
+                                    <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+                                    <p style={{ fontWeight: 600, margin: 0 }}>No reports yet</p>
+                                </div>
+                            ) : reports.map(r => (
+                                <div key={r.id} style={{
+                                    background: 'var(--surface)', border: '1px solid var(--border)',
+                                    borderRadius: 14, padding: '18px 20px',
+                                    borderLeft: `4px solid ${r.status === 'dismissed' ? '#d1d5db' : '#f97316'}`,
+                                    opacity: r.status === 'dismissed' ? 0.6 : 1,
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                                <span style={{
+                                                    fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase',
+                                                    background: r.reported_type === 'gig' ? '#eff6ff' : '#faf5ff',
+                                                    color: r.reported_type === 'gig' ? '#1e40af' : '#6b21a8',
+                                                    border: `1px solid ${r.reported_type === 'gig' ? '#bfdbfe' : '#d8b4fe'}`,
+                                                }}>
+                                                    {r.reported_type}
+                                                </span>
+                                                <span style={{
+                                                    fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase',
+                                                    background: r.status === 'dismissed' ? '#f3f4f6' : '#fff7ed',
+                                                    color: r.status === 'dismissed' ? '#6b7280' : '#c2410c',
+                                                    border: `1px solid ${r.status === 'dismissed' ? '#e5e7eb' : '#fdba74'}`,
+                                                }}>
+                                                    {r.status}
+                                                </span>
+                                            </div>
+                                            <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: 15 }}>{r.reported_name}</p>
+                                            {r.reported_owner && (
+                                                <p style={{ margin: '0 0 4px', fontSize: 12, color: 'var(--text-muted)' }}>by {r.reported_owner}</p>
+                                            )}
+                                            <p style={{ margin: '0 0 6px', fontSize: 13, color: '#c2410c', fontWeight: 600 }}>Reason: {r.reason}</p>
+                                            {r.description && (
+                                                <p style={{ margin: '0 0 6px', fontSize: 13, color: 'var(--text-secondary)', fontStyle: 'italic' }}>"{r.description}"</p>
+                                            )}
+                                            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+                                                Reported by <strong>{r.reporter?.full_name ?? '—'}</strong> · {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                            </p>
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+                                            {r.reported_type === 'gig' && r.status === 'pending' && (
+                                                <button
+                                                    onClick={() => { setRemoveGigId(r.reported_id); setRemoveReason(''); }}
+                                                    style={{
+                                                        background: '#fff5f5', border: '1.5px solid #fca5a5',
+                                                        color: '#dc2626', padding: '6px 14px', borderRadius: 8,
+                                                        fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                                                    }}>
+                                                    🗑 Remove Gig
+                                                </button>
+                                            )}
+                                            {r.status === 'pending' && (
+                                                <button
+                                                    onClick={() => dismissReport(r.id)}
+                                                    style={{
+                                                        background: '#f3f4f6', border: '1px solid #e5e7eb',
+                                                        color: '#6b7280', padding: '6px 14px', borderRadius: 8,
+                                                        fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                                                    }}>
+                                                    Dismiss
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     )}
 

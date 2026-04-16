@@ -274,4 +274,61 @@ router.get('/finances', async (req, res) => {
     }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// REPORTS - Admin only
+// ═══════════════════════════════════════════════════════════════════════════
+router.get('/reports', async (req, res) => {
+    try {
+        if (req.user.email !== ADMIN_EMAIL) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        const { data, error } = await supabase
+            .from('reports')
+            .select('*, reporter:profiles!reporter_id(id, full_name)')
+            .order('created_at', { ascending: false });
+
+        if (error) return res.status(500).json({ error: error.message });
+
+        // For each report, fetch the reported entity name
+        const enriched = await Promise.all((data ?? []).map(async (r) => {
+            if (r.reported_type === 'gig') {
+                const { data: gig } = await supabase.from('gigs').select('id, title, user_id, profile:profiles!user_id(full_name)').eq('id', r.reported_id).single();
+                return { ...r, reported_name: gig?.title ?? 'Unknown gig', reported_owner: gig?.profile?.full_name ?? null };
+            } else {
+                const { data: profile } = await supabase.from('profiles').select('id, full_name').eq('id', r.reported_id).single();
+                return { ...r, reported_name: profile?.full_name ?? 'Unknown user' };
+            }
+        }));
+
+        res.json(enriched);
+    } catch (err) {
+        console.error('Fetch reports error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/dismiss-report', async (req, res) => {
+    try {
+        if (req.user.email !== ADMIN_EMAIL) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        const { reportId } = req.body;
+        if (!reportId) return res.status(400).json({ error: 'Missing reportId' });
+
+        const { error } = await supabase
+            .from('reports')
+            .update({ status: 'dismissed' })
+            .eq('id', reportId);
+
+        if (error) return res.status(500).json({ error: error.message });
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Dismiss report error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

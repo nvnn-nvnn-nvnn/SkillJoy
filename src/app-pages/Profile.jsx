@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth, getSkillName, normalizeSkills, DAYS_OF_WEEK, TIME_PERIODS } from '@/lib/stores';
 import { apiFetch } from '@/lib/api';
 import SkillEditor from '@/components/Skillededitor';
+import ReportModal from '@/components/ReportModal';
+import BlockButton from '@/components/BlockButton';
 
 export default function ProfilePage() {
     const user = useUser();
@@ -50,6 +52,8 @@ export default function ProfilePage() {
 
 
     const isOwnProfile = !userId || userId === user?.id;
+    const [showReport, setShowReport] = useState(false);
+    const [isBlocked, setIsBlocked] = useState(false);
 
 
 
@@ -92,6 +96,16 @@ export default function ProfilePage() {
 
         setStats({ swapsCompleted, gigsCompleted, avgRating, totalRatings: ratingsData.length });
         setRatings(ratingsData);
+
+        // Check if this other user is blocked by us
+        if (!isOwnProfile) {
+            const res = await apiFetch('/api/blocks');
+            if (res.ok) {
+                const blocks = await res.json();
+                setIsBlocked(blocks.some(b => b.blocked_id === targetId));
+            }
+        }
+
         setLoading(false);
     }
 
@@ -426,6 +440,29 @@ export default function ProfilePage() {
                             }}>
                                 Sign Out
                             </button>
+                        </div>
+                    )}
+                    {!isOwnProfile && (
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                            <button
+                                onClick={() => setShowReport(true)}
+                                style={{
+                                    background: 'none', border: '1px solid var(--border)',
+                                    borderRadius: 8, padding: '7px 14px', fontSize: 13,
+                                    color: 'var(--text-muted)', cursor: 'pointer',
+                                    fontFamily: 'inherit', transition: 'color 0.15s, border-color 0.15s',
+                                }}
+                                onMouseOver={e => { e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fca5a5'; }}
+                                onMouseOut={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                            >
+                                ⚑ Report user
+                            </button>
+                            <BlockButton
+                                userId={profile?.id}
+                                initialState={isBlocked}
+                                onBlock={() => setIsBlocked(true)}
+                                onUnblock={() => setIsBlocked(false)}
+                            />
                         </div>
                     )}
                     
@@ -991,6 +1028,14 @@ export default function ProfilePage() {
                     }
                 }
             `}</style>
+
+            <ReportModal
+                isOpen={showReport}
+                onClose={() => setShowReport(false)}
+                reportedType="user"
+                reportedId={profile?.id}
+                reportedName={profile?.full_name}
+            />
 
             {showDisconnectModal && (
                 <div className="modal-backdrop" onClick={() => setShowDisconnectModal(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>

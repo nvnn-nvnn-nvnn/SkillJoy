@@ -12,6 +12,8 @@ const adminRoutes = require('./routes/admin.js');
 const stripeConnectRoutes = require('./routes/stripe-connect.js');
 const contactRoutes = require('./routes/contact.js');
 const verifyCollegeRoutes = require('./routes/verify-college.js');
+const reportRoutes = require('./routes/reports.js');
+const blockRoutes = require('./routes/blocks.js');
 const rateLimit = require('express-rate-limit');
 const { sendEmail, getUserEmail, templates } = require('./lib/email');
 const { SERVICE_FEE_CENTS } = require('./config/fees');
@@ -56,6 +58,8 @@ app.use('/api/users', authMiddleware, userRoutes);
 app.use('/api/stripe-connect', authMiddleware, stripeConnectRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/verify-college', authMiddleware, verifyCollegeRoutes);
+app.use('/api/reports', authMiddleware, reportRoutes);
+app.use('/api/blocks', authMiddleware, blockRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

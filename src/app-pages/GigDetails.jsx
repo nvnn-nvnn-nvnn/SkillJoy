@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/stores';
+import ReportModal from '@/components/ReportModal';
 
 function initials(name) {
     if (!name) return '?';
@@ -22,6 +23,7 @@ export default function GigDetailsPage() {
     const [sendingRequest, setSendingRequest] = useState(false);
     const [toast, setToast] = useState('');
     const [toastType, setToastType] = useState('success');
+    const [showReport, setShowReport] = useState(false);
 
     const SERVICE_FEE = parseFloat(import.meta.env.VITE_SERVICE_FEE) || 6.00;
 
@@ -308,6 +310,23 @@ export default function GigDetailsPage() {
                             )}
                         </div>
 
+                        {/* Report Gig */}
+                        {gig.user_id !== user?.id && (
+                            <button
+                                onClick={() => setShowReport(true)}
+                                style={{
+                                    width: '100%', background: 'none', border: '1px solid var(--border)',
+                                    borderRadius: 8, padding: '8px 14px', fontSize: 13, color: 'var(--text-muted)',
+                                    cursor: 'pointer', fontFamily: 'inherit', marginBottom: 10,
+                                    transition: 'color 0.15s, border-color 0.15s',
+                                }}
+                                onMouseOver={e => { e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fca5a5'; }}
+                                onMouseOut={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                            >
+                                ⚑ Report this gig
+                            </button>
+                        )}
+
                         {/* Hire card */}
                         {gig.user_id !== user?.id && (
                             <div className="gd-card gd-hire">
@@ -363,6 +382,14 @@ export default function GigDetailsPage() {
                     </div>
                 </div>
             </div>
+
+            <ReportModal
+                isOpen={showReport}
+                onClose={() => setShowReport(false)}
+                reportedType="gig"
+                reportedId={gig.id}
+                reportedName={gig.title}
+            />
 
             {toast && <div className={`toast ${toastType}`}>{toast}</div>}
 

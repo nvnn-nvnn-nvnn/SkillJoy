@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth, getSkillName } from '@/lib/stores';
 import { apiFetch } from '@/lib/api';
+import BlockButton from '@/components/BlockButton';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -139,29 +140,36 @@ export default function ChatPage() {
         setLoadingConvos(false);
         if (e) { setError('Could not load conversations. Please refresh.'); return; }
 
-        const enriched = await Promise.all((data ?? []).map(async swap => {
+        // Batch fetch last message for all swaps in one query
+        const swapIds = (data ?? []).map(s => s.id);
+        const lastMsgBySwap = {};
+        if (swapIds.length > 0) {
+            const { data: allMsgs } = await supabase
+                .from('messages')
+                .select('content, created_at, sender_id, swap_id')
+                .in('swap_id', swapIds)
+                .order('created_at', { ascending: false });
+            for (const msg of allMsgs ?? []) {
+                if (!lastMsgBySwap[msg.swap_id]) lastMsgBySwap[msg.swap_id] = msg;
+            }
+        }
+
+        const enriched = (data ?? []).map(swap => {
             const iAmRequester = swap.requester_id === user.id;
             const other = iAmRequester ? swap.receiver : swap.requester;
-
             const myTeachEntry = (profile?.skills_teach ?? []).find(s => (typeof s === 'string' ? s : s.name) === swap.teach_skill);
             const theirTeachEntry = (other?.skills_teach ?? []).find(s => (typeof s === 'string' ? s : s.name) === swap.learn_skill);
-
             const teachStars = myTeachEntry ? (typeof myTeachEntry === 'string' ? 3 : myTeachEntry.stars ?? 3) : null;
             const learnStars = theirTeachEntry ? (typeof theirTeachEntry === 'string' ? 3 : theirTeachEntry.stars ?? 3) : null;
-
-            const { data: lastMsgs } = await supabase
-                .from('messages').select('content, created_at, sender_id')
-                .eq('swap_id', swap.id).order('created_at', { ascending: false }).limit(1);
-
             return {
                 swap_id: swap.id, status: swap.status, other,
                 teach_skill: swap.teach_skill, learn_skill: swap.learn_skill,
                 requester_id: swap.requester_id, receiver_id: swap.receiver_id,
                 requester_completed: swap.requester_completed,
                 receiver_completed: swap.receiver_completed,
-                teachStars, learnStars, lastMsg: lastMsgs?.[0] ?? null,
+                teachStars, learnStars, lastMsg: lastMsgBySwap[swap.id] ?? null,
             };
-        }));
+        });
 
         setConversations(enriched);
         return enriched;
@@ -190,33 +198,44 @@ export default function ChatPage() {
         setLoadingConvos(false);
         if (e) { setError('Could not load conversations. Please refresh.'); return; }
 
-        const enriched = await Promise.all((data ?? []).map(async req => {
+        const gigReqIds = (data ?? []).map(r => r.id);
+        const otherUserIds = [...new Set((data ?? []).map(r => r.provider_id === user.id ? r.requester_id : r.provider_id))];
+
+        const lastMsgByReq = {};
+        const ratingsByUserId = {};
+
+        // Batch: one query for all last messages, one for all ratings
+        await Promise.all([
+            gigReqIds.length > 0 && supabase
+                .from('messages')
+                .select('content, created_at, sender_id, gig_request_id')
+                .in('gig_request_id', gigReqIds)
+                .order('created_at', { ascending: false })
+                .then(({ data: allMsgs }) => {
+                    for (const msg of allMsgs ?? []) {
+                        if (!lastMsgByReq[msg.gig_request_id]) lastMsgByReq[msg.gig_request_id] = msg;
+                    }
+                }),
+            otherUserIds.length > 0 && supabase
+                .from('ratings')
+                .select('rating, rated_id')
+                .in('rated_id', otherUserIds)
+                .then(({ data: allRatings }) => {
+                    for (const r of allRatings ?? []) {
+                        if (!ratingsByUserId[r.rated_id]) ratingsByUserId[r.rated_id] = [];
+                        ratingsByUserId[r.rated_id].push(r.rating);
+                    }
+                }),
+        ].filter(Boolean));
+
+        const enriched = (data ?? []).map(req => {
             const isProvider = req.provider_id === user.id;
             const other = isProvider ? req.requester : req.provider;
-
-            const { data: lastMsgs } = await supabase
-                .from('messages')
-                .select('content, created_at, sender_id')
-                .eq('gig_request_id', req.id)
-                .order('created_at', { ascending: false })
-                .limit(1);
-
-
-            // Profile Ratings
-            const { data: ratings } = await supabase
-                .from("ratings")
-                .select('rating')
-                .eq('rated_id', other.id)
-
-            const avgRating = ratings?.length
-                ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1)
+            const userRatings = ratingsByUserId[other?.id] ?? [];
+            const avgRating = userRatings.length
+                ? (userRatings.reduce((s, r) => s + r, 0) / userRatings.length).toFixed(1)
                 : null;
-
-            const ratingCount = ratings?.length ?? 0;
-
-
-
-
+            const ratingCount = userRatings.length;
             return {
                 gig_request_id: req.id, status: req.status,
                 gig: req.gig,
@@ -225,17 +244,14 @@ export default function ChatPage() {
                 provider_completed: req.provider_completed,
                 payment_status: req.payment_status,
                 confirmation_deadline: req.confirmation_deadline,
+                auto_release_date: req.confirmation_deadline,
                 chat_archived_at: req.chat_archived_at,
                 clearance_date: req.clearance_date,
                 isProvider,
-                lastMsg: lastMsgs?.[0] ?? null,
-                other: { ...other, avgRating, ratingCount }
+                lastMsg: lastMsgByReq[req.id] ?? null,
+                other: { ...other, avgRating, ratingCount },
             };
-
-
-
-
-        }));
+        });
 
         setGigConversations(enriched);
         return enriched;
@@ -434,78 +450,6 @@ export default function ChatPage() {
 
     function closeRatingModal() { setShowRatingModal(false); setRatingValue(0); setRatingComment(''); }
 
-    // ── Complete gig ──────────────────────────────────────────────────────────
-
-    async function markGigComplete(gigReqId) {
-        if (!activeConvo) return;
-        const isRequester = activeConvo.requester_id === user.id;
-        const fieldToUpdate = isRequester ? 'requester_completed' : 'provider_completed';
-
-        // Update our completed field (ownership check ensures only this user's row is touched)
-        const ownerField = isRequester ? 'requester_id' : 'provider_id';
-        const { error: e } = await supabase.from('gig_requests').update({ [fieldToUpdate]: true }).eq('id', gigReqId).eq(ownerField, user.id);
-        if (e) { setError(e.message); return; }
-
-        // Verify the update actually persisted (RLS may silently block it)
-        const { data: row } = await supabase.from('gig_requests').select('requester_completed, provider_completed').eq('id', gigReqId).single();
-        const myFieldActuallyUpdated = row?.[fieldToUpdate] === true;
-
-        if (!myFieldActuallyUpdated) {
-            // RLS blocked the update — try via RPC as fallback
-            const { error: rpcErr } = await supabase.rpc('mark_gig_completed', {
-                gig_req_id: gigReqId,
-                field_name: fieldToUpdate
-            });
-            if (rpcErr) {
-                setError('Could not save your vote. Please check database permissions for gig_requests updates.');
-                return;
-            }
-            // Re-fetch after RPC
-            const { data: row2 } = await supabase.from('gig_requests').select('requester_completed, provider_completed').eq('id', gigReqId).single();
-            if (!row2?.[fieldToUpdate]) {
-                setError('Could not save your vote. Please check database permissions for gig_requests updates.');
-                return;
-            }
-            Object.assign(row, row2);
-        }
-
-        const bothDone = row?.requester_completed && row?.provider_completed;
-
-        // Update local state immediately
-        setGigConversations(prev => prev.map(c =>
-            c.gig_request_id === gigReqId
-                ? { ...c, requester_completed: row.requester_completed, provider_completed: row.provider_completed }
-                : c
-        ));
-        setShowProfileModal(false);
-        setModalProfile(null);
-
-        if (bothDone) {
-            setActiveTab('completed');
-            showToast('Gig completed!');
-            await checkAndShowGigRatingModal(gigReqId);
-        } else {
-            showToast('Marked as complete. Waiting for other party. (1/2)');
-        }
-    }
-
-    async function unmarkGigComplete(gigReqId) {
-        if (!activeConvo) return;
-        const isReq = activeConvo.requester_id === user.id;
-        const field = isReq ? 'requester_completed' : 'provider_completed';
-        const upd = { [field]: false };
-        if (activeConvo.status === 'completed') upd.status = 'accepted';
-
-        const ownerField = isReq ? 'requester_id' : 'provider_id';
-        const { error: err } = await supabase.from('gig_requests').update(upd).eq('id', gigReqId).eq(ownerField, user.id);
-        if (err) { setError(err.message); return; }
-        setGigConversations(prev => prev.map(c =>
-            c.gig_request_id === gigReqId
-                ? { ...c, [field]: false, ...(activeConvo.status === 'completed' ? { status: 'accepted' } : {}) }
-                : c
-        ));
-        showToast('Vote removed.');
-    }
 
     async function checkAndShowGigRatingModal(gigReqId) {
         const { data: existing, error: err } = await supabase
@@ -720,13 +664,11 @@ export default function ChatPage() {
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
         (async () => {
-            const convos = await loadConversations();
-            await loadGigConversations();
+            const [convos, gigConvos] = await Promise.all([loadConversations(), loadGigConversations()]);
             const swapParam = searchParams.get('swap');
             const gigParam = searchParams.get('gig');
             if (gigParam) {
                 setChatMode('gigs');
-                const gigConvos = await loadGigConversations();
                 const found = gigConvos?.find(c => c.gig?.id === gigParam);
                 if (found) await selectConversation(found.gig_request_id, 'gigs');
             } else if (swapParam) {
@@ -1187,7 +1129,7 @@ export default function ChatPage() {
                                         )}
 
 
-                                        {activeConvo.isProvider && activeConvo.payment_status == 'escrowed' && activeConvo.status == "delivered" && (
+                                        {activeConvo.isProvider && activeConvo.payment_status === 'escrowed' && activeConvo.status === 'delivered' && (
 
                                             <button
                                                 className='btn btn-primary'
@@ -1345,6 +1287,10 @@ export default function ChatPage() {
                                     )}
                                 </div>
                             )}
+
+                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                <BlockButton userId={modalProfile.id} />
+                            </div>
                         </div>
                     </div >
                 )
@@ -1565,7 +1511,7 @@ export default function ChatPage() {
             .bubble-theirs { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 4px; }
 
             /* Composer */
-            .composer { display: flex; align-items: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); background: #a06840; flex-shrink: 0; }
+            .composer { display: flex; align-items: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
             .composer-input { flex: 1; resize: none; border: 1px solid var(--border); border-radius: var(--r-lg); padding: 10px 16px; font-size: 14px; font-family: var(--font-body); color: var(--text); background: white; outline: none; overflow-y: hidden; line-height: 1.5; transition: border-color 0.15s, height 0.1s ease; }
             .composer-input:focus { border-color: var(--primary); }
             .composer-send { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: var(--r-full); flex-shrink: 0; }
