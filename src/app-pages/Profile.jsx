@@ -9,7 +9,7 @@ import BlockButton from '@/components/BlockButton';
 
 export default function ProfilePage() {
     const user = useUser();
-    const { setProfile } = useAuth();
+    const { setProfile, loading: authLoading } = useAuth();
     const navigate = useNavigate();
     const { userId } = useParams();
     const [AllGigs, setAllGigs] = useState([]);
@@ -62,22 +62,26 @@ export default function ProfilePage() {
         const targetId = userId || user.id;
 
         let profileData;
-        if (isOwnProfile) {
-            // Own profile: fetch directly via Supabase (full fields, no block check needed)
-            const { data, error: profileErr } = await supabase
-                .from('profiles').select('*').eq('id', targetId).single();
-            if (profileErr) { setError(profileErr.message); setLoading(false); return; }
-            profileData = data;
-        } else {
-            // Other user's profile: go through backend which enforces block check
-            const res = await apiFetch(`/api/users/profile/${targetId}`);
-            if (res.status === 403) {
-                setError('blocked_by_owner');
-                setLoading(false);
-                return;
+        try {
+            if (isOwnProfile) {
+                const { data, error: profileErr } = await supabase
+                    .from('profiles').select('*').eq('id', targetId).single();
+                if (profileErr) { setError(profileErr.message); setLoading(false); return; }
+                profileData = data;
+            } else {
+                const res = await apiFetch(`/api/users/profile/${targetId}`);
+                if (res.status === 403) {
+                    setError('blocked_by_owner');
+                    setLoading(false);
+                    return;
+                }
+                if (!res.ok) { setError('Profile not found.'); setLoading(false); return; }
+                profileData = await res.json();
             }
-            if (!res.ok) { setError('Profile not found.'); setLoading(false); return; }
-            profileData = await res.json();
+        } catch {
+            setError('Could not load profile. Please try again.');
+            setLoading(false);
+            return;
         }
 
         setProfileData(profileData);
@@ -191,10 +195,11 @@ export default function ProfilePage() {
     }
 
     useEffect(() => {
+        if (authLoading) return;
         if (!user) { navigate('/login'); return; }
         loadProfile(); // eslint-disable-line react-hooks/set-state-in-effect
         loadGigs();
-    }, [user, userId]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [user, userId, authLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
     async function handleSendCollegeVerification() {
         setCollegeError('');

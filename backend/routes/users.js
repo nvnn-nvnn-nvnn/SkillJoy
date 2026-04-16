@@ -4,7 +4,7 @@ const supabase = require('../config/supabase');
 
 // Placeholder user routes - add as needed
 
-const PUBLIC_FIELDS = 'id, full_name, bio, avatar_url, service_type, availability, college, college_verified';
+const PUBLIC_FIELDS = 'id, full_name, bio, avatar_url, service_type, availability, college, college_verified, skills_teach, skills_learn, offers_gigs, points';
 
 router.get('/profile/:userId', async (req, res) => {
     try {

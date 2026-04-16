@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useUser } from '@/lib/stores';
+import { useUser, useAuth } from '@/lib/stores';
 import ReportModal from '@/components/ReportModal';
 
 function initials(name) {
@@ -12,6 +12,7 @@ function initials(name) {
 export default function GigDetailsPage() {
     const { gigId } = useParams();
     const user = useUser();
+    const { loading: authLoading } = useAuth();
     const navigate = useNavigate();
 
     const [gig, setGig] = useState(null);
@@ -28,9 +29,10 @@ export default function GigDetailsPage() {
     const SERVICE_FEE = parseFloat(import.meta.env.VITE_SERVICE_FEE) || 6.00;
 
     useEffect(() => {
+        if (authLoading) return;
         if (!user) { navigate('/login'); return; }
         loadGigDetails();
-    }, [gigId, user]);
+    }, [gigId, user, authLoading]);
 
     async function loadGigDetails() {
         setLoading(true);

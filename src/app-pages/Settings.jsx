@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth } from '@/lib/stores';
+import { apiFetch } from '@/lib/api';
 
 export default function SettingsPage() {
     const user = useUser();
@@ -25,6 +26,8 @@ export default function SettingsPage() {
     const [toastType, setToastType] = useState('success');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteInput, setDeleteInput] = useState('');
+    const [blockedUsers, setBlockedUsers] = useState([]);
+    const [unblockingId, setUnblockingId] = useState(null);
 
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
@@ -34,7 +37,20 @@ export default function SettingsPage() {
             if (profile.notification_prefs) setNotificationPrefs(profile.notification_prefs);
             if (profile.privacy_settings) setPrivacySettings(profile.privacy_settings);
         }
+        loadBlockedUsers();
     }, [user, profile]);
+
+    async function loadBlockedUsers() {
+        const res = await apiFetch('/api/blocks');
+        if (res.ok) setBlockedUsers(await res.json());
+    }
+
+    async function handleUnblock(blockedId) {
+        setUnblockingId(blockedId);
+        const res = await apiFetch('/api/blocks/unblock', { method: 'POST', body: JSON.stringify({ blockedId }) });
+        if (res.ok) setBlockedUsers(prev => prev.filter(b => b.blocked_id !== blockedId));
+        setUnblockingId(null);
+    }
 
     async function updateEmail() {
         if (!email || email === user.email) { showToast('Please enter a new email address', 'error'); return; }
@@ -214,6 +230,38 @@ export default function SettingsPage() {
                 <button className="sj-btn sj-btn-primary" onClick={savePrivacySettings} disabled={saving} style={{ marginTop: 8 }}>
                     {saving ? 'Saving…' : 'Save settings'}
                 </button>
+            </section>
+
+            {/* Blocked Users */}
+            <section className="sj-card">
+                <h2 className="sj-section-title">Blocked Users</h2>
+                {blockedUsers.length === 0 ? (
+                    <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>You haven't blocked anyone.</p>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {blockedUsers.map(b => (
+                            <div key={b.blocked_id} style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    {b.blocked?.avatar_url
+                                        ? <img src={b.blocked.avatar_url} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+                                        : <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, color: 'var(--text-muted)' }}>
+                                            {b.blocked?.full_name?.[0]?.toUpperCase() ?? '?'}
+                                          </div>
+                                    }
+                                    <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>{b.blocked?.full_name ?? 'Unknown user'}</span>
+                                </div>
+                                <button
+                                    className="sj-btn"
+                                    style={{ fontSize: 13, padding: '5px 14px' }}
+                                    disabled={unblockingId === b.blocked_id}
+                                    onClick={() => handleUnblock(b.blocked_id)}
+                                >
+                                    {unblockingId === b.blocked_id ? 'Unblocking…' : 'Unblock'}
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </section>
 
             {/* Danger Zone */}
