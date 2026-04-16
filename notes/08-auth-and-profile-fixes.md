@@ -43,8 +43,10 @@ Viewing another user's profile showed "Profile not found" or an infinite spinner
 
 `backend/routes/users.js` — expanded PUBLIC_FIELDS:
 ```js
-const PUBLIC_FIELDS = 'id, full_name, bio, avatar_url, service_type, availability, college, college_verified, skills_teach, skills_learn, offers_gigs, points';
+const PUBLIC_FIELDS = 'id, full_name, bio, avatar_url, service_type, availability, college_verified, skills_teach, skills_learn, offers_gigs, points';
 ```
+
+**Gotcha / follow-up bug:** The first attempt at this fix included a `college` column in PUBLIC_FIELDS — that column does NOT exist on the profiles table (the real columns are `college_email`, `college_verified`, `college_verify_token`, `college_verify_expires_at`, `university_domain`). Supabase returned a "column does not exist" error, the backend caught it and returned 404, and the frontend kept showing "👤 Profile not found". Removed `college` from PUBLIC_FIELDS — only `college_verified` is needed for the public badge display.
 
 `src/app-pages/Profile.jsx` — wrapped the fetch block in try-catch:
 ```js
