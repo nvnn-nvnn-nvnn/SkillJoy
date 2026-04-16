@@ -61,42 +61,65 @@ export default function AdminPage() {
     const [toast, setToast] = useState('');
     const [toastType, setToastType] = useState('success');
 
+    // Auth guard + initial full load
     useEffect(() => {
         if (authLoading) return;
         if (!user) { navigate('/login'); return; }
         if (user.email !== ADMIN_EMAIL) { navigate('/'); return; }
         loadAll();
+        loadReports(); // seed badge count immediately
     }, [user, authLoading]);
+
+    // Refresh active tab's data whenever the tab changes
+    useEffect(() => {
+        if (!user || user.email !== ADMIN_EMAIL || authLoading) return;
+        if (tab === 'orders')    loadOrders();
+        if (tab === 'disputes')  loadDisputes();
+        if (tab === 'users')     loadUsers();
+        if (tab === 'gigs')      loadGigs();
+        if (tab === 'finances')  loadFinances();
+        if (tab === 'reports')   loadReports();
+    }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    async function loadOrders() {
+        const { data } = await supabase
+            .from('gig_requests')
+            .select(`*, gig:gigs(id, title, price), requester:profiles!requester_id(id, full_name), provider:profiles!provider_id(id, full_name)`)
+            .order('created_at', { ascending: false })
+            .limit(100);
+        if (data) setOrders(data);
+    }
+
+    async function loadDisputes() {
+        const { data } = await supabase
+            .from('gig_requests')
+            .select(`*, gig:gigs(id, title), requester:profiles!requester_id(id, full_name), provider:profiles!provider_id(id, full_name)`)
+            .eq('payment_status', 'disputed')
+            .order('dispute_date', { ascending: false });
+        if (data) setDisputes(data);
+    }
+
+    async function loadUsers() {
+        const { data } = await supabase
+            .from('profiles')
+            .select('id, full_name, created_at')
+            .order('created_at', { ascending: false })
+            .limit(100);
+        if (data) setUsers(data);
+    }
+
+    async function loadGigs() {
+        const { data } = await supabase
+            .from('gigs')
+            .select('id, title, category, price, created_at, profile:profiles!user_id(id, full_name)')
+            .order('created_at', { ascending: false })
+            .limit(200);
+        if (data) setGigs(data);
+    }
 
     async function loadAll() {
         setLoading(true);
-        const [ordersRes, disputesRes, usersRes, gigsRes] = await Promise.all([
-            supabase
-                .from('gig_requests')
-                .select(`*, gig:gigs(id, title, price), requester:profiles!requester_id(id, full_name), provider:profiles!provider_id(id, full_name)`)
-                .order('created_at', { ascending: false })
-                .limit(100),
-            supabase
-                .from('gig_requests')
-                .select(`*, gig:gigs(id, title), requester:profiles!requester_id(id, full_name), provider:profiles!provider_id(id, full_name)`)
-                .eq('payment_status', 'disputed')
-                .order('dispute_date', { ascending: false }),
-            supabase
-                .from('profiles')
-                .select('id, full_name, created_at')
-                .order('created_at', { ascending: false })
-                .limit(100),
-            supabase
-                .from('gigs')
-                .select('id, title, category, price, created_at, profile:profiles!user_id(id, full_name)')
-                .order('created_at', { ascending: false })
-                .limit(200),
-        ]);
-
-        if (ordersRes.data) setOrders(ordersRes.data);
-        if (disputesRes.data) setDisputes(disputesRes.data);
-        if (usersRes.data) setUsers(usersRes.data);
-        if (gigsRes.data) setGigs(gigsRes.data);
+        await Promise.all([loadOrders(), loadDisputes(), loadUsers(), loadGigs()]);
         setLoading(false);
     }
 
@@ -289,11 +312,7 @@ export default function AdminPage() {
                 ].map(t => (
                     <button
                         key={t.key}
-                        onClick={() => {
-                            setTab(t.key);
-                            if (t.key === 'finances' && !finances) loadFinances();
-                            if (t.key === 'reports') loadReports();
-                        }}
+                        onClick={() => setTab(t.key)}
                         style={{
                             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                             padding: '9px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
