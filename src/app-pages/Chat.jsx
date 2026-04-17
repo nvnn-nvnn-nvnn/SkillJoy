@@ -29,7 +29,7 @@ function formatLastMsg(lastMsg, userId) {
 const RATING_LABELS = ['', 'Terrible experience', 'Poor experience', 'Average experience', 'Good experience', 'Greatest experience!'];
 
 function isGigCompleted(c) { return c.requester_completed && c.provider_completed || c.status === 'withdrawn' || c.status === 'completed' || c.status === 'cancelled' || c.payment_status === 'withdrawn' || c.payment_status === 'refunded'; }
-function isSwapCompleted(c) { return c.requester_completed && c.receiver_completed; }
+function isSwapCompleted(c) { return (c.requester_completed && c.receiver_completed) || c.status === 'cancelled'; }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -648,6 +648,27 @@ export default function ChatPage() {
     }
 
 
+    // Cancel Swaps from Supabase
+
+    async function cancelSwap(swapId) {
+        
+        // Cancel Swap
+
+        const {error} = await supabase
+            .from('swaps')
+            .update({status: 'cancelled'})
+            .eq('id', swapId);
+
+        if (error) { console.error('cancelSwap error:', error); showToast('Failed to cancel swap'); return; }
+            setConversations(prev => prev.map(c =>
+                c.swap_id === swapId ? { ...c, status: 'cancelled' } : c
+            ));
+            showToast('Swap cancelled.');
+
+
+    }
+
+
     // Lock body scroll on mobile so the footer doesn't create a scrollable gap
     useEffect(() => {
         document.body.style.overflow = 'hidden';
@@ -1031,9 +1052,25 @@ export default function ChatPage() {
                                                 Mark Swap as Complete
                                             </button>
                                         )}
+                                        {/* Cancel Button */}
+                                        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+                                            <button
+                                                className="btn btn-secondary"
+                                                style={{ width: '100%', color: '#dc2626', borderColor: '#fca5a5' }}
+                                                onClick={() => cancelSwap(activeConvo.swap_id)}
+                                            >
+                                                Cancel Swap
+                                            </button>
+                                        </div>
                                     </div>
                                 );
                             })()}
+
+                            {chatMode === 'swaps' && activeConvo?.status === 'cancelled' && (
+                                <div style={{ padding: '12px 14px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, color: '#4b5563', marginBottom: 16 }}>
+                                    ✕ This swap was cancelled.
+                                </div>
+                            )}
 
                             {chatMode === 'gigs' && activeConvo?.gig && (
                                 <div className="modal-section">
