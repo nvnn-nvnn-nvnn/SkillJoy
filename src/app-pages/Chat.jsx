@@ -133,7 +133,7 @@ export default function ChatPage() {
         requester:profiles!requester_id(id, full_name, bio, skills_teach, skills_learn, avatar_url),
         receiver:profiles!receiver_id(id, full_name, bio, skills_teach, skills_learn, avatar_url)
       `)
-            .in('status', ['accepted', 'completed'])
+            .in('status', ['accepted', 'completed', 'cancelled'])
             .or(`requester_id.eq.${user.id},receiver_id.eq.${user.id}`)
             .order('created_at', { ascending: false });
 
