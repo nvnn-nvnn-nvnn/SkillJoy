@@ -19,7 +19,7 @@ export default function Header() {
 
   function closeMenu() { setMenuOpen(false); }
 
-  if (loading || !user) return null;
+  if (loading || !user || currentPath === '/login') return null;
 
   return (
     <>
