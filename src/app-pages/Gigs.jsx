@@ -78,20 +78,19 @@ export default function GigsPage() {
 
     async function loadFavorites() {
         if (!user) return;
-        const { data } = await supabase.from('favorites').select('favorited_id').eq('user_id', user.id).eq('type', 'gig');
+        const { data } = await supabase.from('favorites').select('favorited_id').eq('user_id', user.id);
         if (data) setFavorites(data.map(f => f.favorited_id));
     }
 
-    async function toggleFavorite(odId) {
+    async function toggleFavorite(gigId) {
         if (!user) return;
-        const isFav = favorites.includes(odId);
-        // Optimistic update
-        setFavorites(isFav ? favorites.filter(id => id !== odId) : [...favorites, odId]);
+        const isFav = favorites.includes(gigId);
+        const prev = favorites;
+        setFavorites(isFav ? favorites.filter(id => id !== gigId) : [...favorites, gigId]);
         const { error } = isFav
-            ? await supabase.from('favorites').delete().eq('user_id', user.id).eq('favorited_id', odId).eq('type', 'gig')
-            : await supabase.from('favorites').insert({ user_id: user.id, favorited_id: odId, type: 'gig' });
-        // Rollback on failure
-        if (error) setFavorites(isFav ? [...favorites, odId] : favorites.filter(id => id !== odId));
+            ? await supabase.from('favorites').delete().eq('user_id', user.id).eq('favorited_id', gigId)
+            : await supabase.from('favorites').insert({ user_id: user.id, favorited_id: gigId });
+        if (error) setFavorites(prev);
     }
 
     function loadRecentSearches() {
@@ -314,9 +313,9 @@ export default function GigsPage() {
                         <button
                             className={`btn ${showFavoritesOnly ? 'btn-primary' : 'btn-secondary'}`}
                             onClick={() => setShowFavoritesOnly(v => !v)}
-                            style={{ padding: '10px 16px', backgroundColor: "#fff" }}
+                            style={{ padding: '10px 16px', ...(showFavoritesOnly ? {} : { backgroundColor: '#fff' }) }}
                         >
-                            ⭐ Favorites {showFavoritesOnly ? '✓' : ''}
+                            ⭐ {showFavoritesOnly ? 'Favorites ✓' : 'Favorites'}
                         </button>
                     </div>
 
@@ -928,19 +927,21 @@ export default function GigsPage() {
         /* ── Favorite button ── */
         .sj-fav-btn {
             position: absolute;
-            top: 12px; right: 12px;
+            top: 8px; right: 8px;
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 50%;
-            width: 32px; height: 32px;
+            width: 40px; height: 40px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 18px;
             z-index: 10;
             box-shadow: 0 2px 4px rgba(0,0,0,0.08);
             transition: transform 0.12s, background 0.14s;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
         }
         .sj-fav-btn:hover { transform: scale(1.12); }
         .sj-fav-btn-active { background: #fbbf24; border-color: #fbbf24; }

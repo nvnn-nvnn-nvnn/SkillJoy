@@ -248,7 +248,7 @@ export default function AdminPage() {
             <title>Admin — SkillJoy</title>
 
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32, flexWrap: 'wrap', gap: 12 }}>
                 <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
                         <span style={{ fontSize: 22 }}>🛡️</span>
@@ -301,7 +301,7 @@ export default function AdminPage() {
             </div>
 
             {/* Tabs */}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 6 }}>
+            <div className="admin-tabs-bar">
                 {[
                     { key: 'disputes', label: 'Disputes', count: disputes.length },
                     { key: 'orders',   label: 'Orders',   count: orders.length },
@@ -313,22 +313,10 @@ export default function AdminPage() {
                     <button
                         key={t.key}
                         onClick={() => setTab(t.key)}
-                        style={{
-                            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                            padding: '9px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                            fontSize: 14, fontWeight: 600, transition: 'all 0.15s',
-                            background: tab === t.key ? '#1a1a1a' : 'transparent',
-                            color: tab === t.key ? '#fff' : 'var(--text-muted)',
-                        }}>
+                        className={`admin-tab${tab === t.key ? ' admin-tab-active' : ''}`}>
                         {t.label}
                         {t.count !== null && (
-                            <span style={{
-                                fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 100,
-                                background: tab === t.key
-                                    ? ((t.key === 'disputes' || t.key === 'reports') && t.count > 0 ? '#ef4444' : 'rgba(255,255,255,0.2)')
-                                    : ((t.key === 'disputes' || t.key === 'reports') && t.count > 0 ? '#ef4444' : 'var(--border)'),
-                                color: tab === t.key ? '#fff' : ((t.key === 'disputes' || t.key === 'reports') && t.count > 0 ? '#fff' : 'var(--text-muted)'),
-                            }}>
+                            <span className={`admin-tab-badge${(t.key === 'disputes' || t.key === 'reports') && t.count > 0 ? ' admin-tab-badge-alert' : ''}`}>
                                 {t.count}
                             </span>
                         )}
@@ -801,6 +789,71 @@ export default function AdminPage() {
             )}
 
             {toast && <div className={`toast ${toastType}`}>{toast}</div>}
+
+            <style>{`
+                .admin-tabs-bar {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 6px;
+                    margin-bottom: 20px;
+                    background: var(--surface);
+                    border: 1px solid var(--border);
+                    border-radius: 12px;
+                    padding: 6px;
+                }
+                .admin-tab {
+                    flex: 1 1 auto;
+                    min-width: 80px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 7px;
+                    padding: 9px 14px;
+                    border-radius: 8px;
+                    border: none;
+                    cursor: pointer;
+                    font-size: 14px;
+                    font-weight: 600;
+                    transition: all 0.15s;
+                    background: transparent;
+                    color: var(--text-muted);
+                    white-space: nowrap;
+                    font-family: inherit;
+                }
+                .admin-tab-active {
+                    background: #1a1a1a;
+                    color: #fff;
+                }
+                .admin-tab-badge {
+                    font-size: 11px;
+                    font-weight: 700;
+                    padding: 1px 6px;
+                    border-radius: 100px;
+                    background: var(--border);
+                    color: var(--text-muted);
+                }
+                .admin-tab-active .admin-tab-badge {
+                    background: rgba(255,255,255,0.2);
+                    color: #fff;
+                }
+                .admin-tab-badge-alert {
+                    background: #ef4444 !important;
+                    color: #fff !important;
+                }
+                @media (max-width: 600px) {
+                    .admin-tabs-bar {
+                        gap: 4px;
+                        padding: 4px;
+                    }
+                    .admin-tab {
+                        flex: 1 1 calc(33% - 8px);
+                        min-width: 0;
+                        font-size: 12px;
+                        padding: 8px 6px;
+                        gap: 4px;
+                    }
+                }
+            `}</style>
         </div>
     );
 }

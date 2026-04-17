@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import SkillJoyLogo3 from '../../assets/SkillJoy-Logo2.svg'
 
 export default function LoginPage() {
-    const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
+    const [mode, setMode] = useState('signin'); // 'signin' | 'signup' | 'reset'
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -27,6 +27,12 @@ export default function LoginPage() {
                 const { error: e } = await supabase.auth.signUp({ email, password });
                 if (e) throw e;
                 setSuccess('Check your email to confirm your account, then sign in.');
+            } else if (mode === 'reset') {
+                const { error: e } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: window.location.origin + '/login',
+                });
+                if (e) throw e;
+                setSuccess('Check your email for a password reset link.');
             } else {
                 const { error: e } = await supabase.auth.signInWithPassword({ email, password });
                 if (e) throw e;
@@ -51,27 +57,25 @@ export default function LoginPage() {
         setSuccess('');
     }
 
+    const titles = { signup: 'Create your account', signin: 'Welcome back', reset: 'Reset your password' };
+    const subs = {
+        signup: 'Start swapping skills with students on your campus.',
+        signin: 'Sign in to see your matches and swaps.',
+        reset: 'Enter your email and we\'ll send you a reset link.',
+    };
+
     return (
         <>
             <title>Sign in — SkillJoy</title>
 
             <div className="login-bg">
                 <div className="login-card fade-up">
-                    {/* <a href="/" className="login-logo">
-                        Skill<span>Joy</span>
-                    </a> */}
-                    <img 
+                    <img
                     style={{ height: '45px'}}
                     src={SkillJoyLogo3} alt="" />
 
-                    <h1 className="login-title">
-                        {mode === 'signup' ? 'Create your account' : 'Welcome back'}
-                    </h1>
-                    <p className="login-sub">
-                        {mode === 'signup'
-                            ? 'Start swapping skills with students on your campus.'
-                            : 'Sign in to see your matches and swaps.'}
-                    </p>
+                    <h1 className="login-title">{titles[mode]}</h1>
+                    <p className="login-sub">{subs[mode]}</p>
 
                     <form onSubmit={submit} className="login-form">
                         <div className="field">
@@ -87,19 +91,33 @@ export default function LoginPage() {
                             />
                         </div>
 
-                        <div className="field">
-                            <label htmlFor="password">Password</label>
-                            <input
-                                id="password"
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••'}
-                                required
-                                minLength={6}
-                                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                            />
-                        </div>
+                        {mode !== 'reset' && (
+                            <div className="field">
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                    <label htmlFor="password" style={{ margin: 0 }}>Password</label>
+                                    {mode === 'signin' && (
+                                        <button
+                                            type="button"
+                                            className="btn-text"
+                                            style={{ fontSize: 13 }}
+                                            onClick={() => switchMode('reset')}
+                                        >
+                                            Forgot password?
+                                        </button>
+                                    )}
+                                </div>
+                                <input
+                                    id="password"
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••'}
+                                    required
+                                    minLength={6}
+                                    autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                                />
+                            </div>
+                        )}
 
                         {error && <p className="form-error">{error}</p>}
                         {success && <p className="form-success">{success}</p>}
@@ -116,12 +134,19 @@ export default function LoginPage() {
                                     style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white' }}
                                 />
                             )}
-                            {mode === 'signup' ? 'Create account' : 'Sign in'}
+                            {mode === 'signup' ? 'Create account' : mode === 'reset' ? 'Send reset link' : 'Sign in'}
                         </button>
                     </form>
 
                     <div className="login-toggle">
-                        {mode === 'signin' ? (
+                        {mode === 'reset' ? (
+                            <>
+                                Remember your password?{' '}
+                                <button className="btn-text" onClick={() => switchMode('signin')}>
+                                    Sign in
+                                </button>
+                            </>
+                        ) : mode === 'signin' ? (
                             <>
                                 Don't have an account?{' '}
                                 <button className="btn-text" onClick={() => switchMode('signup')}>
@@ -137,6 +162,12 @@ export default function LoginPage() {
                             </>
                         )}
                     </div>
+
+                    {mode === 'signin' && (
+                        <p style={{ textAlign: 'center', marginTop: 12, fontSize: 13, color: 'var(--text-muted)' }}>
+                            Your username is your email address.
+                        </p>
+                    )}
                 </div>
             </div>
 

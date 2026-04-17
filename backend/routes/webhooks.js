@@ -73,6 +73,7 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
             }
             break;
         }
+        
 
         default:
             console.log(`Unhandled event type ${event.type}`);
