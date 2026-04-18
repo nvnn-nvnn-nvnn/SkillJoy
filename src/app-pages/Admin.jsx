@@ -20,6 +20,9 @@ const STATUS_COLORS = {
     in_progress: { bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe' },
     declined:    { bg: '#fef2f2', color: '#991b1b', border: '#fca5a5' },
     cancelled:   { bg: '#fef2f2', color: '#991b1b', border: '#fca5a5' },
+    chargebacked:    { bg: '#fdf2f8', color: '#86198f', border: '#f0abfc' },
+    chargeback_won:  { bg: '#f0fdf4', color: '#166534', border: '#86efac' },
+    chargeback_lost: { bg: '#fef2f2', color: '#991b1b', border: '#fca5a5' },
 };
 
 function StatusChip({ value }) {

@@ -38,7 +38,7 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
             const orderId = paymentIntent.metadata.orderId;
             console.log(`🔍 Updating order ${orderId} to escrowed...`);
 
-            const { error } = await supabase
+            const { data: updated, error } = await supabase
                 .from('gig_requests')
                 .update({
                     payment_status: 'escrowed',
@@ -48,10 +48,13 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
                     status: 'accepted'
                 })
                 .eq('id', orderId)
-                .neq('payment_status', 'escrowed'); // idempotency guard
+                .neq('payment_status', 'escrowed') // idempotency guard
+                .select('id');
 
             if (error) {
                 console.error('❌ Failed to update order to escrowed:', error);
+            } else if (!updated || updated.length === 0) {
+                console.warn(`⚠️ RACE/MISSING: order ${orderId} not found or already escrowed — webhook may have arrived before order was created`);
             } else {
                 console.log(`✅ Order ${orderId} escrowed. Amount: $${paymentIntent.amount / 100}`);
             }
@@ -73,6 +76,188 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
             }
             break;
         }
+
+
+      case 'charge.dispute.created': {
+        const dispute = event.data.object;
+        console.log(`🚨 CHARGEBACK: dispute ${dispute.id} | pi: ${dispute.payment_intent} | $${dispute.amount / 100} | reason: ${dispute.reason}`);
+
+        if (!dispute) {
+            console.log('⚠️ Unable to fetch dispute information');
+            break
+        };
+
+
+
+        const { data: order } = await supabase
+            .from('gig_requests')
+            .select('id, requester_id, provider_id')
+            .eq('payment_intent_id', dispute.payment_intent)
+            .single();
+
+        if (order) {
+            await supabase
+                .from('gig_requests')
+                .update({ payment_status: 'chargebacked' })
+                .eq('id', order.id);
+
+            const {data: adminProfile} = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('email', process.env.ADMIN_EMAIL)
+                .single();
+
+            if (!adminProfile) {
+                console.error('⚠️ ADMIN_EMAIL not found in profiles — skipping admin notification');
+            }
+
+            const createdNotifications = [
+                {
+                    user_id: order.requester_id,
+                    type: 'chargeback',
+                    title: 'Chargeback opened',
+                    message: `A chargeback was filed on order ${order.id}. Our team is reviewing it.`,
+                    related_id: order.id,
+                    related_type: 'gig',
+                },
+                {
+                    user_id: order.provider_id,
+                    type: 'chargeback',
+                    title: 'Chargeback opened on your order',
+                    message: `A chargeback was filed against order ${order.id}. Funds are frozen pending review.`,
+                    related_id: order.id,
+                    related_type: 'gig',
+                },
+            ];
+            if (adminProfile) {
+                createdNotifications.unshift({
+                    user_id: adminProfile.id,
+                    type: 'chargeback',
+                    title: 'Chargeback received',
+                    message: `Order ${order.id} has been chargebacked. Reason: ${dispute.reason}`,
+                    related_id: order.id,
+                    related_type: 'gig',
+                });
+            }
+            await supabase.from('notifications').insert(createdNotifications);
+        }
+
+
+      
+
+        break;
+    }
+
+        case 'charge.dispute.closed': {
+            const dispute = event.data.object;
+            console.log(`⚖️ DISPUTE CLOSED: ${dispute.id} | outcome: ${dispute.status} | pi: ${dispute.payment_intent}`);
+
+            if (!dispute){
+                console.log('⚠️ Unable to fetch dispute metadata');
+                break;
+            }
+
+            const {data: order} = await supabase
+                .from('gig_requests')
+                .select('id, requester_id, provider_id')
+                .eq('payment_intent_id', dispute.payment_intent)
+                .single()
+
+            if (!order) {
+                console.log('⚠️ Unable to fetch order metadata');
+                break;
+            }
+
+            const { data: adminProfile } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('email', process.env.ADMIN_EMAIL)
+                .single();
+
+            if (!adminProfile) {
+                console.error('⚠️ ADMIN_EMAIL not found in profiles — skipping admin notification');
+            }
+
+            if (dispute.status === 'won') {
+                await supabase
+                    .from('gig_requests')
+                    .update({ payment_status: 'chargeback_won' })
+                    .eq('id', order.id);
+
+                const wonNotifications = [
+                    {
+                        user_id: order.requester_id,
+                        type: 'chargeback',
+                        title: 'Chargeback denied',
+                        message: `Your chargeback on order ${order.id} was denied.`,
+                        related_id: order.id,
+                        related_type: 'gig',
+                    },
+                    {
+                        user_id: order.provider_id,
+                        type: 'chargeback',
+                        title: 'Chargeback resolved in your favor',
+                        message: `The chargeback on order ${order.id} was resolved in your favor.`,
+                        related_id: order.id,
+                        related_type: 'gig',
+                    },
+                ];
+                if (adminProfile) wonNotifications.unshift({
+                    user_id: adminProfile.id,
+                    type: 'chargeback',
+                    title: 'Dispute won',
+                    message: `Dispute ${dispute.id} resolved in our favor. Order ${order.id}.`,
+                    related_id: order.id,
+                    related_type: 'gig',
+                });
+                await supabase.from('notifications').insert(wonNotifications);
+
+            } else if (dispute.status === 'lost') {
+                await supabase
+                    .from('gig_requests')
+                    .update({ payment_status: 'chargeback_lost' })
+                    .eq('id', order.id);
+
+                const lostNotifications = [
+                    {
+                        user_id: order.requester_id,
+                        type: 'chargeback',
+                        title: 'Chargeback approved',
+                        message: `Your chargeback on order ${order.id} was approved.`,
+                        related_id: order.id,
+                        related_type: 'gig',
+                    },
+                    {
+                        user_id: order.provider_id,
+                        type: 'chargeback',
+                        title: 'Chargeback lost',
+                        message: `The chargeback on order ${order.id} was lost. Funds returned to buyer.`,
+                        related_id: order.id,
+                        related_type: 'gig',
+                    },
+                ];
+                if (adminProfile) lostNotifications.unshift({
+                    user_id: adminProfile.id,
+                    type: 'chargeback',
+                    title: 'Dispute lost',
+                    message: `Dispute ${dispute.id} lost. Order ${order.id} refunded to buyer.`,
+                    related_id: order.id,
+                    related_type: 'gig',
+                });
+                await supabase.from('notifications').insert(lostNotifications);
+
+            } else if (dispute.status === 'warning_closed') {
+                console.log(`⚠️ Dispute ${dispute.id} warning_closed — no action needed`);
+            }
+
+            break;
+            
+            
+
+
+
+        }
+
         
 
         default:

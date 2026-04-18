@@ -1,5 +1,20 @@
-import { StrictMode } from 'react'
+import { StrictMode, Component } from 'react'
 import { createRoot } from 'react-dom/client'
+
+class ErrorBoundary extends Component {
+  state = { error: null };
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (this.state.error) return (
+      <div style={{ padding: 40, textAlign: 'center' }}>
+        <h2>Something went wrong.</h2>
+        <p style={{ color: '#888', marginBottom: 16 }}>{this.state.error.message}</p>
+        <button onClick={() => window.location.reload()}>Reload page</button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './lib/stores'
 import './index.css'
@@ -89,6 +104,8 @@ function App() {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )

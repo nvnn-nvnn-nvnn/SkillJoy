@@ -54,8 +54,12 @@ export default function LoginPage() {
                 if (newPassword !== confirmPassword) throw new Error('Passwords do not match.');
                 const { error: e } = await supabase.auth.updateUser({ password: newPassword });
                 if (e) throw e;
+                await supabase.auth.signOut();
                 isRecovery.current = false;
-                navigate('/matches');
+                setNewPassword('');
+                setConfirmPassword('');
+                setMode('signin');
+                setSuccess('Password updated! Please sign in with your new password.');
             } else {
                 const { error: e } = await supabase.auth.signInWithPassword({ email, password });
                 if (e) throw e;

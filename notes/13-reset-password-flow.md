@@ -61,7 +61,14 @@ useEffect(() => {
 }
 ```
 
-After a successful update, `isRecovery` is reset and the user is sent to `/matches`.
+After a successful update, the user is **signed out** and returned to the signin form with a success message. This forces a clean fresh login with the new credentials rather than silently continuing the recovery session:
+
+```js
+await supabase.auth.signOut();
+isRecovery.current = false;
+setMode('signin');
+setSuccess('Password updated! Please sign in with your new password.');
+```
 
 ---
 

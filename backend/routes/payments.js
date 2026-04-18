@@ -734,8 +734,12 @@ router.post('/submit-evidence', async (req, res) => {
         if (imageUrl) {
             try {
                 const parsed = new URL(imageUrl);
-                if (!['https:'].includes(parsed.protocol)) {
+                const supabaseHost = (process.env.SUPABASE_URL || '').replace('https://', '');
+                if (parsed.protocol !== 'https:') {
                     return res.status(400).json({ error: 'Image URL must use HTTPS' });
+                }
+                if (!supabaseHost || !parsed.hostname.endsWith(supabaseHost)) {
+                    return res.status(400).json({ error: 'Image must be uploaded to SkillJoy storage' });
                 }
             } catch {
                 return res.status(400).json({ error: 'Invalid image URL' });
