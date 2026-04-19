@@ -351,8 +351,6 @@ export default function Notifications() {
                 .notification-item.expanded .notification-item-main {
                     padding-top: 20px;
                     padding-bottom: 20px;
-                    flex-direction: column;
-                    align-items: flex-start;
                 }
 
                 .notification-item.unread {
@@ -434,6 +432,8 @@ export default function Notifications() {
                     -webkit-line-clamp: unset;
                     overflow: visible;
                     display: block;
+                    word-break: break-word;
+                    white-space: normal;
                 }
 
                 .notification-time {

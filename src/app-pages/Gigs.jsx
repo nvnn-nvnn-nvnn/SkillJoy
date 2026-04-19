@@ -114,14 +114,15 @@ export default function GigsPage() {
         setBusy(true);
         let query = supabase
             .from('gigs')
-            .select('*, profile:profiles!user_id(id, full_name, bio, service_type, availability)')
+            .select('*, profile:profiles!user_id(id, full_name, bio, service_type, availability, offers_gigs)')
             .order('created_at', { ascending: false });
         if (profile?.college_verified && universityDomain) query = query.eq('university_domain', universityDomain);
         const { data, error } = await query;
 
         if (!error && data) {
-            // Fetch ratings for each provider
-            const gigsWithRatings = await Promise.all(data.map(async (gig) => {
+            // Fetch ratings for each provider — exclude gigs from paused sellers
+            const activeGigs = data.filter(gig => gig.profile?.offers_gigs !== false);
+            const gigsWithRatings = await Promise.all(activeGigs.map(async (gig) => {
                 const { data: ratings } = await supabase
                     .from('ratings')
                     .select('rating')
