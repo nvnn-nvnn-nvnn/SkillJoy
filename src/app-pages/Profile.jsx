@@ -1,18 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useUser, useProfile, useAuth, getSkillName, normalizeSkills, DAYS_OF_WEEK, TIME_PERIODS } from '@/lib/stores';
+import { useUser, useAuth, getSkillName, normalizeSkills, DAYS_OF_WEEK, TIME_PERIODS } from '@/lib/stores';
 import { apiFetch } from '@/lib/api';
 import SkillEditor from '@/components/Skillededitor';
+import ReportModal from '@/components/ReportModal';
+import BlockButton from '@/components/BlockButton';
 
 export default function ProfilePage() {
     const user = useUser();
-    const myProfile = useProfile();
-    const { setProfile } = useAuth();
+    const { setProfile, loading: authLoading } = useAuth();
     const navigate = useNavigate();
     const { userId } = useParams();
     const [AllGigs, setAllGigs] = useState([]);
-    const [busy, setBusy] = useState(false);
 
     const [profile, setProfileData] = useState(null);
     const [stats, setStats] = useState({ swapsCompleted: 0, gigsCompleted: 0, avgRating: 0, totalRatings: 0 });
@@ -36,19 +36,22 @@ export default function ProfilePage() {
 
     // Stripe Status
     const [stripeStatus, setStripeStatus] = useState(null);
-    const [stripeBalance, setStripeBalance] = useState(null);
+    const [stripeEarnings, setStripeEarnings] = useState(null);
 
     // College verification
     const [collegeEmail, setCollegeEmail] = useState('');
     const [collegeSending, setCollegeSending] = useState(false);
     const [collegeSent, setCollegeSent] = useState(false);
     const [collegeError, setCollegeError] = useState('');
+    const [showDisconnectModal, setShowDisconnectModal] = useState(false);
 
 
 
 
 
     const isOwnProfile = !userId || userId === user?.id;
+    const [showReport, setShowReport] = useState(false);
+    const [isBlocked, setIsBlocked] = useState(false);
 
 
 
@@ -58,13 +61,28 @@ export default function ProfilePage() {
         setLoading(true);
         const targetId = userId || user.id;
 
-        const { data: profileData, error: profileErr } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', targetId)
-            .single();
-
-        if (profileErr) { setError(profileErr.message); setLoading(false); return; }
+        let profileData;
+        try {
+            if (isOwnProfile) {
+                const { data, error: profileErr } = await supabase
+                    .from('profiles').select('*').eq('id', targetId).single();
+                if (profileErr) { setError(profileErr.message); setLoading(false); return; }
+                profileData = data;
+            } else {
+                const res = await apiFetch(`/api/users/profile/${targetId}`);
+                if (res.status === 403) {
+                    setError('blocked_by_owner');
+                    setLoading(false);
+                    return;
+                }
+                if (!res.ok) { setError('Profile not found.'); setLoading(false); return; }
+                profileData = await res.json();
+            }
+        } catch {
+            setError('Could not load profile. Please try again.');
+            setLoading(false);
+            return;
+        }
 
         setProfileData(profileData);
         setFullName(profileData.full_name || '');
@@ -91,6 +109,16 @@ export default function ProfilePage() {
 
         setStats({ swapsCompleted, gigsCompleted, avgRating, totalRatings: ratingsData.length });
         setRatings(ratingsData);
+
+        // Check if this other user is blocked by us
+        if (!isOwnProfile) {
+            const res = await apiFetch('/api/blocks');
+            if (res.ok) {
+                const blocks = await res.json();
+                setIsBlocked(blocks.some(b => b.blocked_id === targetId));
+            }
+        }
+
         setLoading(false);
     }
 
@@ -105,7 +133,9 @@ export default function ProfilePage() {
         const { error: uploadErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
         if (uploadErr) { setError(uploadErr.message); setUploadingAvatar(false); return; }
         const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
-        setAvatarUrl(publicUrl);
+        const bustUrl = `${publicUrl}?t=${Date.now()}`;
+        await supabase.from('profiles').update({ avatar_url: bustUrl }).eq('id', user.id);
+        setAvatarUrl(bustUrl);
         setUploadingAvatar(false);
     }
 
@@ -115,9 +145,9 @@ export default function ProfilePage() {
         if (!res.ok) { console.error(data.error); return; }
         setStripeStatus(data);
         if (data.onboarded) {
-            const balRes = await apiFetch('/api/stripe-connect/balance');
+            const balRes = await apiFetch('/api/stripe-connect/earnings');
             const balData = await balRes.json();
-            if (balRes.ok) setStripeBalance(balData);
+            if (balRes.ok) setStripeEarnings(balData);
         }
     }
 
@@ -151,7 +181,6 @@ export default function ProfilePage() {
 // Stripe Load End
 
     async function loadGigs() {
-        setBusy(true);
         const targetId = userId || user.id;
 
         const { data, error } = await supabase
@@ -163,14 +192,14 @@ export default function ProfilePage() {
         if (!error && data) {
             setAllGigs(data);
         }
-        setBusy(false);
     }
 
     useEffect(() => {
+        if (authLoading) return;
         if (!user) { navigate('/login'); return; }
         loadProfile(); // eslint-disable-line react-hooks/set-state-in-effect
         loadGigs();
-    }, [user, userId]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [user, userId, authLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
     async function handleSendCollegeVerification() {
         setCollegeError('');
@@ -186,6 +215,35 @@ export default function ProfilePage() {
         if (!res.ok) { setCollegeError(data.error || 'Failed to send.'); return; }
         setCollegeSent(true);
     }
+
+
+    // Remove College info
+
+    async function disconnectCollegeEmail() {
+        const { error } = await supabase
+            .from('profiles')
+            .update({
+                college_email: null,
+                college_verified: false,
+                university_domain: null,
+                college_verify_token: null,
+                college_verify_expires_at: null,
+            })
+            .eq('id', user.id);
+
+        if (error) { console.error('Could not disconnect College Email'); return; }
+
+        const updated = { ...profile, college_email: null, college_verified: false, university_domain: null, college_verify_token: null, college_verify_expires_at: null };
+        setProfile(updated);
+        setProfileData(updated);
+        setCollegeSent(false);
+        setCollegeEmail('');
+    }
+
+
+
+
+
 
     async function handleSave() {
         if (!fullName.trim()) { setError('Name is required'); return; }
@@ -247,6 +305,19 @@ export default function ProfilePage() {
         return (
             <div className="page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
                 <div className="spinner" style={{ width: 40, height: 40, borderWidth: 3 }} />
+            </div>
+        );
+    }
+
+    if (error === 'blocked_by_owner') {
+        return (
+            <div className="page">
+                <div className="empty-state">
+                    <span className="empty-icon">🚫</span>
+                    <h3>Profile not available</h3>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>This profile is not available.</p>
+                    <button className="btn btn-secondary" onClick={() => navigate(-1)}>Go Back</button>
+                </div>
             </div>
         );
     }
@@ -396,6 +467,29 @@ export default function ProfilePage() {
                             </button>
                         </div>
                     )}
+                    {!isOwnProfile && (
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                            <button
+                                onClick={() => setShowReport(true)}
+                                style={{
+                                    background: 'none', border: '1px solid var(--border)',
+                                    borderRadius: 8, padding: '7px 14px', fontSize: 13,
+                                    color: 'var(--text-muted)', cursor: 'pointer',
+                                    fontFamily: 'inherit', transition: 'color 0.15s, border-color 0.15s',
+                                }}
+                                onMouseOver={e => { e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fca5a5'; }}
+                                onMouseOut={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                            >
+                                ⚑ Report user
+                            </button>
+                            <BlockButton
+                                userId={profile?.id}
+                                initialState={isBlocked}
+                                onBlock={() => setIsBlocked(true)}
+                                onUnblock={() => setIsBlocked(false)}
+                            />
+                        </div>
+                    )}
                     
                 </div>
 
@@ -411,21 +505,63 @@ export default function ProfilePage() {
                     }}>
                         {stripeStatus?.onboarded ? (
                             <div>
-                                <p style={{ color: '#15803d', fontWeight: 600, margin: '0 0 10px' }}>
-                                    ✅ Payouts active — you'll receive funds when buyers release payment.
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
+                                    <p style={{ color: '#15803d', fontWeight: 600, margin: 0 }}>
+                                        ✅ Payouts active
+                                    </p>
+                                    <button
+                                        onClick={checkStripeStatus}
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: '2px 6px', color: '#6b7280', flexShrink: 0 }}
+                                        title="Refresh earnings">
+                                        ↻
+                                    </button>
+                                </div>
+                                <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 12px', lineHeight: 1.5 }}>
+                                    Earnings are transferred to your Stripe account after a short clearance period. Stripe then pays out to your linked bank account automatically.
                                 </p>
-                                {stripeBalance && (
-                                    <div style={{ display: 'flex', flexDirection:"column", gap: '16px', flexWrap: 'wrap' }}>
-                                        <div style={{ background: '#fff', border: '1px solid #86efac', borderRadius: 8, padding: '10px 16px' }}>
-                                            <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>AVAILABLE</div>
-                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#15803d' }}>${stripeBalance.available.toFixed(2)}</div>
+                                <button
+                                    onClick={async () => {
+                                        const res = await apiFetch('/api/stripe-connect/dashboard-link', { method: 'POST' });
+                                        const data = await res.json();
+                                        if (data.url) window.open(data.url, '_blank');
+                                    }}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                        background: '#635bff', color: '#fff', border: 'none',
+                                        padding: '9px 16px', borderRadius: 8, fontSize: 13,
+                                        fontWeight: 600, cursor: 'pointer', marginBottom: 14,
+                                        width: '100%', boxSizing: 'border-box',
+                                    }}>
+                                    <span>Go to Stripe Dashboard</span>
+                                    <span style={{ fontSize: 12 }}>↗</span>
+                                </button>
+                                {stripeEarnings && (
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: 12 }}>
+                                        <div style={{ background: '#fff', border: '1px solid #fbbf24', borderRadius: 8, padding: '10px 12px' }}>
+                                            <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>IN ESCROW</div>
+                                            <div style={{ fontSize: '18px', fontWeight: 700, color: '#92400e' }}>${stripeEarnings.inEscrow.toFixed(2)}</div>
+                                            <div style={{ fontSize: '11px', color: '#9ca3af' }}>held until buyer releases</div>
                                         </div>
-                                        <div style={{ background: '#fff', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 16px' }}>
-                                            <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>PENDING</div>
-                                            <div style={{ fontSize: '20px', fontWeight: 700, color: '#374151' }}>${stripeBalance.pending.toFixed(2)}</div>
+                                        <div style={{ background: '#fff', border: '1px solid #a5b4fc', borderRadius: 8, padding: '10px 12px' }}>
+                                            <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>PENDING CLEARANCE</div>
+                                            <div style={{ fontSize: '18px', fontWeight: 700, color: '#3730a3' }}>${stripeEarnings.pendingClearance.toFixed(2)}</div>
+                                            <div style={{ fontSize: '11px', color: '#9ca3af' }}>clearing in 14 days</div>
+                                        </div>
+                                        <div style={{ background: '#fff', border: '1px solid #86efac', borderRadius: 8, padding: '10px 12px' }}>
+                                            <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>AVAILABLE</div>
+                                            <div style={{ fontSize: '18px', fontWeight: 700, color: '#15803d' }}>${stripeEarnings.stripeAvailable.toFixed(2)}</div>
+                                            <div style={{ fontSize: '11px', color: '#9ca3af' }}>ready to pay out</div>
+                                        </div>
+                                        <div style={{ background: '#fff', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 12px' }}>
+                                            <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>CLEARING</div>
+                                            <div style={{ fontSize: '18px', fontWeight: 700, color: '#374151' }}>${stripeEarnings.stripePending.toFixed(2)}</div>
+                                            <div style={{ fontSize: '11px', color: '#9ca3af' }}>transferred, arriving soon</div>
                                         </div>
                                     </div>
                                 )}
+                                <div style={{ fontSize: '11px', color: '#6b7280', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', lineHeight: 1.5 }}>
+                                    <strong style={{ color: '#374151' }}>How earnings work:</strong> When a buyer pays, funds are held in escrow until you deliver and they approve. After release, there's a short clearance period before transfer to your Stripe account. Stripe then pays out to your bank on its own schedule. Expect 2–3 weeks total from order completion to bank deposit.
+                                </div>
                             </div>
                         ) : (
                             <>
@@ -449,9 +585,22 @@ export default function ProfilePage() {
                         marginBottom: 20,
                     }}>
                         {profile?.college_verified ? (
-                            <p style={{ color: '#15803d', fontWeight: 600, margin: 0 }}>
-                                🎓 College verified — {profile.university_domain}. You're seeing students at your school.
-                            </p>
+                            <div>
+                                <p style={{ color: '#15803d', fontWeight: 600, margin: 0 }}>
+                                    🎓 College verified — {profile.university_domain}. You're seeing students at your school.
+                                </p>
+                                <button
+                                    className='btn btn-secondary'
+                                    style={{ marginTop: 10, fontSize: 13, color: '#dc2626', borderColor: '#fca5a5' }}
+                                    onClick={() => setShowDisconnectModal(true)}
+                                >
+                                    Disconnect university email
+                                </button>
+
+                            </div>
+                         
+                                
+                            
                         ) : collegeSent ? (
                             <div>
                                 <p style={{ color: '#92400e', fontWeight: 600, margin: '0 0 4px' }}>📧 Verification email sent!</p>
@@ -904,6 +1053,30 @@ export default function ProfilePage() {
                     }
                 }
             `}</style>
+
+            <ReportModal
+                isOpen={showReport}
+                onClose={() => setShowReport(false)}
+                reportedType="user"
+                reportedId={profile?.id}
+                reportedName={profile?.full_name}
+            />
+
+            {showDisconnectModal && (
+                <div className="modal-backdrop" onClick={() => setShowDisconnectModal(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 16, padding: '32px 28px 24px', maxWidth: 420, width: '90%', textAlign: 'center', boxShadow: 'var(--shadow-lg)', position: 'relative' }}>
+                        <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+                        <h3 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700 }}>Disconnect university email?</h3>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6, margin: '0 0 24px' }}>
+                            You'll lose access to university-only matching and will need to re-verify to reconnect.
+                        </p>
+                        <div style={{ display: 'flex', gap: 10 }}>
+                            <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowDisconnectModal(false)}>Cancel</button>
+                            <button className="btn" style={{ flex: 1, background: '#dc2626', color: '#fff', border: 'none' }} onClick={() => { setShowDisconnectModal(false); disconnectCollegeEmail(); }}>Disconnect</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }

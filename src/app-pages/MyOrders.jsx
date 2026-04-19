@@ -74,6 +74,7 @@ function PaymentForm({ order, onSuccess, onError, onClose }) {
                         }),
                     });
                     const confirmData = await confirmRes.json();
+                    if (!confirmRes.ok) throw new Error(confirmData.error || 'Something went wrong');
                     console.log('✅ Database updated:', confirmData);
                 } catch (err) {
                     console.log('⚠️ Could not update database immediately:', err);
@@ -411,22 +412,11 @@ export default function MyOrders() {
             .channel(`my-orders-${user.id}-${tab}`)
             .on('postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'gig_requests', filter: `${column}=eq.${user.id}` },
-                (payload) => {
-                    setOrders(prev => prev.map(o =>
-                        o.id === payload.new.id ? { ...o, ...payload.new } : o
-                    ));
-                }
+                () => { loadOrders(); }
             )
             .subscribe();
-        return () => { supabase.removeChannel(channel); };
+        return () => { channel.unsubscribe(); };
     }, [user, tab]);
-
-
-    useEffect(() => {
-        if (!user) return;
-
-
-    }, []);
 
     async function loadOrders() {
         setLoading(true);

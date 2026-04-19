@@ -396,11 +396,7 @@ export default function MySwaps() {
                     box-shadow: var(--shadow); max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto;
                     position: relative;
                 }
-                .modal-close {
-                    position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 20px; cursor: pointer;
-                    color: var(--text-muted);
-                }
-                .modal-close:hover { color: var(--text); }
+
                 .modal-header {
                     display: flex; align-items: center; gap: 16px; margin-bottom: 24px;
                 }

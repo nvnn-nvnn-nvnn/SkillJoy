@@ -4,13 +4,30 @@ const supabase = require('../config/supabase');
 
 // Placeholder user routes - add as needed
 
+const PUBLIC_FIELDS = 'id, full_name, bio, avatar_url, service_type, availability, college_verified, skills_teach, skills_learn, offers_gigs, points';
+
 router.get('/profile/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
+        const isOwnProfile = req.user.id === userId;
+
+        // If viewing someone else's profile, check if they have blocked the requester
+        if (!isOwnProfile) {
+            const { data: block } = await supabase
+                .from('blocked_users')
+                .select('id')
+                .eq('blocker_id', userId)
+                .eq('blocked_id', req.user.id)
+                .maybeSingle();
+
+            if (block) {
+                return res.status(403).json({ error: 'This profile is not available.' });
+            }
+        }
 
         const { data: profile, error } = await supabase
             .from('profiles')
-            .select('*')
+            .select(isOwnProfile ? '*' : PUBLIC_FIELDS)
             .eq('id', userId)
             .single();
 

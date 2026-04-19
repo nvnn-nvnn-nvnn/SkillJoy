@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useUser } from '@/lib/stores';
+import { useUser, useAuth } from '@/lib/stores';
+import ReportModal from '@/components/ReportModal';
 
 function initials(name) {
     if (!name) return '?';
@@ -11,6 +12,7 @@ function initials(name) {
 export default function GigDetailsPage() {
     const { gigId } = useParams();
     const user = useUser();
+    const { loading: authLoading } = useAuth();
     const navigate = useNavigate();
 
     const [gig, setGig] = useState(null);
@@ -22,19 +24,21 @@ export default function GigDetailsPage() {
     const [sendingRequest, setSendingRequest] = useState(false);
     const [toast, setToast] = useState('');
     const [toastType, setToastType] = useState('success');
+    const [showReport, setShowReport] = useState(false);
 
-    const SERVICE_FEE = 6.00;
+    const SERVICE_FEE = parseFloat(import.meta.env.VITE_SERVICE_FEE) || 6.00;
 
     useEffect(() => {
+        if (authLoading) return;
         if (!user) { navigate('/login'); return; }
         loadGigDetails();
-    }, [gigId, user]);
+    }, [gigId, user, authLoading]);
 
     async function loadGigDetails() {
         setLoading(true);
         const { data, error } = await supabase
             .from('gigs')
-            .select('*, profile:profiles!user_id(id, full_name, bio, service_type, availability)')
+            .select('*, profile:profiles!user_id(id, full_name, bio, service_type, availability, avatar_url)')
             .eq('id', gigId)
             .single();
 
@@ -274,7 +278,12 @@ export default function GigDetailsPage() {
                         {/* Provider card */}
                         <div className="gd-card gd-provider">
                             <div className="gd-provider-top">
-                                <div className="gd-provider-avatar">{initials(gig.profile?.full_name)}</div>
+                                <div className="gd-provider-avatar">
+                                    {gig.profile?.avatar_url
+                                        ? <img src={gig.profile.avatar_url} alt={gig.profile.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                                        : initials(gig.profile?.full_name)
+                                    }
+                                </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <Link to={`/profile/${gig.profile?.id}`} className="gd-provider-name">
                                         {gig.profile?.full_name ?? 'Unknown'}
@@ -302,6 +311,23 @@ export default function GigDetailsPage() {
                                 </div>
                             )}
                         </div>
+
+                        {/* Report Gig */}
+                        {gig.user_id !== user?.id && (
+                            <button
+                                onClick={() => setShowReport(true)}
+                                style={{
+                                    width: '100%', background: '#1a1a1a', border: '1px solid #1a1a1a',
+                                    borderRadius: 8, padding: '8px 14px', fontSize: 13, color: '#fff',
+                                    cursor: 'pointer', fontFamily: 'inherit', marginBottom: 10,
+                                    transition: 'background 0.15s, border-color 0.15s',
+                                }}
+                                onMouseOver={e => { e.currentTarget.style.background = '#333'; e.currentTarget.style.borderColor = '#333'; }}
+                                onMouseOut={e => { e.currentTarget.style.background = '#1a1a1a'; e.currentTarget.style.borderColor = '#1a1a1a'; }}
+                            >
+                                ⚑ Report this gig
+                            </button>
+                        )}
 
                         {/* Hire card */}
                         {gig.user_id !== user?.id && (
@@ -358,6 +384,14 @@ export default function GigDetailsPage() {
                     </div>
                 </div>
             </div>
+
+            <ReportModal
+                isOpen={showReport}
+                onClose={() => setShowReport(false)}
+                reportedType="gig"
+                reportedId={gig.id}
+                reportedName={gig.title}
+            />
 
             {toast && <div className={`toast ${toastType}`}>{toast}</div>}
 

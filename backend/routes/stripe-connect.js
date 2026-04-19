@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
-const { SERVICE_FEE_CENTS } = require('../config/fees');
+const { SERVICE_FEE_CENTS, SERVICE_FEE_DOLLARS } = require('../config/fees');
 
 // Process any released orders past clearance_date for a newly-onboarded seller
 async function processReleasedOrders(providerId, stripeAccountId) {
@@ -52,6 +52,20 @@ router.post("/onboard", async (req, res) => {
             .single()
 
         let accountId = profile?.stripe_account_id;
+
+        if (accountId) {
+            // Verify the saved account still belongs to this platform key
+            try {
+                await stripe.accounts.retrieve(accountId);
+            } catch (err) {
+                console.warn(`Stale Stripe account ${accountId} — creating a new one:`, err.message);
+                accountId = null;
+                await supabase
+                    .from('profiles')
+                    .update({ stripe_account_id: null, stripe_onboarded: false })
+                    .eq('id', req.user.id);
+            }
+        }
 
         if (!accountId) {
             const account = await stripe.accounts.create({ type: 'express' });
@@ -106,9 +120,17 @@ router.get('/status', async (req, res)=>{
         if (onboarded && !profile.stripe_onboarded) {
             await supabase.from('profiles').update({ stripe_onboarded: true }).eq('id', req.user.id);
             // Process any released orders that were waiting on this seller's Stripe setup
-            processReleasedOrders(req.user.id, profile.stripe_account_id).catch(err =>
-                console.error('processReleasedOrders error:', err.message)
-            );
+            // processReleasedOrders(req.user.id, profile.stripe_account_id).catch(err =>
+            //     console.error('processReleasedOrders error:', err.message)
+            // );
+
+
+            try {
+                await processReleasedOrders(req.user.id, profile.stripe_account_id);
+            } catch (err) {
+                console.error('processReleasedOrders error:', err.message);
+            }
+
         };
 
 
@@ -145,5 +167,71 @@ router.get('/balance', async (req, res) => {
     }
 });
 
+
+// ── Stripe Express dashboard login link ────────────────────────────────────────
+router.post('/dashboard-link', async (req, res) => {
+    try {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('stripe_account_id, stripe_onboarded')
+            .eq('id', req.user.id)
+            .single();
+
+        if (!profile?.stripe_account_id || !profile?.stripe_onboarded) {
+            return res.status(400).json({ error: 'Stripe account not set up' });
+        }
+
+        const loginLink = await stripe.accounts.createLoginLink(profile.stripe_account_id);
+        res.json({ url: loginLink.url });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── Earnings breakdown: pending (DB) + available (Stripe Connect balance) ──────
+router.get('/earnings', async (req, res) => {
+    try {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('stripe_account_id, stripe_onboarded')
+            .eq('id', req.user.id)
+            .single();
+
+        // Split escrowed (waiting for release) vs released (waiting for clearance)
+        const { data: escrowedOrders } = await supabase
+            .from('gig_requests')
+            .select('payment_amount')
+            .eq('provider_id', req.user.id)
+            .eq('payment_status', 'escrowed');
+
+        const { data: releasedOrders } = await supabase
+            .from('gig_requests')
+            .select('payment_amount')
+            .eq('provider_id', req.user.id)
+            .eq('payment_status', 'released');
+
+        const calc = (orders) => (orders || []).reduce((sum, o) => sum + (parseFloat(o.payment_amount) - SERVICE_FEE_DOLLARS), 0);
+        const inEscrow         = Math.max(0, parseFloat(calc(escrowedOrders).toFixed(2)));
+        const pendingClearance = Math.max(0, parseFloat(calc(releasedOrders).toFixed(2)));
+
+        // Available = Stripe Connect balance (post-transfer)
+        let stripeAvailable = 0;
+        let stripePending = 0;
+        if (profile?.stripe_account_id && profile?.stripe_onboarded) {
+            const balance = await stripe.balance.retrieve({ stripeAccount: profile.stripe_account_id });
+            stripeAvailable = balance.available.reduce((sum, b) => sum + b.amount, 0) / 100;
+            stripePending  = balance.pending.reduce((sum, b) => sum + b.amount, 0) / 100;
+        }
+
+        res.json({
+            inEscrow,          // buyer hasn't released yet
+            pendingClearance,  // released, waiting for 14-day clearance
+            stripeAvailable,   // transferred, available to pay out
+            stripePending,     // transferred but still clearing on Stripe's side
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 module.exports = router;

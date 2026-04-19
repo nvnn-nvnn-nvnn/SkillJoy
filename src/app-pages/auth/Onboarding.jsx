@@ -156,7 +156,7 @@ export default function OnboardingPage() {
                                     </div>
                                     <div className="field" style={{ marginTop: 20 }}>
                                         <label htmlFor="bio">
-                                            Short bio <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none' }}>(optional)</span>
+                                            Short bio <span style={{ color: '#fff', fontWeight: 400, textTransform: 'none' }}>(optional)</span>
                                         </label>
                                         <textarea id="bio" value={bio} onChange={e => setBio(e.target.value)} placeholder="e.g. CS junior who loves code and music." rows={3} style={{ resize: 'vertical' }} />
                                     </div>
@@ -267,7 +267,7 @@ export default function OnboardingPage() {
                                                     key={opt.value}
                                                     style={{
                                                         display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
-                                                        padding: '14px 16px', background: serviceType === opt.value ? 'var(--surface-alt)' : 'transparent',
+                                                        padding: '14px 16px', background: serviceType === opt.value ? 'var(--surface-alt)' : '#fff',
                                                         borderRadius: 'var(--r)', border: `1px solid ${serviceType === opt.value ? 'var(--primary)' : 'var(--border)'}`,
                                                         transition: 'all 0.15s ease',
                                                     }}
@@ -282,7 +282,7 @@ export default function OnboardingPage() {
                                                     />
                                                     <div>
                                                         <p style={{ fontWeight: 600, fontSize: 15 }}>{opt.label}</p>
-                                                        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{opt.desc}</p>
+                                                        <p style={{ fontSize: 13, color: '#fff', marginTop: 2 }}>{opt.desc}</p>
                                                     </div>
                                                 </label>
                                             ))}
@@ -320,10 +320,10 @@ export default function OnboardingPage() {
         .progress-bar { height: 3px; background: var(--border); border-radius: var(--r-full); margin-bottom: 12px; overflow: hidden; }
         .progress-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); border-radius: var(--r-full); transition: width 0.3s ease; }
         .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 36px; }
-        .step-indicator { font-size: 12px; color: var(--text-muted); letter-spacing: 0.04em; }
+        .step-indicator { font-size: 12px; color: #fff; letter-spacing: 0.04em; }
         .exit-btn { font-size: 14px; padding: 6px 12px; }
         .onboard-title { font-size: 32px; margin-bottom: 8px; }
-        .onboard-sub { font-size: 16px; color: var(--text-secondary); margin-bottom: 36px; }
+        .onboard-sub { font-size: 16px; color: #fff; margin-bottom: 36px; }
         .skill-group { margin-bottom: 24px; }
         .skill-chips { display: flex; flex-wrap: wrap; gap: 8px; }
         .custom-input { display: flex; gap: 8px; margin-top: 24px; margin-bottom: 8px; }

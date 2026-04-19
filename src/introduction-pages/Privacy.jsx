@@ -33,7 +33,7 @@ export default function PrivacyPage() {
             </Section>
 
             <Section title="8. Your Rights">
-                Depending on your location, you may have rights to access, correct, or delete your personal data. To exercise these rights, contact us at <a href="mailto:privacy@skilljoy.app" style={{ color: 'var(--accent)' }}>privacy@skilljoy.app</a>.
+                Depending on your location, you may have rights to access, correct, or delete your personal data. To exercise these rights, contact us at <a href="mailto:privacy" style={{ color: 'var(--accent)' }}>techkage@proton.me</a>
             </Section>
 
             <Section title="9. Children">
@@ -45,7 +45,7 @@ export default function PrivacyPage() {
             </Section>
 
             <Section title="11. Contact">
-                Questions about this policy? Email us at <a href="mailto:privacy@skilljoy.app" style={{ color: 'var(--accent)' }}>privacy@skilljoy.app</a>.
+                Questions about this policy? Email us at <a href="mailto:techkage@proton.me" style={{ color: 'var(--accent)' }}>techkage@proton.me</a>.
             </Section>
         </div>
     );

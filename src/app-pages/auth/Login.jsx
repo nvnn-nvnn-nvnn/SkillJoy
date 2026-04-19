@@ -1,12 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/stores';
 import { useNavigate } from 'react-router-dom';
+import SkillJoyLogo3 from '../../assets/SkillJoy-Logo2.svg'
 
 export default function LoginPage() {
-    const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
+    const isRecovery = useRef(window.location.hash.includes('type=recovery'));
+    const [mode, setMode] = useState(() =>
+        window.location.hash.includes('type=recovery') ? 'new-password' : 'signin'
+    );
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [busy, setBusy] = useState(false);
@@ -14,8 +20,19 @@ export default function LoginPage() {
     const user = useUser();
     const navigate = useNavigate();
 
+    // Intercept Supabase's PASSWORD_RECOVERY event before the redirect fires
     useEffect(() => {
-        if (user) navigate('/matches');
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+            if (event === 'PASSWORD_RECOVERY') {
+                isRecovery.current = true;
+                setMode('new-password');
+            }
+        });
+        return () => subscription.unsubscribe();
+    }, []);
+
+    useEffect(() => {
+        if (user && !isRecovery.current) navigate('/matches');
     }, [user, navigate]);
 
     async function submit(e) {
@@ -26,6 +43,23 @@ export default function LoginPage() {
                 const { error: e } = await supabase.auth.signUp({ email, password });
                 if (e) throw e;
                 setSuccess('Check your email to confirm your account, then sign in.');
+            } else if (mode === 'reset') {
+                const { error: e } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: (import.meta.env.VITE_SITE_URL ?? window.location.origin) + '/login',
+                });
+                if (e) throw e;
+                setSuccess('Check your email for a password reset link.');
+            } else if (mode === 'new-password') {
+                if (newPassword.length < 6) throw new Error('Password must be at least 6 characters.');
+                if (newPassword !== confirmPassword) throw new Error('Passwords do not match.');
+                const { error: e } = await supabase.auth.updateUser({ password: newPassword });
+                if (e) throw e;
+                await supabase.auth.signOut();
+                isRecovery.current = false;
+                setNewPassword('');
+                setConfirmPassword('');
+                setMode('signin');
+                setSuccess('Password updated! Please sign in with your new password.');
             } else {
                 const { error: e } = await supabase.auth.signInWithPassword({ email, password });
                 if (e) throw e;
@@ -50,52 +84,101 @@ export default function LoginPage() {
         setSuccess('');
     }
 
+    const titles = { signup: 'Create your account', signin: 'Welcome back', reset: 'Reset your password', 'new-password': 'Set a new password' };
+    const subs = {
+        signup: 'Start swapping skills with students on your campus.',
+        signin: 'Sign in to see your matches and swaps.',
+        reset: "Enter your email and we'll send you a reset link.",
+        'new-password': 'Choose a new password for your account.',
+    };
+
     return (
         <>
             <title>Sign in — SkillJoy</title>
 
             <div className="login-bg">
                 <div className="login-card fade-up">
-                    <a href="/" className="login-logo">
-                        Skill<span>Joy</span>
-                    </a>
+                    <img
+                    style={{ height: '45px'}}
+                    src={SkillJoyLogo3} alt="" />
 
-                    <h1 className="login-title">
-                        {mode === 'signup' ? 'Create your account' : 'Welcome back'}
-                    </h1>
-                    <p className="login-sub">
-                        {mode === 'signup'
-                            ? 'Start swapping skills with students on your campus.'
-                            : 'Sign in to see your matches and swaps.'}
-                    </p>
+                    <h1 className="login-title">{titles[mode]}</h1>
+                    <p className="login-sub">{subs[mode]}</p>
 
                     <form onSubmit={submit} className="login-form">
-                        <div className="field">
-                            <label htmlFor="email">Email</label>
-                            <input
-                                id="email"
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder="you@university.edu"
-                                required
-                                autoComplete="email"
-                            />
-                        </div>
+                        {mode === 'new-password' ? (
+                            <>
+                                <div className="field">
+                                    <label htmlFor="new-password">New password</label>
+                                    <input
+                                        id="new-password"
+                                        type="password"
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        placeholder="At least 6 characters"
+                                        required
+                                        minLength={6}
+                                        autoComplete="new-password"
+                                    />
+                                </div>
+                                <div className="field">
+                                    <label htmlFor="confirm-password">Confirm password</label>
+                                    <input
+                                        id="confirm-password"
+                                        type="password"
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        placeholder="••••••••"
+                                        required
+                                        minLength={6}
+                                        autoComplete="new-password"
+                                    />
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="field">
+                                    <label htmlFor="email">Email</label>
+                                    <input
+                                        id="email"
+                                        type="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        placeholder="you@university.edu"
+                                        required
+                                        autoComplete="email"
+                                    />
+                                </div>
 
-                        <div className="field">
-                            <label htmlFor="password">Password</label>
-                            <input
-                                id="password"
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••'}
-                                required
-                                minLength={6}
-                                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                            />
-                        </div>
+                                {mode !== 'reset' && (
+                                    <div className="field">
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                            <label htmlFor="password" style={{ margin: 0 }}>Password</label>
+                                            {mode === 'signin' && (
+                                                <button
+                                                    type="button"
+                                                    className="btn-text"
+                                                    style={{ fontSize: 13 }}
+                                                    onClick={() => switchMode('reset')}
+                                                >
+                                                    Forgot password?
+                                                </button>
+                                            )}
+                                        </div>
+                                        <input
+                                            id="password"
+                                            type="password"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••'}
+                                            required
+                                            minLength={6}
+                                            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                                        />
+                                    </div>
+                                )}
+                            </>
+                        )}
 
                         {error && <p className="form-error">{error}</p>}
                         {success && <p className="form-success">{success}</p>}
@@ -112,12 +195,19 @@ export default function LoginPage() {
                                     style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white' }}
                                 />
                             )}
-                            {mode === 'signup' ? 'Create account' : 'Sign in'}
+                            {mode === 'signup' ? 'Create account' : mode === 'reset' ? 'Send reset link' : mode === 'new-password' ? 'Set new password' : 'Sign in'}
                         </button>
                     </form>
 
                     <div className="login-toggle">
-                        {mode === 'signin' ? (
+                        {mode === 'reset' ? (
+                            <>
+                                Remember your password?{' '}
+                                <button className="btn-text" onClick={() => switchMode('signin')}>
+                                    Sign in
+                                </button>
+                            </>
+                        ) : mode === 'signin' ? (
                             <>
                                 Don't have an account?{' '}
                                 <button className="btn-text" onClick={() => switchMode('signup')}>
@@ -133,6 +223,12 @@ export default function LoginPage() {
                             </>
                         )}
                     </div>
+
+                    {mode === 'signin' && (
+                        <p style={{ textAlign: 'center', marginTop: 12, fontSize: 13, color: 'var(--text-muted)' }}>
+                            Your username is your email address.
+                        </p>
+                    )}
                 </div>
             </div>
 

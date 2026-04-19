@@ -179,10 +179,15 @@ router.post('/release', async (req, res) => {
             return res.status(400).json({ error: 'Payment is not in escrow' });
         }
 
+        if (order.status === 'disputed') {
+            return res.status(400).json({ error: 'Cannot release payment while order is disputed' });
+        }
+
         const clearanceDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
 
         // Update database - mark as released, start 14-day clearance
-        const { error } = await supabase
+        // The .eq('payment_status', 'escrowed') on the UPDATE guards against race conditions
+        const { data: released, error } = await supabase
             .from('gig_requests')
             .update({
                 payment_status: 'released',
@@ -190,10 +195,17 @@ router.post('/release', async (req, res) => {
                 clearance_date: clearanceDate,
                 status: 'completed'
             })
-            .eq('id', orderId);
+            .eq('id', orderId)
+            .eq('payment_status', 'escrowed')
+            .select('id')
+            .single();
 
         if (error) {
             return res.status(500).json({ error: error.message });
+        }
+
+        if (!released) {
+            return res.status(409).json({ error: 'Order state changed. Refresh and try again.' });
         }
 
         // Stripe transfer happens after the 14-day clearance window via the clearance cron in index.js
@@ -457,6 +469,7 @@ router.post('/cancel-dispute', async (req, res) => {
                 dispute_date: null,
                 dispute_resolution: 'Dispute cancelled by buyer',
                 dispute_resolved_date: new Date().toISOString(),
+                clearance_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
             })
             .eq('id', orderId);
 
@@ -567,10 +580,14 @@ router.post('/dispute', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// REFUND PAYMENT - Called when dispute is resolved in buyer's favor
+// REFUND PAYMENT - Called when dispute is resolved in buyer's favor (admin only)
 // ═══════════════════════════════════════════════════════════════════════════
 router.post('/refund', async (req, res) => {
     try {
+        if (req.user.email !== process.env.ADMIN_EMAIL) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
         const { orderId } = req.body;
 
         if (!orderId) {
@@ -585,7 +602,6 @@ router.post('/refund', async (req, res) => {
             .single();
 
         if (orderError || !order) return res.status(404).json({ error: 'Order not found' });
-        if (order.requester_id !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
 
         if (!order.payment_intent_id) {
             return res.status(400).json({ error: 'No payment to refund' });
@@ -709,6 +725,25 @@ router.post('/submit-evidence', async (req, res) => {
 
         if (!orderId || !content?.trim()) {
             return res.status(400).json({ error: 'Missing orderId or content' });
+        }
+
+        if (content.trim().length > 5000) {
+            return res.status(400).json({ error: 'Evidence content exceeds 5000 character limit' });
+        }
+
+        if (imageUrl) {
+            try {
+                const parsed = new URL(imageUrl);
+                const supabaseHost = (process.env.SUPABASE_URL || '').replace('https://', '');
+                if (parsed.protocol !== 'https:') {
+                    return res.status(400).json({ error: 'Image URL must use HTTPS' });
+                }
+                if (!supabaseHost || !parsed.hostname.endsWith(supabaseHost)) {
+                    return res.status(400).json({ error: 'Image must be uploaded to SkillJoy storage' });
+                }
+            } catch {
+                return res.status(400).json({ error: 'Invalid image URL' });
+            }
         }
 
         // Verify user is a party to this dispute

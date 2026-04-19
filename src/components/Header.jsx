@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useUser, useProfile, useAuth } from '@/lib/stores';
+import { useUser, useProfile, useAuth, useUnreadCounts } from '@/lib/stores';
 import { Link, useLocation } from 'react-router-dom';
 import Notifications from './Notifications';
 import SkillJoyLogo from '../assets/SkillJoy-Logo.svg'
@@ -12,13 +12,14 @@ export default function Header() {
   const user = useUser();
   const profile = useProfile();
   const { loading } = useAuth();
+  const unread = useUnreadCounts();
   const location = useLocation();
   const currentPath = location.pathname;
   const [menuOpen, setMenuOpen] = useState(false);
 
   function closeMenu() { setMenuOpen(false); }
 
-  if (loading || !user) return null;
+  if (loading || !user || currentPath === '/login') return null;
 
   return (
     <>
@@ -36,11 +37,19 @@ export default function Header() {
       {/* Desktop nav */}
       <div className="nav-links">
         <Link to="/matches" className={`nav-link${currentPath === '/matches' ? ' active' : ''}`}>Matches</Link>
-        <Link to="/swaps" className={`nav-link${currentPath === '/swaps' ? ' active' : ''}`}>Swaps</Link>
-        <Link to="/gigs" className={`nav-link${currentPath === '/gigs' ? ' active' : ''}`}>Gigs</Link>
-        <Link to="/my-orders" className={`nav-link${currentPath === '/my-orders' ? ' active' : ''}`}>Orders</Link>
+        <Link to="/swaps" className={`nav-link${currentPath === '/swaps' ? ' active' : ''}`}>
+          Swaps{unread.swap > 0 && <span className="nav-badge">{unread.swap}</span>}
+        </Link>
+        <Link to="/gigs" className={`nav-link${currentPath === '/gigs' ? ' active' : ''}`}>
+          Gigs{unread.gig > 0 && <span className="nav-badge">{unread.gig}</span>}
+        </Link>
+        <Link to="/my-orders" className={`nav-link${currentPath === '/my-orders' ? ' active' : ''}`}>
+          Orders{unread.gig > 0 && <span className="nav-badge">{unread.gig}</span>}
+        </Link>
         <Link to="/disputes" className={`nav-link${currentPath === '/disputes' ? ' active' : ''}`}>Disputes</Link>
-        <Link to="/chat" className={`nav-link${currentPath === '/chat' ? ' active' : ''}`}>Chat</Link>
+        <Link to="/chat" className={`nav-link${currentPath === '/chat' ? ' active' : ''}`}>
+          Chat{(unread.gig + unread.swap) > 0 && <span className="nav-badge">{unread.gig + unread.swap}</span>}
+        </Link>
         {/* <Link to="/rewards" className={`nav-link${currentPath === '/rewards' ? ' active' : ''}`}>Rewards</Link> */}
         {user.email === 'techkage@proton.me' && (
           <Link to="/admin" className={`nav-link${currentPath === '/admin' ? ' active' : ''}`} style={{ color: '#ec9146', fontWeight: 700 }}>Admin</Link>
@@ -62,11 +71,19 @@ export default function Header() {
             <div className="points-badge">🏆 {profile?.points || 0}</div>
           </div>
           <Link to="/matches" className={`nav-link${currentPath === '/matches' ? ' active' : ''}`} onClick={closeMenu}>Matches</Link>
-          <Link to="/swaps" className={`nav-link${currentPath === '/swaps' ? ' active' : ''}`} onClick={closeMenu}>Swaps</Link>
-          <Link to="/gigs" className={`nav-link${currentPath === '/gigs' ? ' active' : ''}`} onClick={closeMenu}>Gigs</Link>
-          <Link to="/my-orders" className={`nav-link${currentPath === '/my-orders' ? ' active' : ''}`} onClick={closeMenu}>Orders</Link>
+          <Link to="/swaps" className={`nav-link${currentPath === '/swaps' ? ' active' : ''}`} onClick={closeMenu}>
+            Swaps{unread.swap > 0 && <span className="nav-badge">{unread.swap}</span>}
+          </Link>
+          <Link to="/gigs" className={`nav-link${currentPath === '/gigs' ? ' active' : ''}`} onClick={closeMenu}>
+            Gigs{unread.gig > 0 && <span className="nav-badge">{unread.gig}</span>}
+          </Link>
+          <Link to="/my-orders" className={`nav-link${currentPath === '/my-orders' ? ' active' : ''}`} onClick={closeMenu}>
+            Orders{unread.gig > 0 && <span className="nav-badge">{unread.gig}</span>}
+          </Link>
           <Link to="/disputes" className={`nav-link${currentPath === '/disputes' ? ' active' : ''}`} onClick={closeMenu}>Disputes</Link>
-          <Link to="/chat" className={`nav-link${currentPath === '/chat' ? ' active' : ''}`} onClick={closeMenu}>Chat</Link>
+          <Link to="/chat" className={`nav-link${currentPath === '/chat' ? ' active' : ''}`} onClick={closeMenu}>
+            Chat{(unread.gig + unread.swap) > 0 && <span className="nav-badge">{unread.gig + unread.swap}</span>}
+          </Link>
           <Link to="/rewards" className={`nav-link${currentPath === '/rewards' ? ' active' : ''}`} onClick={closeMenu}>Rewards</Link>
           {user.email === 'techkage@proton.me' && (
             <Link to="/admin" className={`nav-link${currentPath === '/admin' ? ' active' : ''}`} onClick={closeMenu} style={{ color: '#ec9146', fontWeight: 700 }}>Admin</Link>

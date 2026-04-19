@@ -42,7 +42,7 @@ export default function RefundPolicyPage() {
             </Section>
 
             <Section title="Contact">
-                For refund-related questions, contact <a href="mailto:support@skilljoy.app" style={{ color: 'var(--accent)' }}>support@skilljoy.app</a>.
+                For refund-related questions, contact <a href="mailto:techkage@proton.me" style={{ color: 'var(--accent)' }}>techkage@proton.me</a>.
             </Section>
         </div>
     );

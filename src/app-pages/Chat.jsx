@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth, getSkillName } from '@/lib/stores';
 import { apiFetch } from '@/lib/api';
+import BlockButton from '@/components/BlockButton';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -28,7 +29,7 @@ function formatLastMsg(lastMsg, userId) {
 const RATING_LABELS = ['', 'Terrible experience', 'Poor experience', 'Average experience', 'Good experience', 'Greatest experience!'];
 
 function isGigCompleted(c) { return c.requester_completed && c.provider_completed || c.status === 'withdrawn' || c.status === 'completed' || c.status === 'cancelled' || c.payment_status === 'withdrawn' || c.payment_status === 'refunded'; }
-function isSwapCompleted(c) { return c.requester_completed && c.receiver_completed; }
+function isSwapCompleted(c) { return (c.requester_completed && c.receiver_completed) || c.status === 'cancelled'; }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -76,6 +77,7 @@ export default function ChatPage() {
     const inputRef = useRef(null);
     const realtimeSub = useRef(null);
     const swapSub = useRef(null);
+    const gigListSubs = useRef([]);
     const hasMounted = useRef(false);
 
     // Derived
@@ -128,39 +130,46 @@ export default function ChatPage() {
         id, status, teach_skill, learn_skill,
         requester_id, receiver_id,
         requester_completed, receiver_completed,
-        requester:profiles!requester_id(id, full_name, bio, skills_teach, skills_learn),
-        receiver:profiles!receiver_id(id, full_name, bio, skills_teach, skills_learn)
+        requester:profiles!requester_id(id, full_name, bio, skills_teach, skills_learn, avatar_url),
+        receiver:profiles!receiver_id(id, full_name, bio, skills_teach, skills_learn, avatar_url)
       `)
-            .in('status', ['accepted', 'completed'])
+            .in('status', ['accepted', 'completed', 'cancelled'])
             .or(`requester_id.eq.${user.id},receiver_id.eq.${user.id}`)
             .order('created_at', { ascending: false });
 
         setLoadingConvos(false);
         if (e) { setError('Could not load conversations. Please refresh.'); return; }
 
-        const enriched = await Promise.all((data ?? []).map(async swap => {
+        // Batch fetch last message for all swaps in one query
+        const swapIds = (data ?? []).map(s => s.id);
+        const lastMsgBySwap = {};
+        if (swapIds.length > 0) {
+            const { data: allMsgs } = await supabase
+                .from('messages')
+                .select('content, created_at, sender_id, swap_id')
+                .in('swap_id', swapIds)
+                .order('created_at', { ascending: false });
+            for (const msg of allMsgs ?? []) {
+                if (!lastMsgBySwap[msg.swap_id]) lastMsgBySwap[msg.swap_id] = msg;
+            }
+        }
+
+        const enriched = (data ?? []).map(swap => {
             const iAmRequester = swap.requester_id === user.id;
             const other = iAmRequester ? swap.receiver : swap.requester;
-
             const myTeachEntry = (profile?.skills_teach ?? []).find(s => (typeof s === 'string' ? s : s.name) === swap.teach_skill);
             const theirTeachEntry = (other?.skills_teach ?? []).find(s => (typeof s === 'string' ? s : s.name) === swap.learn_skill);
-
             const teachStars = myTeachEntry ? (typeof myTeachEntry === 'string' ? 3 : myTeachEntry.stars ?? 3) : null;
             const learnStars = theirTeachEntry ? (typeof theirTeachEntry === 'string' ? 3 : theirTeachEntry.stars ?? 3) : null;
-
-            const { data: lastMsgs } = await supabase
-                .from('messages').select('content, created_at, sender_id')
-                .eq('swap_id', swap.id).order('created_at', { ascending: false }).limit(1);
-
             return {
                 swap_id: swap.id, status: swap.status, other,
                 teach_skill: swap.teach_skill, learn_skill: swap.learn_skill,
                 requester_id: swap.requester_id, receiver_id: swap.receiver_id,
                 requester_completed: swap.requester_completed,
                 receiver_completed: swap.receiver_completed,
-                teachStars, learnStars, lastMsg: lastMsgs?.[0] ?? null,
+                teachStars, learnStars, lastMsg: lastMsgBySwap[swap.id] ?? null,
             };
-        }));
+        });
 
         setConversations(enriched);
         return enriched;
@@ -176,8 +185,8 @@ export default function ChatPage() {
             .select(`
                 id, status,
                 gig:gigs!gig_id(id, title, price, category),
-                requester:profiles!requester_id(id, full_name, bio),
-                provider:profiles!provider_id(id, full_name, bio),
+                requester:profiles!requester_id(id, full_name, bio, avatar_url),
+                provider:profiles!provider_id(id, full_name, bio, avatar_url),
                 requester_id, provider_id,
                 requester_completed, provider_completed,
                 payment_status, confirmation_deadline, chat_archived_at, clearance_date
@@ -189,33 +198,44 @@ export default function ChatPage() {
         setLoadingConvos(false);
         if (e) { setError('Could not load conversations. Please refresh.'); return; }
 
-        const enriched = await Promise.all((data ?? []).map(async req => {
+        const gigReqIds = (data ?? []).map(r => r.id);
+        const otherUserIds = [...new Set((data ?? []).map(r => r.provider_id === user.id ? r.requester_id : r.provider_id))];
+
+        const lastMsgByReq = {};
+        const ratingsByUserId = {};
+
+        // Batch: one query for all last messages, one for all ratings
+        await Promise.all([
+            gigReqIds.length > 0 && supabase
+                .from('messages')
+                .select('content, created_at, sender_id, gig_request_id')
+                .in('gig_request_id', gigReqIds)
+                .order('created_at', { ascending: false })
+                .then(({ data: allMsgs }) => {
+                    for (const msg of allMsgs ?? []) {
+                        if (!lastMsgByReq[msg.gig_request_id]) lastMsgByReq[msg.gig_request_id] = msg;
+                    }
+                }),
+            otherUserIds.length > 0 && supabase
+                .from('ratings')
+                .select('rating, rated_id')
+                .in('rated_id', otherUserIds)
+                .then(({ data: allRatings }) => {
+                    for (const r of allRatings ?? []) {
+                        if (!ratingsByUserId[r.rated_id]) ratingsByUserId[r.rated_id] = [];
+                        ratingsByUserId[r.rated_id].push(r.rating);
+                    }
+                }),
+        ].filter(Boolean));
+
+        const enriched = (data ?? []).map(req => {
             const isProvider = req.provider_id === user.id;
             const other = isProvider ? req.requester : req.provider;
-
-            const { data: lastMsgs } = await supabase
-                .from('messages')
-                .select('content, created_at, sender_id')
-                .eq('gig_request_id', req.id)
-                .order('created_at', { ascending: false })
-                .limit(1);
-
-
-            // Profile Ratings
-            const { data: ratings } = await supabase
-                .from("ratings")
-                .select('rating')
-                .eq('rated_id', other.id)
-
-            const avgRating = ratings?.length
-                ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1)
+            const userRatings = ratingsByUserId[other?.id] ?? [];
+            const avgRating = userRatings.length
+                ? (userRatings.reduce((s, r) => s + r, 0) / userRatings.length).toFixed(1)
                 : null;
-
-            const ratingCount = ratings?.length ?? 0;
-
-
-
-
+            const ratingCount = userRatings.length;
             return {
                 gig_request_id: req.id, status: req.status,
                 gig: req.gig,
@@ -224,17 +244,14 @@ export default function ChatPage() {
                 provider_completed: req.provider_completed,
                 payment_status: req.payment_status,
                 confirmation_deadline: req.confirmation_deadline,
+                auto_release_date: req.confirmation_deadline,
                 chat_archived_at: req.chat_archived_at,
                 clearance_date: req.clearance_date,
                 isProvider,
-                lastMsg: lastMsgs?.[0] ?? null,
-                other: { ...other, avgRating, ratingCount }
+                lastMsg: lastMsgByReq[req.id] ?? null,
+                other: { ...other, avgRating, ratingCount },
             };
-
-
-
-
-        }));
+        });
 
         setGigConversations(enriched);
         return enriched;
@@ -433,78 +450,6 @@ export default function ChatPage() {
 
     function closeRatingModal() { setShowRatingModal(false); setRatingValue(0); setRatingComment(''); }
 
-    // ── Complete gig ──────────────────────────────────────────────────────────
-
-    async function markGigComplete(gigReqId) {
-        if (!activeConvo) return;
-        const isRequester = activeConvo.requester_id === user.id;
-        const fieldToUpdate = isRequester ? 'requester_completed' : 'provider_completed';
-
-        // Update our completed field (ownership check ensures only this user's row is touched)
-        const ownerField = isRequester ? 'requester_id' : 'provider_id';
-        const { error: e } = await supabase.from('gig_requests').update({ [fieldToUpdate]: true }).eq('id', gigReqId).eq(ownerField, user.id);
-        if (e) { setError(e.message); return; }
-
-        // Verify the update actually persisted (RLS may silently block it)
-        const { data: row } = await supabase.from('gig_requests').select('requester_completed, provider_completed').eq('id', gigReqId).single();
-        const myFieldActuallyUpdated = row?.[fieldToUpdate] === true;
-
-        if (!myFieldActuallyUpdated) {
-            // RLS blocked the update — try via RPC as fallback
-            const { error: rpcErr } = await supabase.rpc('mark_gig_completed', {
-                gig_req_id: gigReqId,
-                field_name: fieldToUpdate
-            });
-            if (rpcErr) {
-                setError('Could not save your vote. Please check database permissions for gig_requests updates.');
-                return;
-            }
-            // Re-fetch after RPC
-            const { data: row2 } = await supabase.from('gig_requests').select('requester_completed, provider_completed').eq('id', gigReqId).single();
-            if (!row2?.[fieldToUpdate]) {
-                setError('Could not save your vote. Please check database permissions for gig_requests updates.');
-                return;
-            }
-            Object.assign(row, row2);
-        }
-
-        const bothDone = row?.requester_completed && row?.provider_completed;
-
-        // Update local state immediately
-        setGigConversations(prev => prev.map(c =>
-            c.gig_request_id === gigReqId
-                ? { ...c, requester_completed: row.requester_completed, provider_completed: row.provider_completed }
-                : c
-        ));
-        setShowProfileModal(false);
-        setModalProfile(null);
-
-        if (bothDone) {
-            setActiveTab('completed');
-            showToast('Gig completed!');
-            await checkAndShowGigRatingModal(gigReqId);
-        } else {
-            showToast('Marked as complete. Waiting for other party. (1/2)');
-        }
-    }
-
-    async function unmarkGigComplete(gigReqId) {
-        if (!activeConvo) return;
-        const isReq = activeConvo.requester_id === user.id;
-        const field = isReq ? 'requester_completed' : 'provider_completed';
-        const upd = { [field]: false };
-        if (activeConvo.status === 'completed') upd.status = 'accepted';
-
-        const ownerField = isReq ? 'requester_id' : 'provider_id';
-        const { error: err } = await supabase.from('gig_requests').update(upd).eq('id', gigReqId).eq(ownerField, user.id);
-        if (err) { setError(err.message); return; }
-        setGigConversations(prev => prev.map(c =>
-            c.gig_request_id === gigReqId
-                ? { ...c, [field]: false, ...(activeConvo.status === 'completed' ? { status: 'accepted' } : {}) }
-                : c
-        ));
-        showToast('Vote removed.');
-    }
 
     async function checkAndShowGigRatingModal(gigReqId) {
         const { data: existing, error: err } = await supabase
@@ -703,6 +648,27 @@ export default function ChatPage() {
     }
 
 
+    // Cancel Swaps from Supabase
+
+    async function cancelSwap(swapId) {
+        
+        // Cancel Swap
+
+        const {error} = await supabase
+            .from('swaps')
+            .update({status: 'cancelled'})
+            .eq('id', swapId);
+
+        if (error) { console.error('cancelSwap error:', error); showToast('Failed to cancel swap'); return; }
+            setConversations(prev => prev.map(c =>
+                c.swap_id === swapId ? { ...c, status: 'cancelled' } : c
+            ));
+            showToast('Swap cancelled.');
+
+
+    }
+
+
     // Lock body scroll on mobile so the footer doesn't create a scrollable gap
     useEffect(() => {
         document.body.style.overflow = 'hidden';
@@ -719,13 +685,11 @@ export default function ChatPage() {
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
         (async () => {
-            const convos = await loadConversations();
-            await loadGigConversations();
+            const [convos, gigConvos] = await Promise.all([loadConversations(), loadGigConversations()]);
             const swapParam = searchParams.get('swap');
             const gigParam = searchParams.get('gig');
             if (gigParam) {
                 setChatMode('gigs');
-                const gigConvos = await loadGigConversations();
                 const found = gigConvos?.find(c => c.gig?.id === gigParam);
                 if (found) await selectConversation(found.gig_request_id, 'gigs');
             } else if (swapParam) {
@@ -735,7 +699,28 @@ export default function ChatPage() {
                 await selectConversation(convos[0].swap_id, 'swaps');
             }
         })();
-        return () => cleanupSubs();
+        // Subscribe to notifications INSERT events for this user.
+        // Supabase Realtime column filters on UPDATE events require REPLICA IDENTITY FULL;
+        // gig_requests uses the default so filtering by requester_id/provider_id on UPDATEs
+        // silently drops every event. Notifications are always INSERT and user_id filtering
+        // on INSERT is reliable — this fires whenever order status changes.
+        const chNotif = supabase
+            .channel(`gig-list-notif-${user.id}`)
+            .on('postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+                (payload) => {
+                    if (payload.new?.type === 'order_update') {
+                        loadGigConversations(true);
+                    }
+                })
+            .subscribe();
+        gigListSubs.current = [chNotif];
+
+        return () => {
+            cleanupSubs();
+            gigListSubs.current.forEach(ch => supabase.removeChannel(ch));
+            gigListSubs.current = [];
+        };
     }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
@@ -1024,7 +1009,12 @@ export default function ChatPage() {
                             <button className="modal-close" onClick={() => { setShowProfileModal(false); setModalProfile(null); }}>✕</button>
 
                             <div className="modal-header">
-                                <div className="avatar avatar-lg">{initials(modalProfile.full_name)}</div>
+                                <div className="avatar avatar-lg">
+                                    {modalProfile.avatar_url
+                                        ? <img src={modalProfile.avatar_url} alt={modalProfile.full_name} />
+                                        : initials(modalProfile.full_name)
+                                    }
+                                </div>
                                 {/* <div><h2>{modalProfile.full_name}</h2></div> */}
                                 <Link to={`/profile/${modalProfile.id}`}>
                                     <h2>{modalProfile.full_name}</h2>
@@ -1062,9 +1052,25 @@ export default function ChatPage() {
                                                 Mark Swap as Complete
                                             </button>
                                         )}
+                                        {/* Cancel Button */}
+                                        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+                                            <button
+                                                className="btn btn-secondary"
+                                                style={{ width: '100%', color: '#dc2626', borderColor: '#fca5a5' }}
+                                                onClick={() => cancelSwap(activeConvo.swap_id)}
+                                            >
+                                                Cancel Swap
+                                            </button>
+                                        </div>
                                     </div>
                                 );
                             })()}
+
+                            {chatMode === 'swaps' && activeConvo?.status === 'cancelled' && (
+                                <div style={{ padding: '12px 14px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, color: '#4b5563', marginBottom: 16 }}>
+                                    ✕ This swap was cancelled.
+                                </div>
+                            )}
 
                             {chatMode === 'gigs' && activeConvo?.gig && (
                                 <div className="modal-section">
@@ -1160,7 +1166,7 @@ export default function ChatPage() {
                                         )}
 
 
-                                        {activeConvo.isProvider && activeConvo.payment_status == 'escrowed' && activeConvo.status == "delivered" && (
+                                        {activeConvo.isProvider && activeConvo.payment_status === 'escrowed' && activeConvo.status === 'delivered' && (
 
                                             <button
                                                 className='btn btn-primary'
@@ -1318,6 +1324,10 @@ export default function ChatPage() {
                                     )}
                                 </div>
                             )}
+
+                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                <BlockButton userId={modalProfile.id} />
+                            </div>
                         </div>
                     </div >
                 )
@@ -1507,16 +1517,7 @@ export default function ChatPage() {
             .avatar-sm { width: 34px !important; height: 34px !important; font-size: 12px !important; flex-shrink: 0; }
 
             /* Main */
-            .chat-main { 
-            flex: 1;
-             display: flex; 
-             flex-direction: 
-             column; 
-             min-width: 0; 
-             overflow: hidden; 
-
-             
-             }
+            .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
             .chat-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-secondary); }
             .chat-empty h3 { font-size: 20px; color: var(--text); }
             .chat-empty p { font-size: 14px; }
@@ -1536,19 +1537,7 @@ export default function ChatPage() {
             .role-providing { background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; }
 
             /* Messages */
-<<<<<<< HEAD
-            .messages-area { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 4px; min-height: 0; overscroll-behavior: contain; }
-=======
-            .messages-area { 
-            flex: 1;
-            overflow-y: auto;
-            touch-action: pan-y;
-            padding: 20px 24px; 
-            display: flex; flex-direction: 
-            column; gap: 4px;
-            min-height: 0; }
-            
->>>>>>> 19fa40f8d21b2f96b196a75c62a727113c4ccd2d
+            .messages-area { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 4px; min-height: 0; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
             .msgs-loading, .msgs-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 14px; }
             .time-divider { text-align: center; font-size: 11px; color: var(--text-muted); margin: 12px 0 8px; }
             .msg-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 2px; }
@@ -1559,7 +1548,7 @@ export default function ChatPage() {
             .bubble-theirs { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 4px; }
 
             /* Composer */
-            .composer { display: flex; align-items: flex-end; gap: 10px; padding: 14px 20px; padding-bottom: max(14px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: #a06840; flex-shrink: 0; }
+            .composer { display: flex; align-items: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
             .composer-input { flex: 1; resize: none; border: 1px solid var(--border); border-radius: var(--r-lg); padding: 10px 16px; font-size: 14px; font-family: var(--font-body); color: var(--text); background: white; outline: none; overflow-y: hidden; line-height: 1.5; transition: border-color 0.15s, height 0.1s ease; }
             .composer-input:focus { border-color: var(--primary); }
             .composer-send { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: var(--r-full); flex-shrink: 0; }
@@ -1582,7 +1571,7 @@ export default function ChatPage() {
             .modal-section { margin-bottom: 24px;  }
             .modal-section h3 { font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
             .modal-section .bio { color: var(--text-secondary); line-height: 1.6; }
-            .modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary); }
+
             .btn-danger { background: #ef4444; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
             .btn-danger:hover { background: #dc2626; }
             .chat-withdraw-btn { display: flex; align-items: center; justify-content: center; gap: 7px; background: #fff5f5; border: 1.5px solid #fca5a5; color: #dc2626; padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; }

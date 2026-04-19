@@ -45,7 +45,7 @@ export default function TermsPage() {
             </Section>
 
             <Section title="11. Contact">
-                For questions about these terms, contact us at <a href="mailto:legal@skilljoy.app" style={{ color: 'var(--accent)' }}>legal@skilljoy.app</a>.
+                For questions about these terms, contact us at <a href="mailto:techkage@proton.me" style={{ color: 'var(--accent)' }}>techkage@proton.me</a>.
             </Section>
         </div>
     );
