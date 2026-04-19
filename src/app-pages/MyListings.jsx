@@ -994,7 +994,7 @@ export default function MyListingsPage() {
         .gig-title-link:hover { color: var(--accent); text-decoration: underline; }
         .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 500; padding: 16px; }
         .modal { position: relative; background: var(--surface); border-radius: var(--r-lg); padding: 32px; max-width: 500px; width: 100%; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-        .modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary); }
+
         .modal-section { margin-bottom: 20px; }
         .modal-section h3 { font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
 

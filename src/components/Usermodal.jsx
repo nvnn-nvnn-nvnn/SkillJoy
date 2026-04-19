@@ -182,18 +182,6 @@ export default function UserModal({ user, onClose, onPropose, submitting }) {
             </div>
 
             <style>{`
-        .modal-close {
-          position: absolute;
-          top: 16px; right: 16px;
-          background: var(--surface-alt);
-          border: none;
-          width: 32px; height: 32px;
-          border-radius: 50%;
-          cursor: pointer;
-          font-size: 16px;
-          color: var(--text-secondary);
-        }
-        .modal-close:hover { background: var(--border); }
         .modal-section { margin: 16px 0; }
         .modal-section h3 {
           font-size: 13px;

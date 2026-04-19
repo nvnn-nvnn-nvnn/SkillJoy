@@ -431,6 +431,7 @@ label {
 }
 
 .modal {
+  position: relative;
   background: var(--surface);
   border-radius: 16px;
   padding: 32px;
@@ -452,6 +453,32 @@ label {
     opacity: 1;
     transform: scale(1) translateY(0);
   }
+}
+
+/* ── Modal close button ── */
+.modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.modal-close:hover {
+  background: var(--border);
+  color: var(--text);
+  border-color: var(--border-strong);
 }
 
 /* ── Toasts ── */

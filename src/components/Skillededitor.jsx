@@ -118,6 +118,7 @@ export default function SkillEditor({ skills, onChange, type = 'teach' }) {
                 >
                     <div
                         style={{
+                            position: 'relative',
                             background: 'var(--surface)', borderRadius: 20,
                             width: '100%', maxWidth: 560,
                             maxHeight: '80vh', display: 'flex', flexDirection: 'column',
@@ -126,22 +127,16 @@ export default function SkillEditor({ skills, onChange, type = 'teach' }) {
                         }}
                         onClick={e => e.stopPropagation()}
                     >
+                        <button className="modal-close" onClick={() => setShowModal(false)}>✕</button>
+
                         {/* Modal header */}
-                        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-                                    {type === 'teach' ? 'Skills you can teach' : 'Skills you want to learn'}
-                                </h2>
-                                <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-                                    {skills.length} selected — tap any skill to toggle
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => setShowModal(false)}
-                                style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 8px', lineHeight: 1 }}
-                            >
-                                ✕
-                            </button>
+                        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+                            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
+                                {type === 'teach' ? 'Skills you can teach' : 'Skills you want to learn'}
+                            </h2>
+                            <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
+                                {skills.length} selected — tap any skill to toggle
+                            </p>
                         </div>
 
                         {/* Scrollable categories */}

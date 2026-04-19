@@ -1571,7 +1571,7 @@ export default function ChatPage() {
             .modal-section { margin-bottom: 24px;  }
             .modal-section h3 { font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
             .modal-section .bio { color: var(--text-secondary); line-height: 1.6; }
-            .modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary); }
+
             .btn-danger { background: #ef4444; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
             .btn-danger:hover { background: #dc2626; }
             .chat-withdraw-btn { display: flex; align-items: center; justify-content: center; gap: 7px; background: #fff5f5; border: 1.5px solid #fca5a5; color: #dc2626; padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
