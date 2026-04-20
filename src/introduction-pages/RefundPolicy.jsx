@@ -34,7 +34,7 @@ export default function RefundPolicyPage() {
             </Section>
 
             <Section title="Platform Fee">
-                The $6 platform service fee is non-refundable in all cases, including cancelled and disputed orders.
+                The 10% platform service fee is non-refundable in all cases, including cancelled and disputed orders.
             </Section>
 
             <Section title="Processing Time">

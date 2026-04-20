@@ -1,6 +1,6 @@
 // ── Shared fee constants ───────────────────────────────────────────────────
 // Keep SERVICE_FEE_PERCENT in sync with VITE_SERVICE_FEE_PERCENT (frontend).
-const SERVICE_FEE_PERCENT = 0.04; // 4% of gig base price
+const SERVICE_FEE_PERCENT = 0.10; // 10% of gig base price
 
 // Fee in cents, computed from the seller's base price (gig.price).
 function feeCents(baseDollars) {

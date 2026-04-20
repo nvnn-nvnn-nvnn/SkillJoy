@@ -25,8 +25,10 @@ function PaymentForm({ order, onSuccess, onError, onClose }) {
     const [cardName, setCardName] = useState('');
     const [zipCode, setZipCode] = useState('');
 
-    const SERVICE_FEE = 6.00; // Keep in sync with backend/config/fees.js
-    const total = (parseFloat(order.gig.price) || 0) + SERVICE_FEE;
+    const SERVICE_FEE_PERCENT = parseFloat(import.meta.env.VITE_SERVICE_FEE_PERCENT) || 0.10; // keep in sync with backend/config/fees.js
+    const basePrice = parseFloat(order.gig.price) || 0;
+    const serviceFee = basePrice * SERVICE_FEE_PERCENT;
+    const total = basePrice + serviceFee;
 
     async function handleSubmit(e) {
         e.preventDefault();
@@ -38,7 +40,7 @@ function PaymentForm({ order, onSuccess, onError, onClose }) {
                 method: 'POST',
                 body: JSON.stringify({
                     orderId: order.id,
-                    amount: order.gig.price + SERVICE_FEE
+                    amount: total
                 }),
             });
 
@@ -132,8 +134,8 @@ function PaymentForm({ order, onSuccess, onError, onClose }) {
                     <span>${parseFloat(order.gig.price).toFixed(2)}</span>
                 </div>
                 <div className="pf-breakdown-row">
-                    <span>Service fee</span>
-                    <span>${SERVICE_FEE.toFixed(2)}</span>
+                    <span>Service fee ({(SERVICE_FEE_PERCENT * 100).toFixed(0)}%)</span>
+                    <span>${serviceFee.toFixed(2)}</span>
                 </div>
                 <div className="pf-breakdown-row pf-breakdown-total">
                     <span>Total due</span>

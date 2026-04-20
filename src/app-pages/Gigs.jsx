@@ -207,7 +207,7 @@ export default function GigsPage() {
         setTimeout(() => setToast(''), 3500);
     }
 
-    const SERVICE_FEE = 6.00;
+    const SERVICE_FEE_PERCENT = parseFloat(import.meta.env.VITE_SERVICE_FEE_PERCENT) || 0.10;
 
     function openPaymentModal(gig) {
         setPaymentModal(gig);
@@ -486,7 +486,7 @@ export default function GigsPage() {
                 )}
 
                 {/* Stripe Payment Placeholder */}
-                <div className="stripe-placeholder">
+                {/* <div className="stripe-placeholder">
                     <div className="stripe-icon">💳</div>
                     <div className="stripe-info">
                         <h3>Payments powered by Stripe</h3>
@@ -495,7 +495,9 @@ export default function GigsPage() {
                             Connect Stripe Account (Coming Soon)
                         </button>
                     </div>
-                </div>
+                </div> */}
+
+                
             </div >
 
             {/* ── Payment / Hire Modal ── */}
@@ -571,12 +573,12 @@ export default function GigsPage() {
                                 <span>${(parseFloat(customAmount) || 0).toFixed(2)}</span>
                             </div>
                             <div className="payment-line">
-                                <span>Service fee</span>
-                                <span>${SERVICE_FEE.toFixed(2)}</span>
+                                <span>Service fee ({(SERVICE_FEE_PERCENT * 100).toFixed(0)}%)</span>
+                                <span>${((parseFloat(customAmount) || 0) * SERVICE_FEE_PERCENT).toFixed(2)}</span>
                             </div>
                             <div className="payment-line payment-total">
                                 <span>Total</span>
-                                <span>${((parseFloat(customAmount) || 0) + SERVICE_FEE).toFixed(2)}</span>
+                                <span>${((parseFloat(customAmount) || 0) * (1 + SERVICE_FEE_PERCENT)).toFixed(2)}</span>
                             </div>
                         </div>
 

@@ -21,7 +21,7 @@ export default function TermsPage() {
             </Section>
 
             <Section title="5. Payments & Escrow">
-                Payments for Gigs are held in escrow via Stripe until the buyer releases funds or the auto-release period expires (3 days after delivery). SkillJoy charges a platform service fee of $6 per transaction. All payments are processed by Stripe and subject to Stripe's terms of service.
+                Payments for Gigs are held in escrow via Stripe until the buyer releases funds or the auto-release period expires (3 days after delivery). SkillJoy charges a platform service fee of 10% of the gig price per transaction. All payments are processed by Stripe and subject to Stripe's terms of service.
             </Section>
 
             <Section title="6. Disputes">
