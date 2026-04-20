@@ -16,7 +16,7 @@ const reportRoutes = require('./routes/reports.js');
 const blockRoutes = require('./routes/blocks.js');
 const rateLimit = require('express-rate-limit');
 const { sendEmail, getUserEmail, templates } = require('./lib/email');
-const { SERVICE_FEE_CENTS } = require('./config/fees');
+const { feeCentsFromTotal } = require('./config/fees');
 
 // Global limiter: 200 req per 15 min per IP
 const globalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
@@ -202,7 +202,7 @@ cron.schedule('0 1 * * *', () => {
             }
 
             try {
-                const transferAmount = Math.round(order.payment_amount * 100) - SERVICE_FEE_CENTS;
+                const transferAmount = Math.round(order.payment_amount * 100) - feeCentsFromTotal(order.payment_amount);
                 await stripe.transfers.create({
                     amount: transferAmount,
                     currency: 'usd',
@@ -228,7 +228,7 @@ cron.schedule('0 1 * * *', () => {
                         ...templates.fundsCleared({
                             sellerName: 'there',
                             gigTitle,
-                            amount: ((order.payment_amount * 100 - SERVICE_FEE_CENTS) / 100).toFixed(2),
+                            amount: ((order.payment_amount * 100 - feeCentsFromTotal(order.payment_amount)) / 100).toFixed(2),
                         }),
                     });
                 }

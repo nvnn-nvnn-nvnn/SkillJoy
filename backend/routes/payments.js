@@ -3,7 +3,7 @@ const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
 const { sendEmail, getUserEmail, templates } = require('../lib/email');
-const { SERVICE_FEE_DOLLARS } = require('../config/fees');
+const { feeDollars } = require('../config/fees');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CREATE PAYMENT INTENT - Called when buyer clicks "Accept & Pay"
@@ -45,7 +45,7 @@ router.post('/create-intent', async (req, res) => {
             return res.status(402).json({ error: 'This seller has not set up payouts yet. Payment cannot proceed.' });
         }
 
-        const amount = parseFloat(order.gig.price) + SERVICE_FEE_DOLLARS;
+        const amount = parseFloat(order.gig.price) + feeDollars(order.gig.price);
 
         const paymentIntent = await stripe.paymentIntents.create({
             amount: Math.round(amount * 100),

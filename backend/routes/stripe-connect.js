@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
-const { SERVICE_FEE_CENTS, SERVICE_FEE_DOLLARS } = require('../config/fees');
+const { feeCentsFromTotal, feeDollarsFromTotal } = require('../config/fees');
 
 // Process any released orders past clearance_date for a newly-onboarded seller
 async function processReleasedOrders(providerId, stripeAccountId) {
@@ -17,7 +17,7 @@ async function processReleasedOrders(providerId, stripeAccountId) {
 
     for (const order of orders) {
         try {
-            const transferAmount = Math.round(order.payment_amount * 100) - SERVICE_FEE_CENTS;
+            const transferAmount = Math.round(order.payment_amount * 100) - feeCentsFromTotal(order.payment_amount);
             await stripe.transfers.create({
                 amount: transferAmount,
                 currency: 'usd',
@@ -210,7 +210,7 @@ router.get('/earnings', async (req, res) => {
             .eq('provider_id', req.user.id)
             .eq('payment_status', 'released');
 
-        const calc = (orders) => (orders || []).reduce((sum, o) => sum + (parseFloat(o.payment_amount) - SERVICE_FEE_DOLLARS), 0);
+        const calc = (orders) => (orders || []).reduce((sum, o) => sum + (parseFloat(o.payment_amount) - feeDollarsFromTotal(o.payment_amount)), 0);
         const inEscrow         = Math.max(0, parseFloat(calc(escrowedOrders).toFixed(2)));
         const pendingClearance = Math.max(0, parseFloat(calc(releasedOrders).toFixed(2)));
 

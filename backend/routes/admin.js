@@ -113,7 +113,7 @@ router.post('/run-clearance', async (req, res) => {
         }
         if (!isAdmin) return res.status(403).json({ error: 'Forbidden' });
 
-        const { SERVICE_FEE_CENTS } = require('../config/fees');
+        const { feeCentsFromTotal } = require('../config/fees');
         const { orderId } = req.body; // optional — force-clear a specific order bypassing clearance_date
 
         let query = supabase
@@ -148,7 +148,7 @@ router.post('/run-clearance', async (req, res) => {
             }
 
             try {
-                const transferAmount = Math.round(order.payment_amount * 100) - SERVICE_FEE_CENTS;
+                const transferAmount = Math.round(order.payment_amount * 100) - feeCentsFromTotal(order.payment_amount);
                 console.log(`Attempting transfer: $${transferAmount / 100} to ${provider.stripe_account_id} for order ${order.id}`);
                 await stripe.transfers.create({
                     amount: transferAmount,
@@ -227,7 +227,7 @@ router.get('/finances', async (req, res) => {
             return res.status(403).json({ error: 'Forbidden' });
         }
 
-        const { SERVICE_FEE_DOLLARS } = require('../config/fees');
+        const { feeDollarsFromTotal } = require('../config/fees');
 
         // 1. Live Stripe platform balance
         const balance = await stripe.balance.retrieve();
@@ -245,16 +245,19 @@ router.get('/finances', async (req, res) => {
         if (error) return res.status(500).json({ error: error.message });
 
         const owedToSellers = (releasedOrders ?? []).reduce((sum, o) => {
-            return sum + Math.max(0, (o.payment_amount ?? 0) - SERVICE_FEE_DOLLARS);
+            return sum + Math.max(0, (o.payment_amount ?? 0) - feeDollarsFromTotal(o.payment_amount ?? 0));
         }, 0);
 
         // 3. All-time fees collected from cleared orders
         const { data: clearedOrders } = await supabase
             .from('gig_requests')
-            .select('id')
+            .select('id, payment_amount')
             .eq('payment_status', 'cleared');
 
-        const totalFeesEarned = (clearedOrders?.length ?? 0) * SERVICE_FEE_DOLLARS;
+        const totalFeesEarned = (clearedOrders ?? []).reduce(
+            (sum, o) => sum + feeDollarsFromTotal(o.payment_amount ?? 0),
+            0
+        );
 
         // 4. Your actual profit sitting in Stripe right now
         const actualProfit = stripeTotal - owedToSellers;
