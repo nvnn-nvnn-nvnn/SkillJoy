@@ -154,6 +154,7 @@ export default function MyListingsPage() {
     // ── Create / Update Gig ──
     async function handleCreateGig(e) {
         e.preventDefault();
+        if (!profile?.stripe_onboarded || !profile?.offers_gigs) { showToast('Set up Stripe payouts and enable gig services before listing.', 'error'); return; }
         if (!title.trim() || !price) { showToast('Please fill in title and price', 'error'); return; }
 
         setSubmitting(true);
@@ -471,23 +472,34 @@ export default function MyListingsPage() {
                         {/* ── Create Gig Tab ── */}
                         {tab === 'create' && (
                             <form onSubmit={handleCreateGig} className="gig-form">
-                                {!profile?.stripe_onboarded && (
+                                {(!profile?.stripe_onboarded || !profile?.offers_gigs) && (
                                     <div style={{
-                                        padding: '14px 18px',
+                                        padding: '16px 18px',
                                         background: '#fff7ed',
                                         border: '1px solid #fdba74',
                                         borderRadius: 10,
                                         marginBottom: 20,
                                     }}>
-                                        <p style={{ color: '#92400e', fontWeight: 600, margin: '0 0 6px' }}>
-                                            ⚠️ Stripe not connected
+                                        <p style={{ color: '#92400e', fontWeight: 700, margin: '0 0 10px', fontSize: 15 }}>
+                                            ⚠️ Before you can list a gig, you need to:
                                         </p>
-                                        <p style={{ color: '#78350f', margin: '0 0 10px', fontSize: 14 }}>
-                                            You need to connect Stripe to receive payments before listing a gig.
+                                        <ul style={{ margin: '0 0 14px', paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                            {!profile?.stripe_onboarded && (
+                                                <li style={{ color: '#78350f', fontSize: 14 }}>
+                                                    Connect Stripe to receive payments —{' '}
+                                                    <Link to="/profile" style={{ color: '#92400e', fontWeight: 600 }}>Set up payouts</Link>
+                                                </li>
+                                            )}
+                                            {!profile?.offers_gigs && (
+                                                <li style={{ color: '#78350f', fontSize: 14 }}>
+                                                    Enable gig services in your settings —{' '}
+                                                    <Link to="/settings" style={{ color: '#92400e', fontWeight: 600 }}>Go to Settings</Link>
+                                                </li>
+                                            )}
+                                        </ul>
+                                        <p style={{ color: '#92400e', fontSize: 13, margin: 0 }}>
+                                            Your gig won't be submitted until both are complete.
                                         </p>
-                                        <Link to="/profile" className="btn btn-primary" style={{ fontSize: 13, padding: '6px 14px' }}>
-                                            Set Up Payouts
-                                        </Link>
                                     </div>
                                 )}
                                 <div className="field">
@@ -770,7 +782,7 @@ export default function MyListingsPage() {
                                 </div>
 
                                 <div className="form-submit-row" style={{ display: 'flex', gap: 10 }}>
-                                    <button className="btn btn-primary" type="submit" disabled={submitting || !title.trim() || !price}>
+                                    <button className="btn btn-primary" type="submit" disabled={submitting || !title.trim() || !price || !profile?.stripe_onboarded || !profile?.offers_gigs}>
                                         {submitting ? (editingGig ? 'Saving...' : 'Listing...') : (editingGig ? 'Save Changes' : 'List Gig')}
                                     </button>
                                     {editingGig && (

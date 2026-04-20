@@ -78,11 +78,20 @@ export default function SettingsPage() {
 
     async function saveGigSettings() {
         setSaving(true);
+        const turningOff = profile?.offers_gigs === true && offersGigs === false;
         const { error } = await supabase.from('profiles').update({ offers_gigs: offersGigs }).eq('id', user.id);
         setSaving(false);
         if (error) { showToast(error.message, 'error'); return; }
         const { data: updated } = await supabase.from('profiles').select('*').eq('id', user.id).single();
         if (updated) setProfile(updated);
+        if (turningOff) {
+            await supabase.from('notifications').insert({
+                user_id: user.id,
+                type: 'order_update',
+                title: 'Gig services are now paused',
+                message: 'Your gigs are no longer visible to buyers. No new requests will come in until you re-enable gig services in Settings. Your gig listings and payout info are safe.',
+            });
+        }
         showToast('Gig settings saved!', 'success');
     }
 
