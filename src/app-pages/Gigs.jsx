@@ -282,10 +282,13 @@ export default function GigsPage() {
                     <div style={{ fontSize: 48 }}>🎓</div>
                     <h2 style={{ fontWeight: 700, fontSize: 22, margin: 0, color: 'var(--text-primary)' }}>Verify your university email to browse Gigs</h2>
                     <p style={{ color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
-                        Gigs are only available to verified university members. Skill Swaps are still open to you.
+                        Gigs are only available to verified university members. Skill Swaps are always open to you.
                     </p>
-                    <button className="btn-primary" onClick={() => navigate('/profile')}>
+                    <button className="btn-primary" style={{ background: '#fff', color: 'var(--accent)', border: '1.5px solid var(--accent)' }} onClick={() => navigate('/profile')}>
                         Go to Profile to Verify
+                    </button>
+                    <button className="btn-secondary" style={{ background: '#fff', color: 'var(--text-secondary)', border: '1.5px solid #e5e7eb' }} onClick={() => navigate('/swaps')}>
+                        Browse Skill Swaps
                     </button>
                 </div>
             </div>
