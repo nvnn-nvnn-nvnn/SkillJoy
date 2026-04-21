@@ -42,4 +42,36 @@ router.get('/profile/:userId', async (req, res) => {
     }
 });
 
+// ── Delete account ───────────────────────────────────────────────────────────
+// Permanently deletes the user's profile row and their Supabase auth account.
+router.delete('/account', async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        // Delete profile (cascades to related rows if FK constraints are set up)
+        const { error: profileErr } = await supabase
+            .from('profiles')
+            .delete()
+            .eq('id', userId);
+
+        if (profileErr) {
+            console.error('Delete profile error:', profileErr.message);
+            return res.status(500).json({ error: 'Failed to delete profile.' });
+        }
+
+        // Delete the auth user (requires service-role key, which the backend client has)
+        const { error: authErr } = await supabase.auth.admin.deleteUser(userId);
+
+        if (authErr) {
+            console.error('Delete auth user error:', authErr.message);
+            return res.status(500).json({ error: 'Profile deleted but failed to remove auth account. Contact support.' });
+        }
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Delete account error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

@@ -112,8 +112,18 @@ export default function SettingsPage() {
     async function deleteAccount() {
         if (deleteInput !== 'DELETE') return;
         setSaving(true);
-        await supabase.auth.signOut();
-        navigate('/login');
+        try {
+            const res = await apiFetch('/api/users/account', { method: 'DELETE' });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body.error || 'Failed to delete account');
+            }
+            await supabase.auth.signOut();
+            navigate('/login');
+        } catch (err) {
+            showToast(err.message, 'error');
+            setSaving(false);
+        }
     }
 
     function showToast(msg, type = 'success') {

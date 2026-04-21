@@ -7,6 +7,31 @@ import SkillEditor from '@/components/Skillededitor';
 
 const TOTAL_STEPS = 4;
 
+const STEP_LABELS = ['About You', 'Teach', 'Learn', 'Availability'];
+
+// Reusable chip-grid for both Teach (step 2) and Learn (step 3)
+function SkillChipGrid({ categories, selected, isSelected, onToggle }) {
+    return categories.map(cat => (
+        <div key={cat.label} className="skill-group">
+            <p className="section-label">{cat.label}</p>
+            <div className="skill-chips">
+                {cat.skills.map(name => {
+                    const active = isSelected(name);
+                    return (
+                        <button
+                            key={name}
+                            className={`skill-tag skill-select ${active ? (selected === 'teach' ? 'active-teach' : 'active-learn') : (selected === 'teach' ? 'skill-teach' : 'skill-learn')}`}
+                            onClick={() => onToggle(name)}
+                        >
+                            {active && <span>&#10003; </span>}{name}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    ));
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OnboardingPage() {
@@ -28,8 +53,6 @@ export default function OnboardingPage() {
     const [step, setStep] = useState(1);
     const [viewMode, setViewMode] = useState(false);
 
-    const progress = (step / TOTAL_STEPS) * 100;
-
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
         if (profile) {
@@ -43,7 +66,7 @@ export default function OnboardingPage() {
         }
     }, [user, profile]);
 
-    // ── Teach helpers ─────────────────────────────────────────────────────────
+    // ── Teach helpers ────────────────────────────────────────────────────────
 
     function toggleTeach(name) {
         setSkillsTeach(prev =>
@@ -58,7 +81,7 @@ export default function OnboardingPage() {
         setCustomTeach('');
     }
 
-    // ── Learn helpers ─────────────────────────────────────────────────────────
+    // ── Learn helpers ────────────────────────────────────────────────────────
 
     function toggleLearn(skill) {
         setSkillsLearn(prev =>
@@ -80,7 +103,7 @@ export default function OnboardingPage() {
         }
     }
 
-    // ── Availability toggle ───────────────────────────────────────────────────
+    // ── Availability toggle ──────────────────────────────────────────────────
 
     function toggleAvailability(opt) {
         setAvailability(prev =>
@@ -88,7 +111,7 @@ export default function OnboardingPage() {
         );
     }
 
-    // ── Save ──────────────────────────────────────────────────────────────────
+    // ── Save ─────────────────────────────────────────────────────────────────
 
     async function save() {
         if (!fullName.trim()) { setError('Please enter your name.'); return; }
@@ -113,41 +136,59 @@ export default function OnboardingPage() {
         navigate('/matches');
     }
 
-    // ── Render ────────────────────────────────────────────────────────────────
+    // ── Service type options ─────────────────────────────────────────────────
+
+    const serviceOptions = [
+        { value: 'swap', label: 'Skill Swap', desc: 'Exchange skills with others for free' },
+        { value: 'gigs', label: 'Paid Services', desc: 'Offer your skills for money (gig work)' },
+        { value: 'both', label: 'Both', desc: 'Open to swapping and paid gigs' },
+    ];
+
+    // ── Render ───────────────────────────────────────────────────────────────
 
     return (
         <>
             <title>Set up your profile — SkillJoy</title>
 
             <div className="onboard-bg">
-                <div className="onboard-wrap fade-up">
+                <div className="onboard-card fade-up">
 
                     {viewMode && profile ? (
                         <ProfileView
                             profile={profile}
-                            acceptedSwapsCount={0} /* pass real count from your swaps query if needed */
+                            acceptedSwapsCount={0}
                             onEdit={() => setViewMode(false)}
                         />
                     ) : (
                         <>
-                            {profile?.full_name && (
-                                <div className="mode-toggle">
-                                    <button className="btn btn-ghost btn-sm" onClick={() => setViewMode(true)}>← Back to Profile View</button>
+                            {/* Header: step dots + exit */}
+                            <div className="onboard-header">
+                                <div className="step-dots">
+                                    {STEP_LABELS.map((label, i) => (
+                                        <div key={label} className="step-dot-group">
+                                            <div className={`step-dot ${i + 1 < step ? 'done' : ''} ${i + 1 === step ? 'current' : ''}`}>
+                                                {i + 1 < step ? '\u2713' : i + 1}
+                                            </div>
+                                            <span className={`step-dot-label ${i + 1 === step ? 'current' : ''}`}>{label}</span>
+                                        </div>
+                                    ))}
                                 </div>
-                            )}
-
-                            {/* Progress */}
-                            <div className="progress-bar">
-                                <div className="progress-fill" style={{ width: `${progress}%` }} />
+                                <button
+                                    className="btn btn-ghost exit-link"
+                                    onClick={() => profile?.full_name ? setViewMode(true) : navigate('/')}
+                                >
+                                    {profile?.full_name ? 'Cancel' : 'Exit'}
+                                </button>
                             </div>
-                            <div className="header-row">
-                                <p className="step-indicator">Step {step} of {TOTAL_STEPS}</p>
-                                <button className="btn btn-secondary exit-btn" onClick={() => navigate('/')}>Exit</button>
+
+                            {/* Progress bar */}
+                            <div className="progress-bar">
+                                <div className="progress-fill" style={{ width: `${(step / TOTAL_STEPS) * 100}%` }} />
                             </div>
 
                             {/* ── Step 1: Name + Bio ── */}
                             {step === 1 && (
-                                <>
+                                <div className="step-body">
                                     <h1 className="onboard-title">Let's set up your profile</h1>
                                     <p className="onboard-sub">Tell other students a little about yourself.</p>
                                     <div className="field">
@@ -156,71 +197,41 @@ export default function OnboardingPage() {
                                     </div>
                                     <div className="field" style={{ marginTop: 20 }}>
                                         <label htmlFor="bio">
-                                            Short bio <span style={{ color: '#fff', fontWeight: 400, textTransform: 'none' }}>(optional)</span>
+                                            Short bio <span className="label-optional">(optional)</span>
                                         </label>
                                         <textarea id="bio" value={bio} onChange={e => setBio(e.target.value)} placeholder="e.g. CS junior who loves code and music." rows={3} style={{ resize: 'vertical' }} />
                                     </div>
-                                </>
+                                </div>
                             )}
 
                             {/* ── Step 2: Skills to Teach ── */}
                             {step === 2 && (
-                                <>
+                                <div className="step-body">
                                     <h1 className="onboard-title">What can you teach?</h1>
                                     <p className="onboard-sub">Pick skills you can share, then rate your level with stars.</p>
-                                    {SKILL_CATEGORIES.map(cat => (
-                                        <div key={cat.label} className="skill-group">
-                                            <p className="section-label">{cat.label}</p>
-                                            <div className="skill-chips">
-                                                {cat.skills.map(name => {
-                                                    const selected = hasSkill(skillsTeach, name);
-                                                    return (
-                                                        <button
-                                                            key={name}
-                                                            className={`skill-tag skill-select ${selected ? 'active-teach' : 'skill-teach'}`}
-                                                            onClick={() => toggleTeach(name)}
-                                                        >
-                                                            {selected && <span>✓ </span>}{name}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    ))}
-                                    <div className="custom-input">
-                                        <input type="text" value={customTeach} onChange={e => setCustomTeach(e.target.value)} onKeyDown={e => handleKey(e, 'teach')} placeholder="Add a custom skill…" />
+                                    {/* SkillEditor has its own add input + Browse modal — no need for a second input */}
+                                    {/* <div className="custom-input">
+                                        <input type="text" value={customTeach} onChange={e => setCustomTeach(e.target.value)} onKeyDown={e => handleKey(e, 'teach')} placeholder="Add a custom skill..." />
                                         <button className="btn btn-secondary btn-sm" onClick={addCustomTeach}>Add</button>
-                                    </div>
+                                    </div> */}
                                     <SkillEditor skills={skillsTeach} onChange={setSkillsTeach} />
-                                </>
+                                </div>
                             )}
 
                             {/* ── Step 3: Skills to Learn ── */}
                             {step === 3 && (
-                                <>
+                                <div className="step-body">
                                     <h1 className="onboard-title">What do you want to learn?</h1>
                                     <p className="onboard-sub">Pick skills you've always wanted to pick up.</p>
-                                    {SKILL_CATEGORIES.map(cat => (
-                                        <div key={cat.label} className="skill-group">
-                                            <p className="section-label">{cat.label}</p>
-                                            <div className="skill-chips">
-                                                {cat.skills.map(skill => {
-                                                    const selected = skillsLearn.includes(skill);
-                                                    return (
-                                                        <button
-                                                            key={skill}
-                                                            className={`skill-tag skill-select ${selected ? 'active-learn' : 'skill-learn'}`}
-                                                            onClick={() => toggleLearn(skill)}
-                                                        >
-                                                            {selected && <span>✓ </span>}{skill}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    ))}
+                                    {/* SkillChipGrid kept for the browse-by-category view */}
+                                    <SkillChipGrid
+                                        categories={SKILL_CATEGORIES}
+                                        selected="learn"
+                                        isSelected={name => skillsLearn.includes(name)}
+                                        onToggle={toggleLearn}
+                                    />
                                     <div className="custom-input">
-                                        <input type="text" value={customLearn} onChange={e => setCustomLearn(e.target.value)} onKeyDown={e => handleKey(e, 'learn')} placeholder="Add a custom skill…" />
+                                        <input type="text" value={customLearn} onChange={e => setCustomLearn(e.target.value)} onKeyDown={e => handleKey(e, 'learn')} placeholder="Add a custom skill..." />
                                         <button className="btn btn-secondary btn-sm" onClick={addCustomLearn}>Add</button>
                                     </div>
                                     {skillsLearn.length > 0 && (
@@ -229,18 +240,18 @@ export default function OnboardingPage() {
                                             <div className="skill-chips">
                                                 {skillsLearn.map(s => (
                                                     <button key={s} className="skill-tag active-learn" onClick={() => toggleLearn(s)}>
-                                                        {s} <span style={{ opacity: 0.7 }}>✕</span>
+                                                        {s} <span style={{ opacity: 0.6 }}>&times;</span>
                                                     </button>
                                                 ))}
                                             </div>
                                         </div>
                                     )}
-                                </>
+                                </div>
                             )}
 
-                            {/* ── Step 4: Availability ── */}
+                            {/* ── Step 4: Availability + Service Type ── */}
                             {step === 4 && (
-                                <>
+                                <div className="step-body">
                                     <h1 className="onboard-title">When are you free?</h1>
                                     <p className="onboard-sub">Help matches know when to reach out.</p>
                                     <div className="avail-grid">
@@ -255,22 +266,13 @@ export default function OnboardingPage() {
                                         ))}
                                     </div>
 
-                                    <div style={{ marginTop: 32 }}>
+                                    <div className="service-section">
                                         <p className="section-label" style={{ marginBottom: 12 }}>What are you open to?</p>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                            {[
-                                                { value: 'swap', label: 'Skill Swap', desc: 'Exchange skills with others for free' },
-                                                { value: 'gigs', label: 'Paid Services', desc: 'Offer your skills for money (gig work)' },
-                                                { value: 'both', label: 'Both', desc: 'Open to swapping and paid gigs' },
-                                            ].map(opt => (
+                                        <div className="service-options">
+                                            {serviceOptions.map(opt => (
                                                 <label
                                                     key={opt.value}
-                                                    style={{
-                                                        display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
-                                                        padding: '14px 16px', background: serviceType === opt.value ? 'var(--surface-alt)' : '#fff',
-                                                        borderRadius: 'var(--r)', border: `1px solid ${serviceType === opt.value ? 'var(--primary)' : 'var(--border)'}`,
-                                                        transition: 'all 0.15s ease',
-                                                    }}
+                                                    className={`service-option ${serviceType === opt.value ? 'selected' : ''}`}
                                                 >
                                                     <input
                                                         type="radio"
@@ -278,20 +280,19 @@ export default function OnboardingPage() {
                                                         value={opt.value}
                                                         checked={serviceType === opt.value}
                                                         onChange={e => setServiceType(e.target.value)}
-                                                        style={{ width: 18, height: 18, accentColor: 'var(--primary)' }}
                                                     />
                                                     <div>
-                                                        <p style={{ fontWeight: 600, fontSize: 15 }}>{opt.label}</p>
-                                                        <p style={{ fontSize: 13, color: '#fff', marginTop: 2 }}>{opt.desc}</p>
+                                                        <p className="service-label">{opt.label}</p>
+                                                        <p className="service-desc">{opt.desc}</p>
                                                     </div>
                                                 </label>
                                             ))}
                                         </div>
                                     </div>
-                                </>
+                                </div>
                             )}
 
-                            {error && <p className="form-error" style={{ marginTop: 16 }}>{error}</p>}
+                            {error && <p className="form-error">{error}</p>}
 
                             {/* Nav */}
                             <div className="step-nav">
@@ -315,24 +316,219 @@ export default function OnboardingPage() {
             </div>
 
             <style>{`
-        .onboard-bg { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 24px 80px; background: var(--bg); }
-        .onboard-wrap { width: 100%; max-width: 600px; }
-        .progress-bar { height: 3px; background: var(--border); border-radius: var(--r-full); margin-bottom: 12px; overflow: hidden; }
-        .progress-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); border-radius: var(--r-full); transition: width 0.3s ease; }
-        .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 36px; }
-        .step-indicator { font-size: 12px; color: #fff; letter-spacing: 0.04em; }
-        .exit-btn { font-size: 14px; padding: 6px 12px; }
-        .onboard-title { font-size: 32px; margin-bottom: 8px; }
-        .onboard-sub { font-size: 16px; color: #fff; margin-bottom: 36px; }
+        .onboard-bg {
+            min-height: 100vh;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 40px 20px 80px;
+            background: var(--bg);
+        }
+        .onboard-card {
+            width: 100%;
+            max-width: 620px;
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 36px 40px 40px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
+        }
+
+        /* ── Header ── */
+        .onboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+        .step-dots {
+            display: flex;
+            gap: 20px;
+        }
+        .step-dot-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+        .step-dot {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 600;
+            border: 2px solid var(--border-strong);
+            color: var(--text-muted);
+            background: var(--surface);
+            transition: all 0.2s ease;
+        }
+        .step-dot.current {
+            border-color: var(--accent);
+            color: var(--surface);
+            background: var(--accent);
+        }
+        .step-dot.done {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-light);
+        }
+        .step-dot-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+            letter-spacing: 0.02em;
+        }
+        .step-dot-label.current {
+            color: var(--text);
+            font-weight: 600;
+        }
+        .exit-link {
+            font-size: 14px;
+            color: var(--text-muted);
+            padding: 6px 0;
+            margin-top: 4px;
+        }
+        .exit-link:hover { color: var(--text); }
+
+        /* ── Progress bar ── */
+        .progress-bar {
+            height: 4px;
+            background: var(--border);
+            border-radius: var(--r-full);
+            margin-bottom: 32px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #e8774a);
+            border-radius: var(--r-full);
+            transition: width 0.35s ease;
+        }
+
+        /* ── Step body ── */
+        .step-body { min-height: 200px; }
+
+        .onboard-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 6px;
+            line-height: 1.2;
+        }
+        .onboard-sub {
+            font-size: 15px;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+            line-height: 1.5;
+        }
+        .label-optional {
+            color: var(--text-muted);
+            font-weight: 400;
+            text-transform: none;
+        }
+
+        /* ── Skills ── */
         .skill-group { margin-bottom: 24px; }
         .skill-chips { display: flex; flex-wrap: wrap; gap: 8px; }
         .custom-input { display: flex; gap: 8px; margin-top: 24px; margin-bottom: 8px; }
         .custom-input input { flex: 1; }
-        .selected-preview { margin-top: 24px; padding: 20px; background: var(--surface-alt); border-radius: var(--r); border: 1px solid var(--border); }
-        .avail-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
-        .step-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--border); }
-        .form-error { font-size: 13px; color: var(--accent); background: var(--accent-light); border: 1px solid var(--accent-mid); border-radius: var(--r-sm); padding: 10px 14px; }
-        .mode-toggle { margin-bottom: 16px; }
+        .selected-preview {
+            margin-top: 24px;
+            padding: 20px;
+            background: var(--surface-alt);
+            border-radius: var(--r);
+            border: 1px solid var(--border);
+        }
+
+        /* ── Availability ── */
+        .avail-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 28px; }
+        .avail-chip {
+            padding: 10px 18px;
+            border-radius: var(--r-full);
+            border: 1.5px solid var(--border-strong);
+            background: var(--surface);
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .avail-chip:hover {
+            border-color: var(--accent-mid);
+            background: var(--surface-alt);
+        }
+        .avail-chip.active {
+            background: var(--accent-light);
+            color: var(--accent);
+            border-color: var(--accent);
+            font-weight: 600;
+        }
+
+        /* ── Service type ── */
+        .service-section { margin-top: 32px; }
+        .service-options { display: flex; flex-direction: column; gap: 10px; }
+        .service-option {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            padding: 14px 16px;
+            background: var(--surface);
+            border-radius: var(--r);
+            border: 1.5px solid var(--border);
+            transition: all 0.15s ease;
+        }
+        .service-option:hover { border-color: var(--border-strong); }
+        .service-option.selected {
+            background: var(--surface-alt);
+            border-color: var(--accent);
+        }
+        .service-option input[type="radio"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--accent);
+            flex-shrink: 0;
+        }
+        .service-label {
+            font-weight: 600;
+            font-size: 15px;
+            color: var(--text);
+        }
+        .service-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* ── Nav + Error ── */
+        .step-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 36px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+        }
+        .form-error {
+            font-size: 13px;
+            color: var(--accent);
+            background: var(--accent-light);
+            border: 1px solid var(--accent-mid);
+            border-radius: var(--r-sm);
+            padding: 10px 14px;
+            margin-top: 16px;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 600px) {
+            .onboard-card { padding: 28px 20px 32px; border-radius: 12px; }
+            .onboard-title { font-size: 24px; }
+            .step-dots { gap: 12px; }
+            .step-dot { width: 28px; height: 28px; font-size: 12px; }
+            .step-dot-label { font-size: 10px; }
+        }
       `}</style>
         </>
     );
