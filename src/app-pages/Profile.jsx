@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useUser, useAuth, getSkillName, normalizeSkills, DAYS_OF_WEEK, TIME_PERIODS } from '@/lib/stores';
+import { useUser, useAuth, useProfile, getSkillName, normalizeSkills, DAYS_OF_WEEK, TIME_PERIODS } from '@/lib/stores';
 import { apiFetch } from '@/lib/api';
 import SkillEditor from '@/components/Skillededitor';
 import ReportModal from '@/components/ReportModal';
@@ -10,6 +10,7 @@ import BlockButton from '@/components/BlockButton';
 export default function ProfilePage() {
     const user = useUser();
     const { setProfile, loading: authLoading } = useAuth();
+    const myProfile = useProfile();
     const navigate = useNavigate();
     const { userId } = useParams();
     const [AllGigs, setAllGigs] = useState([]);
@@ -182,12 +183,24 @@ export default function ProfilePage() {
 
     async function loadGigs() {
         const targetId = userId || user.id;
+        const isOther = userId && userId !== user.id;
 
-        const { data, error } = await supabase
+        let query = supabase
             .from('gigs')
             .select('*, profile:profiles!user_id(id, full_name, bio, service_type)')
             .eq('user_id', targetId)
             .order('created_at', { ascending: false });
+
+        // When viewing someone else's profile, only show gigs from the same university
+        if (isOther && myProfile?.college_verified && myProfile?.university_domain) {
+            query = query.eq('university_domain', myProfile.university_domain);
+        } else if (isOther) {
+            // Viewer has no verified domain — hide all gigs from other users
+            setAllGigs([]);
+            return;
+        }
+
+        const { data, error } = await query;
 
         if (!error && data) {
             setAllGigs(data);

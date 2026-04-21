@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useUser, useAuth } from '@/lib/stores';
+import { useUser, useAuth, useProfile } from '@/lib/stores';
 import ReportModal from '@/components/ReportModal';
 
 function initials(name) {
@@ -12,6 +12,7 @@ function initials(name) {
 export default function GigDetailsPage() {
     const { gigId } = useParams();
     const user = useUser();
+    const myProfile = useProfile();
     const { loading: authLoading } = useAuth();
     const navigate = useNavigate();
 
@@ -45,6 +46,16 @@ export default function GigDetailsPage() {
             .single();
 
         if (!error && data) {
+            // Block access if the gig belongs to another user and domains don't match
+            const isOwnGig = data.user_id === user.id;
+            if (!isOwnGig && data.university_domain) {
+                if (!myProfile?.college_verified || myProfile?.university_domain !== data.university_domain) {
+                    showToast('This gig is only available to students at the same university.', 'error');
+                    navigate('/gigs');
+                    return;
+                }
+            }
+
             const { data: ratings } = await supabase
                 .from('ratings').select('rating').eq('rated_id', data.user_id);
             const avgRating = ratings?.length ? ratings.reduce((s, r) => s + r.rating, 0) / ratings.length : null;
