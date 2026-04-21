@@ -37,7 +37,8 @@ function buildMatches(allUsers, me) {
 
             const theyTeachScore = overlapScore(theirTeachRated, myLearn);
             const iTeachScore = overlapScore(myTeachRated, theirLearn);
-            const score = theyTeachScore + iTeachScore;
+            const domainBonus = (me.university_domain && p.university_domain === me.university_domain) ? 10 : 0;
+            const score = theyTeachScore + iTeachScore + domainBonus;
 
             const myLearnLower = myLearn.map(s => getSkillName(s).toLowerCase());
             const theirLearnLower = theirLearn.map(s => getSkillName(s).toLowerCase());
@@ -75,11 +76,7 @@ export default function MatchesPage() {
         if (!user) { navigate('/login'); return; }
         if (profile && !profile.full_name) { navigate('/onboarding'); return; }
         (async () => {
-            let q = supabase.from('profiles').select('*').neq('id', user.id);
-            if (profile?.college_verified && profile?.university_domain) {
-                q = q.eq('university_domain', profile.university_domain);
-            }
-            const { data, error: e } = await q;
+            const { data, error: e } = await supabase.from('profiles').select('*').neq('id', user.id);
             if (e) setError(e.message);
             else setAllUsers(data ?? []);
             setBusy(false);
