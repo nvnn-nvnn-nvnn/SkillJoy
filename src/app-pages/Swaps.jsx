@@ -22,7 +22,8 @@ function getMatchInfo(profile, them) {
     const theirLearn = them.skills_learn ?? [];
     const theyTeachScore = overlapScore(theirTeach, myLearn);
     const iTeachScore = overlapScore(myTeachRated, theirLearn);
-    const score = theyTeachScore + iTeachScore;
+    const domainBonus = (profile.university_domain && them.university_domain === profile.university_domain) ? 10 : 0;
+    const score = theyTeachScore + iTeachScore + domainBonus;
     const mutual = theyTeachScore > 0 && iTeachScore > 0;
     if (mutual) return { score, label: 'Perfect Match ✨', color: 'indigo' };
     if (theyTeachScore) return { score, label: 'They can teach you', color: 'green' };
@@ -63,11 +64,7 @@ export default function Swaps() {
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
         (async () => {
-            let q = supabase.from('profiles').select('*').neq('id', user.id);
-            if (profile?.college_verified && profile?.university_domain) {
-                q = q.eq('university_domain', profile.university_domain);
-            }
-            const { data, error } = await q;
+            const { data, error } = await supabase.from('profiles').select('*').neq('id', user.id);
             if (!error && data) setAllUsers(data);
             setBusy(false);
         })();

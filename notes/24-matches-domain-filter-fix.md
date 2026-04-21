@@ -31,3 +31,4 @@ const score = theyTeachScore + iTeachScore + domainBonus;
 
 ## Files Changed
 - `src/app-pages/Matches.jsx` — removed `.eq('university_domain')` filter, added `domainBonus` to score
+- `src/app-pages/Swaps.jsx` — same fix: removed domain filter, added `domainBonus` in `getMatchInfo`
