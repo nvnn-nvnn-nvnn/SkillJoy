@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import SkillStars from '@/components/Skillstars';
 import { setSkillStars, removeSkill, hasSkill, SKILL_CATEGORIES } from '@/lib/stores';
 
@@ -106,8 +107,8 @@ export default function SkillEditor({ skills, onChange, type = 'teach' }) {
                 </div>
             )}
 
-            {/* Browse Skills Modal */}
-            {showModal && (
+            {/* Browse Skills Modal — portaled to document.body so it escapes any parent overflow/transform */}
+            {showModal && createPortal(
                 <div
                     style={{
                         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
@@ -183,7 +184,8 @@ export default function SkillEditor({ skills, onChange, type = 'teach' }) {
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             <style>{`
