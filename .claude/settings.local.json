@@ -11,7 +11,12 @@
       "Bash(grep -n \"//.*\\(\" \"c:\\\\Users\\\\Devan Chuyen Lee\\\\Documents\\\\Skill-Swap\\\\src\\\\app-pages\\\\Chat.jsx\")",
       "Bash(grep -rn \"/\\\\*\\\\|^[[:space:]]*//[^/]\" \"c:\\\\Users\\\\Devan Chuyen Lee\\\\Documents\\\\Skill-Swap\\\\src\\\\app-pages\\\\MyOrders.jsx\")",
       "Bash(node --check \"/c/Users/Devan Chuyen Lee/Documents/Skill-Swap/backend/index.js\")",
-      "Bash(grep -E \"\\\\.env$|\\\\.env\\\\.\")"
+      "Bash(grep -E \"\\\\.env$|\\\\.env\\\\.\")",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(git mv *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
   }
 }
