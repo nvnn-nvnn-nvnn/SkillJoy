@@ -57,7 +57,7 @@ app.use('/api/users', authMiddleware, userRoutes);
 
 app.use('/api/stripe-connect', authMiddleware, stripeConnectRoutes);
 app.use('/api/contact', contactRoutes);
-app.use('/api/verify-college', authMiddleware, verifyCollegeRoutes);
+app.use('/api/verify-college', verifyCollegeRoutes);
 app.use('/api/reports', authMiddleware, reportRoutes);
 app.use('/api/blocks', authMiddleware, blockRoutes);
 

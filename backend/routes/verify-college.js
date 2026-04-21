@@ -3,10 +3,11 @@ const router = express.Router();
 const { randomUUID } = require('crypto');
 const supabase = require('../config/supabase');
 const { sendEmail } = require('../lib/email');
+const authMiddleware = require('../middleware/auth');
 
 // POST /api/verify-college/send
 // Sends a verification email to the provided .edu address
-router.post('/send', async (req, res) => {
+router.post('/send', authMiddleware, async (req, res) => {
     const { collegeEmail } = req.body;
 
     if (!collegeEmail) return res.status(400).json({ error: 'College email is required.' });
