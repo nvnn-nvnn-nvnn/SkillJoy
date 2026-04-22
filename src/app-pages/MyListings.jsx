@@ -85,9 +85,9 @@ export default function MyListingsPage() {
         setBusy(true);
         const [gigsRes, incomingRes, sentRes, completedRes] = await Promise.all([
             supabase.from('gigs').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-            supabase.from('gig_requests').select('*, gig:gigs!gig_id(id, title, price, category), requester:profiles!requester_id(id, full_name)').eq('provider_id', user.id).order('created_at', { ascending: false }),
-            supabase.from('gig_requests').select('*, gig:gigs!gig_id(id, title, price, category), provider:profiles!provider_id(id, full_name)').eq('requester_id', user.id).order('created_at', { ascending: false }),
-            supabase.from('gig_requests').select('*, gig:gigs!gig_id(id, title, price, category), requester:profiles!requester_id(id, full_name), provider:profiles!provider_id(id, full_name)').or(`requester_id.eq.${user.id},provider_id.eq.${user.id}`).eq('status', 'completed').order('created_at', { ascending: false }),
+            supabase.from('gig_requests').select('*, gig:gigs!gig_id(id, title, price, category, description, commitments, requirements, images), requester:profiles!requester_id(id, full_name)').eq('provider_id', user.id).order('created_at', { ascending: false }),
+            supabase.from('gig_requests').select('*, gig:gigs!gig_id(id, title, price, category, description, commitments, requirements, images), provider:profiles!provider_id(id, full_name)').eq('requester_id', user.id).order('created_at', { ascending: false }),
+            supabase.from('gig_requests').select('*, gig:gigs!gig_id(id, title, price, category, description, commitments, requirements, images), requester:profiles!requester_id(id, full_name), provider:profiles!provider_id(id, full_name)').or(`requester_id.eq.${user.id},provider_id.eq.${user.id}`).eq('status', 'completed').order('created_at', { ascending: false }),
         ]);
         if (!gigsRes.error && gigsRes.data) setMyGigs(gigsRes.data);
         if (!incomingRes.error && incomingRes.data) setIncoming(incomingRes.data);
@@ -638,6 +638,9 @@ export default function MyListingsPage() {
                         {gigDetailModal.requirements && (
                             <div className="ml-modal-section"><h4>Requirements</h4><p>{gigDetailModal.requirements}</p></div>
                         )}
+                        <Link to={`/gigs/${gigDetailModal.id}`} className="ml-modal-link" onClick={() => setGigDetailModal(null)}>
+                            View full gig page &rarr;
+                        </Link>
                     </div>
                 </div>
             )}
@@ -1128,6 +1131,16 @@ export default function MyListingsPage() {
                     width: 120px; height: 120px; object-fit: cover;
                     border-radius: 8px; border: 1px solid var(--border);
                 }
+                .ml-modal-link {
+                    display: inline-flex; align-items: center; gap: 4px;
+                    margin-top: 8px; padding: 10px 18px;
+                    background: var(--surface-alt); border: 1px solid var(--border);
+                    border-radius: 10px;
+                    font-size: 14px; font-weight: 600; color: var(--accent);
+                    text-decoration: none; width: fit-content;
+                    transition: all 0.14s;
+                }
+                .ml-modal-link:hover { background: var(--accent-light); border-color: var(--accent-mid); }
 
                 /* ── Responsive ── */
                 @media (max-width: 768px) {
