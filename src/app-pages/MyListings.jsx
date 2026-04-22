@@ -806,14 +806,14 @@ export default function MyListingsPage() {
                 /* ── Buttons ── */
                 .ml-btn-create {
                     display: inline-flex; align-items: center; gap: 6px;
-                    padding: 10px 20px;
-                    background: var(--text); color: var(--surface);
+                    padding: 10px 22px;
+                    background: var(--accent); color: #fff;
                     border: none; border-radius: 10px;
                     font-size: 14px; font-weight: 600;
                     cursor: pointer; font-family: inherit;
-                    transition: opacity 0.15s;
+                    transition: background 0.15s;
                 }
-                .ml-btn-create:hover { opacity: 0.85; }
+                .ml-btn-create:hover { background: var(--accent-hover); }
                 .ml-btn-create:disabled { opacity: 0.4; cursor: not-allowed; }
                 .ml-btn-browse {
                     display: inline-flex; align-items: center;
@@ -855,10 +855,12 @@ export default function MyListingsPage() {
                 .ml-btn-decline:hover { background: var(--accent-light); }
                 .ml-btn-chat {
                     padding: 7px 18px; border-radius: 8px; border: none;
-                    background: var(--text); color: var(--surface);
+                    background: var(--accent); color: #fff;
                     font-size: 13px; font-weight: 600;
                     cursor: pointer; font-family: inherit;
+                    transition: background 0.14s;
                 }
+                .ml-btn-chat:hover { background: var(--accent-hover); }
                 .ml-btn-ghost {
                     padding: 8px 18px; border-radius: 8px;
                     border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
@@ -868,11 +870,12 @@ export default function MyListingsPage() {
                 .ml-btn-ghost:hover { border-color: var(--text); }
                 .ml-btn-sm {
                     padding: 8px 16px; border-radius: 8px;
-                    border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+                    border: 1.5px solid var(--border-strong); background: var(--surface-alt); color: var(--text-secondary);
                     font-size: 13px; font-weight: 600;
                     cursor: pointer; font-family: inherit;
+                    transition: all 0.14s;
                 }
-                .ml-btn-sm:hover { border-color: var(--text); }
+                .ml-btn-sm:hover { border-color: var(--accent-mid); color: var(--text); background: var(--primary-light); }
 
                 /* ── Gig Cards ── */
                 .ml-gig-grid {
@@ -983,10 +986,18 @@ export default function MyListingsPage() {
                 .pay-cleared { background: #dcfce7; color: #166534; }
 
                 /* ── Form ── */
-                .ml-form-wrap { max-width: 640px; }
+                .ml-form-wrap {
+                    max-width: 640px;
+                    background: var(--surface);
+                    border: 1px solid var(--border);
+                    border-radius: 16px;
+                    padding: 28px 32px 32px;
+                }
                 .ml-form-header {
                     display: flex; justify-content: space-between; align-items: center;
-                    margin-bottom: 24px;
+                    margin-bottom: 8px;
+                    padding-bottom: 20px;
+                    border-bottom: 1px solid var(--border);
                 }
                 .ml-form-header h2 { font-size: 22px; font-weight: 700; margin: 0; }
                 .ml-form { display: flex; flex-direction: column; gap: 0; }
@@ -997,65 +1008,84 @@ export default function MyListingsPage() {
                 }
                 .ml-form-section:last-of-type { border-bottom: none; }
                 .ml-form-section-title {
-                    font-size: 13px; font-weight: 700; text-transform: uppercase;
-                    letter-spacing: 0.06em; color: var(--text-muted); margin: 0;
+                    font-size: 12px; font-weight: 700; text-transform: uppercase;
+                    letter-spacing: 0.06em; color: var(--text-secondary); margin: 0;
+                    padding: 6px 12px;
+                    background: var(--surface-alt);
+                    border-radius: 6px;
+                    width: fit-content;
                 }
                 .ml-form-row { display: flex; gap: 16px; }
                 .ml-optional {
-                    font-size: 12px; font-weight: 400; color: var(--text-muted);
+                    font-size: 11px; font-weight: 500; color: var(--text-muted);
                     text-transform: none; letter-spacing: 0;
+                    margin-left: 4px;
                 }
 
                 /* Images */
-                .ml-img-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-                .ml-img-thumb { position: relative; width: 80px; height: 80px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+                .ml-img-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+                .ml-img-thumb {
+                    position: relative; width: 88px; height: 88px;
+                    border-radius: 10px; overflow: hidden;
+                    border: 1.5px solid var(--border);
+                    transition: border-color 0.14s;
+                }
+                .ml-img-thumb:hover { border-color: var(--border-strong); }
                 .ml-img-thumb img { width: 100%; height: 100%; object-fit: cover; }
                 .ml-img-remove {
-                    position: absolute; top: -1px; right: -1px;
-                    width: 20px; height: 20px; border-radius: 50%;
-                    background: var(--accent); color: #fff; border: none;
+                    position: absolute; top: 4px; right: 4px;
+                    width: 22px; height: 22px; border-radius: 50%;
+                    background: rgba(0,0,0,0.6); color: #fff; border: none;
                     font-size: 11px; cursor: pointer;
                     display: flex; align-items: center; justify-content: center;
+                    opacity: 0; transition: opacity 0.15s;
                 }
+                .ml-img-thumb:hover .ml-img-remove { opacity: 1; }
                 .ml-img-actions { display: flex; flex-direction: column; gap: 10px; }
                 .ml-upload-btn {
                     display: inline-flex; align-items: center; gap: 6px;
-                    padding: 9px 16px;
-                    border: 1px dashed var(--border-strong); border-radius: 8px;
-                    cursor: pointer; font-size: 13px; color: var(--text-secondary);
-                    font-family: inherit; transition: border-color 0.14s;
+                    padding: 10px 18px;
+                    border: 1.5px dashed var(--border-strong); border-radius: 10px;
+                    cursor: pointer; font-size: 13px; font-weight: 500;
+                    color: var(--text-secondary); background: var(--surface-alt);
+                    font-family: inherit; transition: all 0.14s;
                     width: fit-content;
                 }
-                .ml-upload-btn:hover { border-color: var(--text); }
+                .ml-upload-btn:hover { border-color: var(--accent-mid); color: var(--text); background: var(--primary-light); }
                 .ml-url-row { display: flex; gap: 8px; }
 
                 /* FAQs */
                 .ml-faq-item {
-                    display: flex; flex-direction: column; gap: 8px;
-                    padding: 14px; background: var(--surface-alt);
-                    border: 1px solid var(--border); border-radius: 10px;
+                    display: flex; flex-direction: column; gap: 10px;
+                    padding: 16px; background: var(--surface-alt);
+                    border: 1px solid var(--border); border-radius: 12px;
                 }
                 .ml-faq-header { display: flex; justify-content: space-between; align-items: center; }
-                .ml-faq-num { font-size: 12px; font-weight: 700; color: var(--text-muted); }
-                .ml-faq-remove { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 2px; }
-                .ml-faq-remove:hover { color: var(--accent); }
+                .ml-faq-num {
+                    font-size: 11px; font-weight: 700;
+                    color: var(--accent); background: var(--accent-light);
+                    padding: 2px 8px; border-radius: 4px;
+                }
+                .ml-faq-remove { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 4px; }
+                .ml-faq-remove:hover { color: var(--accent); background: var(--accent-light); }
                 .ml-add-btn {
                     display: inline-flex; align-items: center; gap: 6px;
-                    padding: 8px 14px;
-                    border: 1px dashed var(--border-strong); border-radius: 8px;
-                    background: transparent; color: var(--text-secondary);
-                    font-size: 13px; cursor: pointer; font-family: inherit;
-                    width: fit-content; transition: border-color 0.14s;
+                    padding: 9px 16px;
+                    border: 1.5px dashed var(--border-strong); border-radius: 10px;
+                    background: var(--surface-alt); color: var(--text-secondary);
+                    font-size: 13px; font-weight: 500;
+                    cursor: pointer; font-family: inherit;
+                    width: fit-content; transition: all 0.14s;
                 }
-                .ml-add-btn:hover { border-color: var(--text); }
+                .ml-add-btn:hover { border-color: var(--accent-mid); color: var(--text); background: var(--primary-light); }
 
                 /* Tags */
                 .ml-tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
                 .ml-tag {
-                    display: inline-flex; align-items: center; gap: 4px;
-                    padding: 4px 12px;
-                    background: var(--surface-alt); border: 1px solid var(--border);
-                    border-radius: 100px; font-size: 13px;
+                    display: inline-flex; align-items: center; gap: 5px;
+                    padding: 5px 14px;
+                    background: var(--primary-light); border: 1px solid var(--primary-mid);
+                    border-radius: 100px; font-size: 13px; color: var(--text);
                 }
                 .ml-tag button { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 15px; line-height: 1; padding: 0; }
                 .ml-tag button:hover { color: var(--accent); }
@@ -1064,6 +1094,7 @@ export default function MyListingsPage() {
                 .ml-form-footer {
                     display: flex; gap: 12px; padding-top: 24px;
                     margin-top: 8px;
+                    border-top: 1px solid var(--border);
                 }
 
                 /* ── Modal ── */
@@ -1112,6 +1143,7 @@ export default function MyListingsPage() {
                     .ml-url-row { flex-direction: column; }
                     .ml-form-footer { flex-direction: column; }
                     .ml-form-footer .ml-btn-create { width: 100%; justify-content: center; }
+                    .ml-form-wrap { padding: 20px 18px 24px; }
                     .ml-modal { padding: 20px 16px; border-radius: 12px; }
                 }
             `}</style>
