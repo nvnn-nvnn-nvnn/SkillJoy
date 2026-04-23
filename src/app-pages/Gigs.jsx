@@ -115,6 +115,7 @@ export default function GigsPage() {
         let query = supabase
             .from('gigs')
             .select('*, profile:profiles!user_id(id, full_name, bio, service_type, availability, offers_gigs)')
+            .eq('active', true)
             .order('created_at', { ascending: false });
         if (profile?.college_verified && universityDomain) query = query.eq('university_domain', universityDomain);
         const { data, error } = await query;
