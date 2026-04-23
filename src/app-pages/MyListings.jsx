@@ -76,6 +76,13 @@ export default function MyListingsPage() {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [pendingDeleteId, setPendingDeleteId] = useState(null);
 
+
+    // Gig Active
+
+    const [gigActive, setGigActive] = useState(true);
+
+    // state varibles. 
+
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
         loadData(); // eslint-disable-line react-hooks/immutability
@@ -132,12 +139,22 @@ export default function MyListingsPage() {
         setImages(gig.images || []); setFaqs(gig.faqs || []);
         setTags(gig.tags || []); setUrlInput('');
         setTab('create');
+        setGigActive(gig.active ?? true)
+
     }
 
     function resetForm() {
         setEditingGig(null);
         setTitle(''); setDescription(''); setPrice(''); setCategory('');
         setCommitments(''); setRequirements(''); setImages([]); setFaqs([]); setUrlInput(''); setTags([]); setTagInput('');
+        setGigActive(true);
+    }
+
+    async function setActiveGig(gigId, active) {
+        const { error } = await supabase.from('gigs').update({ active }).eq('id', gigId).eq('user_id', user.id);
+        if (error) { showToast(error.message, 'error'); return; }
+        setMyGigs(prev => prev.map(g => g.id === gigId ? { ...g, active } : g));
+        showToast(active ? 'Gig activated' : 'Gig deactivated', 'success');
     }
 
     // ── Create / Update Gig ──
@@ -155,6 +172,7 @@ export default function MyListingsPage() {
             images: images.length > 0 ? images : null,
             faqs: validFaqs.length > 0 ? validFaqs : null,
             tags: tags.length > 0 ? tags : null,
+            active: gigActive,
         };
 
         const universityDomain = (profile?.college_verified && profile?.university_domain) ? profile.university_domain : null;
@@ -311,7 +329,10 @@ export default function MyListingsPage() {
                                             <div className="ml-gig-body">
                                                 <div className="ml-gig-top">
                                                     {gig.category && <span className="ml-gig-cat">{gig.category}</span>}
-                                                    <span className="ml-gig-price">${gig.price?.toFixed(2)}</span>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                        {gig.active === false && <span className="ml-gig-inactive-badge">Inactive</span>}
+                                                        <span className="ml-gig-price">${gig.price?.toFixed(2)}</span>
+                                                    </div>
                                                 </div>
                                                 <h3 className="ml-gig-title" onClick={() => setGigDetailModal(gig)}>{gig.title}</h3>
                                                 {gig.description && <p className="ml-gig-desc">{gig.description}</p>}
@@ -323,6 +344,13 @@ export default function MyListingsPage() {
                                                 )}
                                                 <div className="ml-gig-actions">
                                                     <button className="ml-btn-edit" onClick={() => handleEditGig(gig)}>Edit</button>
+                                                    <button
+                                                        className={`ml-btn-toggle ${gig.active === false ? 'ml-btn-toggle-off' : ''}`}
+                                                        onClick={() => setActiveGig(gig.id, gig.active === false)}
+                                                        title={gig.active === false ? 'Activate gig' : 'Deactivate gig'}
+                                                    >
+                                                        {gig.active === false ? 'Activate' : 'Deactivate'}
+                                                    </button>
                                                     <button className="ml-btn-delete" onClick={() => handleDeleteGig(gig.id)}>Remove</button>
                                                 </div>
                                             </div>
@@ -501,6 +529,8 @@ export default function MyListingsPage() {
                                             <label htmlFor="gig-desc">Description <span className="ml-optional">optional</span></label>
                                             <textarea id="gig-desc" value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe what you offer..." rows={3} style={{ resize: 'vertical' }} />
                                         </div>
+
+                                        
                                     </div>
 
                                     <div className="ml-form-section">
@@ -585,6 +615,32 @@ export default function MyListingsPage() {
                                                 if (t && !tags.includes(t) && tags.length < 8) { setTags([...tags, t]); setTagInput(''); }
                                             }}>Add</button>
                                         </div>
+                                        {/* Set Active */}
+
+                                        <div>
+                                             <h3 className="ml-form-section-title"> Set Active </h3>
+                                
+                                            <button
+                                                type='button'
+                                                className='ml-btn-ghost'
+                                                style={{
+                                                    marginTop: '15px'
+                                                }}
+                                                onClick={() => {
+                                                    setGigActive(prev => !prev)
+                                                }}
+                                            >
+                                                 {gigActive ? "Deactivate Gig" : "Activate Gig"}
+                                           
+                                            </button>
+                                            <p
+                                                className= 'ml-active-note'
+                                            >
+                                                Gigs are set to active by default. Please deactivate any gig you do not wish to be currently active.
+                                            </p>
+                                        </div>
+
+
                                     </div>
 
                                     <div className="ml-form-footer">
@@ -816,6 +872,26 @@ export default function MyListingsPage() {
                     cursor: pointer; font-family: inherit;
                     transition: background 0.15s;
                 }
+
+                    /* Mini warning box for active toggle */
+                .ml-active-note {
+                background: #FFFBEB;
+                border-left: 3px solid #F59E0B;
+                padding: 8px 12px;
+                border-radius: 8px;
+                font-size: 12px;
+                color: #B45309;
+                margin-top: 12px;
+                line-height: 1.4;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                }
+                .ml-active-note::before {
+                content: "ℹ️";
+                font-size: 14px;
+                flex-shrink: 0;
+                }
                 .ml-btn-create:hover { background: var(--accent-hover); }
                 .ml-btn-create:disabled { opacity: 0.4; cursor: not-allowed; }
                 .ml-btn-browse {
@@ -933,6 +1009,24 @@ export default function MyListingsPage() {
                     padding-top: 12px; margin-top: auto;
                     border-top: 1px solid var(--border);
                 }
+                .ml-gig-inactive-badge {
+                    padding: 2px 8px; border-radius: 100px;
+                    font-size: 11px; font-weight: 600;
+                    background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db;
+                }
+                .ml-btn-toggle {
+                    padding: 6px 14px; border-radius: 8px;
+                    font-size: 13px; font-weight: 500;
+                    cursor: pointer; font-family: inherit;
+                    border: 1px solid #d1d5db;
+                    background: #f9fafb; color: #374151;
+                    transition: all 0.14s;
+                }
+                .ml-btn-toggle:hover { border-color: #374151; }
+                .ml-btn-toggle-off {
+                    border-color: #86efac; background: #f0fdf4; color: #15803d;
+                }
+                .ml-btn-toggle-off:hover { background: #dcfce7; border-color: #15803d; }
 
                 /* ── Request Cards ── */
                 .ml-req-list { display: flex; flex-direction: column; gap: 12px; }
