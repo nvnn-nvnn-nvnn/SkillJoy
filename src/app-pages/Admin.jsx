@@ -642,9 +642,9 @@ export default function AdminPage() {
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                                                 <span style={{
                                                     fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase',
-                                                    background: r.reported_type === 'gig' ? '#eff6ff' : '#faf5ff',
-                                                    color: r.reported_type === 'gig' ? '#1e40af' : '#6b21a8',
-                                                    border: `1px solid ${r.reported_type === 'gig' ? '#bfdbfe' : '#d8b4fe'}`,
+                                                    background: r.reported_type === 'gig' ? '#eff6ff' : r.reported_type === 'comment' ? '#fef3c7' : '#faf5ff',
+                                                    color: r.reported_type === 'gig' ? '#1e40af' : r.reported_type === 'comment' ? '#92400e' : '#6b21a8',
+                                                    border: `1px solid ${r.reported_type === 'gig' ? '#bfdbfe' : r.reported_type === 'comment' ? '#fde68a' : '#d8b4fe'}`,
                                                 }}>
                                                     {r.reported_type}
                                                 </span>
@@ -658,7 +658,12 @@ export default function AdminPage() {
                                                 </span>
                                             </div>
                                             <Link
-                                                to={r.reported_type === 'gig' ? `/gigs/${r.reported_id}` : `/profile/${r.reported_id}`}
+                                                to={
+                                                    r.reported_type === 'gig' ? `/gigs/${r.reported_id}`
+                                                    : r.reported_type === 'comment'
+                                                        ? (r.comment_target_type === 'gig' ? `/gigs/${r.comment_target_id}` : `/profile/${r.comment_target_id}`)
+                                                    : `/profile/${r.reported_id}`
+                                                }
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 style={{ margin: '0 0 4px', fontWeight: 700, fontSize: 15, color: 'var(--primary)', textDecoration: 'none', display: 'block' }}
@@ -699,6 +704,24 @@ export default function AdminPage() {
                                                         fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
                                                     }}>
                                                     🗑 Remove Gig
+                                                </button>
+                                            )}
+                                            {r.reported_type === 'comment' && r.status === 'pending' && (
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!window.confirm('Delete this comment?')) return;
+                                                        const res = await apiFetch('/api/admin/remove-comment', { method: 'POST', body: JSON.stringify({ commentId: r.reported_id }) });
+                                                        const data = await res.json();
+                                                        if (!res.ok) { showToast('Failed: ' + (data.error || 'unknown'), 'error'); return; }
+                                                        showToast('Comment removed', 'success');
+                                                        loadReports();
+                                                    }}
+                                                    style={{
+                                                        background: '#fff5f5', border: '1.5px solid #fca5a5',
+                                                        color: '#dc2626', padding: '6px 14px', borderRadius: 8,
+                                                        fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                                                    }}>
+                                                    🗑 Remove Comment
                                                 </button>
                                             )}
                                             {r.status === 'pending' && (

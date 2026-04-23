@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
 
-const GIG_REASONS  = ['Spam or misleading', 'Inappropriate content', 'Scam or fraud', 'Copyright violation', 'Other'];
-const USER_REASONS = ['Harassment', 'Spam or misleading', 'Fake profile', 'Scam or fraud', 'Inappropriate behavior', 'Other'];
+const GIG_REASONS     = ['Spam or misleading', 'Inappropriate content', 'Scam or fraud', 'Copyright violation', 'Other'];
+const USER_REASONS    = ['Harassment', 'Spam or misleading', 'Fake profile', 'Scam or fraud', 'Inappropriate behavior', 'Other'];
+const COMMENT_REASONS = ['Spam or misleading', 'Harassment', 'Hate speech', 'Inappropriate content', 'Illegal activity', 'Other'];
+
+const REASONS_BY_TYPE = { gig: GIG_REASONS, user: USER_REASONS, comment: COMMENT_REASONS };
+const TYPE_LABEL = { gig: 'gig', user: 'user', comment: 'comment' };
 
 export default function ReportModal({ isOpen, onClose, reportedType, reportedId, reportedName }) {
     const [reason, setReason] = useState('');
@@ -13,7 +17,7 @@ export default function ReportModal({ isOpen, onClose, reportedType, reportedId,
 
     if (!isOpen) return null;
 
-    const reasons = reportedType === 'gig' ? GIG_REASONS : USER_REASONS;
+    const reasons = REASONS_BY_TYPE[reportedType] || USER_REASONS;
 
     function handleClose() {
         setReason('');
@@ -60,7 +64,7 @@ export default function ReportModal({ isOpen, onClose, reportedType, reportedId,
                 ) : (
                     <form onSubmit={handleSubmit}>
                         <h2 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 700 }}>
-                            Report {reportedType === 'gig' ? 'gig' : 'user'}
+                            Report {TYPE_LABEL[reportedType] ?? 'item'}
                         </h2>
                         <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--text-muted)' }}>
                             Reporting: <strong style={{ color: 'var(--text-primary)' }}>{reportedName}</strong>

@@ -6,6 +6,7 @@ import { apiFetch } from '@/lib/api';
 import SkillEditor from '@/components/Skillededitor';
 import ReportModal from '@/components/ReportModal';
 import BlockButton from '@/components/BlockButton';
+import Comments from '@/components/Comments';
 
 export default function ProfilePage() {
     const user = useUser();
@@ -823,6 +824,8 @@ export default function ProfilePage() {
                         </div>
                     </div>
                 )}
+
+                {profile?.id && <Comments targetType="profile" targetId={profile.id} />}
 
                 {editMode && (
                     <div className="profile-actions">

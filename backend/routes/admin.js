@@ -298,6 +298,19 @@ router.get('/reports', async (req, res) => {
             if (r.reported_type === 'gig') {
                 const { data: gig } = await supabase.from('gigs').select('id, title, user_id, profile:profiles!user_id(full_name)').eq('id', r.reported_id).single();
                 return { ...r, reported_name: gig?.title ?? 'Unknown gig', reported_owner: gig?.profile?.full_name ?? null };
+            } else if (r.reported_type === 'comment') {
+                const { data: comment } = await supabase
+                    .from('comments')
+                    .select('id, body, target_type, target_id, author:profiles!author_id(full_name)')
+                    .eq('id', r.reported_id)
+                    .single();
+                return {
+                    ...r,
+                    reported_name: comment ? `"${comment.body.slice(0, 80)}${comment.body.length > 80 ? '…' : ''}"` : 'Comment deleted',
+                    reported_owner: comment?.author?.full_name ?? null,
+                    comment_target_type: comment?.target_type ?? null,
+                    comment_target_id: comment?.target_id ?? null,
+                };
             } else {
                 const { data: profile } = await supabase.from('profiles').select('id, full_name').eq('id', r.reported_id).single();
                 return { ...r, reported_name: profile?.full_name ?? 'Unknown user' };
@@ -307,6 +320,31 @@ router.get('/reports', async (req, res) => {
         res.json(enriched);
     } catch (err) {
         console.error('Fetch reports error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/remove-comment', async (req, res) => {
+    try {
+        if (req.user.email !== ADMIN_EMAIL) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        const { commentId } = req.body;
+        if (!commentId) return res.status(400).json({ error: 'Missing commentId' });
+
+        const { error } = await supabase.from('comments').delete().eq('id', commentId);
+        if (error) return res.status(500).json({ error: error.message });
+
+        await supabase.from('reports')
+            .update({ status: 'resolved' })
+            .eq('reported_type', 'comment')
+            .eq('reported_id', commentId)
+            .eq('status', 'pending');
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Remove comment error:', err);
         res.status(500).json({ error: err.message });
     }
 });

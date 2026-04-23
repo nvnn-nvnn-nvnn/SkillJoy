@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useAuth, useProfile } from '@/lib/stores';
 import ReportModal from '@/components/ReportModal';
+import Comments from '@/components/Comments';
 
 function initials(name) {
     if (!name) return '?';
@@ -396,6 +397,8 @@ export default function GigDetailsPage() {
                         )}
                     </div>
                 </div>
+
+                <Comments targetType="gig" targetId={gig.id} />
             </div>
 
             <ReportModal
