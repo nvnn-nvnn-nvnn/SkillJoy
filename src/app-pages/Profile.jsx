@@ -181,7 +181,7 @@ export default function ProfilePage() {
 
 // Stripe Load End
 
-    async function loadGigs() {
+    async function loadGigs(collegeVerified, universityDomain) {
         const targetId = userId || user.id;
         const isOther = userId && userId !== user.id;
 
@@ -189,12 +189,13 @@ export default function ProfilePage() {
             .from('gigs')
             .select('*, profile:profiles!user_id(id, full_name, bio, service_type)')
             .eq('user_id', targetId)
+            .eq('active', true)
             .order('created_at', { ascending: false });
 
         // When viewing someone else's profile, only show gigs from the same university
-        if (isOther && myProfile?.college_verified && myProfile?.university_domain) {
-            query = query.eq('university_domain', myProfile.university_domain);
-        } else if (isOther) {
+        if (isOther && collegeVerified && universityDomain) {
+            query = query.eq('university_domain', universityDomain);
+        } else if (isOther && !collegeVerified) {
             // Viewer has no verified domain — hide all gigs from other users
             setAllGigs([]);
             return;
@@ -211,8 +212,8 @@ export default function ProfilePage() {
         if (authLoading) return;
         if (!user) { navigate('/login'); return; }
         loadProfile(); // eslint-disable-line react-hooks/set-state-in-effect
-        loadGigs();
-    }, [user, userId, authLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+        loadGigs(myProfile?.college_verified, myProfile?.university_domain);
+    }, [user, userId, authLoading, myProfile?.college_verified, myProfile?.university_domain]); // eslint-disable-line react-hooks/exhaustive-deps
 
     async function handleSendCollegeVerification() {
         setCollegeError('');
