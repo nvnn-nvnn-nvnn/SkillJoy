@@ -189,7 +189,7 @@ export default function ProfilePage() {
             .from('gigs')
             .select('*, profile:profiles!user_id(id, full_name, bio, service_type)')
             .eq('user_id', targetId)
-            .eq('active', true)
+            .neq('active', false)
             .order('created_at', { ascending: false });
 
         // When viewing someone else's profile, only show gigs from the same university

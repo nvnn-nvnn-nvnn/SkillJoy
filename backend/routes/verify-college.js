@@ -79,6 +79,12 @@ router.post('/confirm', async (req, res) => {
 
     if (updateError) return res.status(500).json({ error: updateError.message });
 
+    // Backfill university_domain on any existing gigs the user created before verification
+    await supabase.from('gigs')
+        .update({ university_domain: universityDomain })
+        .eq('user_id', profile.id)
+        .is('university_domain', null);
+
     res.json({ success: true, universityDomain });
 });
 
