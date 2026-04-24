@@ -57,7 +57,7 @@ export default function AboutPage() {
                         DL
                     </div>
                     <div>
-                        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Devan Lee</div>
+                        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Ryan Chang</div>
                         <div style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6 }}>
                             🏆 3rd place — Northland Hackathon<br />
                             Designer, developer, and the person who decided students deserve a better way to trade skills.

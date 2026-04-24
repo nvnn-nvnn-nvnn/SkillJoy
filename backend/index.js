@@ -61,6 +61,7 @@ app.use('/api/verify-college', verifyCollegeRoutes);
 app.use('/api/reports', authMiddleware, reportRoutes);
 app.use('/api/blocks', authMiddleware, blockRoutes);
 
+
 // Health check
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
