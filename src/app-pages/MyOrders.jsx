@@ -25,9 +25,9 @@ function PaymentForm({ order, onSuccess, onError, onClose }) {
     const [cardName, setCardName] = useState('');
     const [zipCode, setZipCode] = useState('');
 
-    const SERVICE_FEE_PERCENT = parseFloat(import.meta.env.VITE_SERVICE_FEE_PERCENT) || 0.10; // keep in sync with backend/config/fees.js
+    const SERVICE_FEE = parseFloat(import.meta.env.VITE_SERVICE_FEE) || 3.50;
     const basePrice = parseFloat(order.gig.price) || 0;
-    const serviceFee = basePrice * SERVICE_FEE_PERCENT;
+    const serviceFee = SERVICE_FEE;
     const total = basePrice + serviceFee;
 
     async function handleSubmit(e) {
@@ -134,7 +134,7 @@ function PaymentForm({ order, onSuccess, onError, onClose }) {
                     <span>${parseFloat(order.gig.price).toFixed(2)}</span>
                 </div>
                 <div className="pf-breakdown-row">
-                    <span>Service fee ({(SERVICE_FEE_PERCENT * 100).toFixed(0)}%)</span>
+                    <span>Service fee (flat)</span>
                     <span>${serviceFee.toFixed(2)}</span>
                 </div>
                 <div className="pf-breakdown-row pf-breakdown-total">

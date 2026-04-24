@@ -209,7 +209,7 @@ export default function GigsPage() {
         setTimeout(() => setToast(''), 3500);
     }
 
-    const SERVICE_FEE_PERCENT = parseFloat(import.meta.env.VITE_SERVICE_FEE_PERCENT) || 0.10;
+    const SERVICE_FEE = parseFloat(import.meta.env.VITE_SERVICE_FEE) || 3.50;
 
     function openPaymentModal(gig) {
         setPaymentModal(gig);
@@ -595,12 +595,12 @@ export default function GigsPage() {
                                 <span>${(parseFloat(customAmount) || 0).toFixed(2)}</span>
                             </div>
                             <div className="payment-line">
-                                <span>Service fee ({(SERVICE_FEE_PERCENT * 100).toFixed(0)}%)</span>
-                                <span>${((parseFloat(customAmount) || 0) * SERVICE_FEE_PERCENT).toFixed(2)}</span>
+                                <span>Service fee (flat)</span>
+                                <span>${SERVICE_FEE.toFixed(2)}</span>
                             </div>
                             <div className="payment-line payment-total">
                                 <span>Total</span>
-                                <span>${((parseFloat(customAmount) || 0) * (1 + SERVICE_FEE_PERCENT)).toFixed(2)}</span>
+                                <span>${((parseFloat(customAmount) || 0) + SERVICE_FEE).toFixed(2)}</span>
                             </div>
                         </div>
 

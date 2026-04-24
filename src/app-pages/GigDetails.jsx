@@ -28,9 +28,9 @@ export default function GigDetailsPage() {
     const [toastType, setToastType] = useState('success');
     const [showReport, setShowReport] = useState(false);
 
-    const SERVICE_FEE_PERCENT = parseFloat(import.meta.env.VITE_SERVICE_FEE_PERCENT) || 0.10;
+    const SERVICE_FEE = parseFloat(import.meta.env.VITE_SERVICE_FEE) || 3.50;
     const offerAmount = parseFloat(customAmount) || 0;
-    const serviceFee = offerAmount * SERVICE_FEE_PERCENT;
+    const serviceFee = SERVICE_FEE;
 
     useEffect(() => {
         if (authLoading) return;
@@ -372,7 +372,7 @@ export default function GigDetailsPage() {
                                         <span>${(parseFloat(customAmount) || 0).toFixed(2)}</span>
                                     </div>
                                     <div className="gd-breakdown-row">
-                                        <span>Service fee ({(SERVICE_FEE_PERCENT * 100).toFixed(0)}%)</span>
+                                        <span>Service fee (flat)</span>
                                         <span>${serviceFee.toFixed(2)}</span>
                                     </div>
                                     <div className="gd-breakdown-row gd-breakdown-total">

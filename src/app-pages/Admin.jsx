@@ -500,13 +500,13 @@ export default function AdminPage() {
                                         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px', borderTop: '3px solid #8b5cf6' }}>
                                             <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>All-Time Fees Collected</div>
                                             <div style={{ fontSize: 28, fontWeight: 800, color: '#6d28d9' }}>${finances.totalFeesEarned.toFixed(2)}</div>
-                                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>10% of gig price, from cleared orders</div>
+                                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>$3.50 flat fee per order, from cleared orders</div>
                                         </div>
                                     </div>
 
                                     {/* How this works explanation */}
                                     <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 18px', marginBottom: 24, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                                        <strong style={{ color: 'var(--text-primary)' }}>How to read this:</strong> Your Stripe balance holds both your profit (10% service fees) and funds reserved for sellers. <strong style={{ color: '#92400e' }}>Owed to Sellers</strong> is money that must go out once clearance windows expire. <strong style={{ color: '#15803d' }}>Actual Profit</strong> is what's truly yours right now.
+                                        <strong style={{ color: 'var(--text-primary)' }}>How to read this:</strong> Your Stripe balance holds both your profit ($3.50 flat service fees) and funds reserved for sellers. <strong style={{ color: '#92400e' }}>Owed to Sellers</strong> is money that must go out once clearance windows expire. <strong style={{ color: '#15803d' }}>Actual Profit</strong> is what's truly yours right now.
                                     </div>
 
                                     {/* Pending transfers list */}

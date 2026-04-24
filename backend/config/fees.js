@@ -1,32 +1,30 @@
 // ── Shared fee constants ───────────────────────────────────────────────────
-// Keep SERVICE_FEE_PERCENT in sync with VITE_SERVICE_FEE_PERCENT (frontend).
-const SERVICE_FEE_PERCENT = 0.10; // 10% of gig base price
+// Keep SERVICE_FEE_FLAT in sync with VITE_SERVICE_FEE (frontend).
+const SERVICE_FEE_FLAT = 3.50; // flat $3.50 per transaction
+const SERVICE_FEE_CENTS = 350;
 
-// Fee in cents, computed from the seller's base price (gig.price).
-function feeCents(baseDollars) {
-    return Math.round(parseFloat(baseDollars || 0) * 100 * SERVICE_FEE_PERCENT);
+// Fee in cents — flat regardless of gig price.
+function feeCents(_baseDollars) {
+    return SERVICE_FEE_CENTS;
 }
 
-// Fee in dollars, computed from the seller's base price.
-function feeDollars(baseDollars) {
-    return feeCents(baseDollars) / 100;
+// Fee in dollars — flat regardless of gig price.
+function feeDollars(_baseDollars) {
+    return SERVICE_FEE_FLAT;
 }
 
-// Fee in cents, extracted from a total the buyer paid (payment_amount).
-// payment_amount = base + base*percent = base*(1+percent)
-// so fee = payment_amount - payment_amount / (1+percent)
-function feeCentsFromTotal(totalDollars) {
-    const totalCents = Math.round(parseFloat(totalDollars || 0) * 100);
-    const baseCents = Math.round(totalCents / (1 + SERVICE_FEE_PERCENT));
-    return totalCents - baseCents;
+// Fee in cents from total (buyer paid base + flat fee).
+function feeCentsFromTotal(_totalDollars) {
+    return SERVICE_FEE_CENTS;
 }
 
-function feeDollarsFromTotal(totalDollars) {
-    return feeCentsFromTotal(totalDollars) / 100;
+function feeDollarsFromTotal(_totalDollars) {
+    return SERVICE_FEE_FLAT;
 }
 
 module.exports = {
-    SERVICE_FEE_PERCENT,
+    SERVICE_FEE_FLAT,
+    SERVICE_FEE_CENTS,
     feeCents,
     feeDollars,
     feeCentsFromTotal,
