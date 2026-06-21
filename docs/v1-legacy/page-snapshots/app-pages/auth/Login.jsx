@@ -1,0 +1,318 @@
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/stores';
+import { useNavigate } from 'react-router-dom';
+import SkillJoyLogo3 from '../../assets/SkillJoy-Logo2.svg'
+
+export default function LoginPage() {
+    const isRecovery = useRef(window.location.hash.includes('type=recovery'));
+    const [mode, setMode] = useState(() =>
+        window.location.hash.includes('type=recovery') ? 'new-password' : 'signin'
+    );
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+    const [busy, setBusy] = useState(false);
+
+    const user = useUser();
+    const navigate = useNavigate();
+
+    // Intercept Supabase's PASSWORD_RECOVERY event before the redirect fires
+    useEffect(() => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+            if (event === 'PASSWORD_RECOVERY') {
+                isRecovery.current = true;
+                setMode('new-password');
+            }
+        });
+        return () => subscription.unsubscribe();
+    }, []);
+
+    useEffect(() => {
+        if (user && !isRecovery.current) navigate('/matches');
+    }, [user, navigate]);
+
+    async function submit(e) {
+        e.preventDefault();
+        setError(''); setSuccess(''); setBusy(true);
+        try {
+            if (mode === 'signup') {
+                const { error: e } = await supabase.auth.signUp({ email, password });
+                if (e) throw e;
+                setSuccess('Check your email to confirm your account, then sign in.');
+            } else if (mode === 'reset') {
+                const { error: e } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: (import.meta.env.VITE_SITE_URL ?? window.location.origin) + '/login',
+                });
+                if (e) throw e;
+                setSuccess('Check your email for a password reset link.');
+            } else if (mode === 'new-password') {
+                if (newPassword.length < 6) throw new Error('Password must be at least 6 characters.');
+                if (newPassword !== confirmPassword) throw new Error('Passwords do not match.');
+                const { error: e } = await supabase.auth.updateUser({ password: newPassword });
+                if (e) throw e;
+                await supabase.auth.signOut();
+                isRecovery.current = false;
+                setNewPassword('');
+                setConfirmPassword('');
+                setMode('signin');
+                setSuccess('Password updated! Please sign in with your new password.');
+            } else {
+                const { error: e } = await supabase.auth.signInWithPassword({ email, password });
+                if (e) throw e;
+                const { data: { user: signedInUser } } = await supabase.auth.getUser();
+                const { data: userProfile } = await supabase.from('profiles').select('full_name').eq('id', signedInUser.id).single();
+                if (!userProfile?.full_name) {
+                    navigate('/onboarding');
+                } else {
+                    navigate('/matches');
+                }
+            }
+        } catch (e) {
+            setError(e.message ?? 'Something went wrong.');
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    function switchMode(next) {
+        setMode(next);
+        setError('');
+        setSuccess('');
+    }
+
+    const titles = { signup: 'Create your account', signin: 'Welcome back', reset: 'Reset your password', 'new-password': 'Set a new password' };
+    const subs = {
+        signup: 'Start swapping skills with students on your campus.',
+        signin: 'Sign in to see your matches and swaps.',
+        reset: "Enter your email and we'll send you a reset link.",
+        'new-password': 'Choose a new password for your account.',
+    };
+
+    return (
+        <>
+            <title>Sign in — SkillJoy</title>
+
+            <div className="login-bg">
+                <div className="login-card fade-up">
+                    <img
+                    style={{ height: '45px'}}
+                    src={SkillJoyLogo3} alt="" />
+
+                    <h1 className="login-title">{titles[mode]}</h1>
+                    <p className="login-sub">{subs[mode]}</p>
+
+                    <form onSubmit={submit} className="login-form">
+                        {mode === 'new-password' ? (
+                            <>
+                                <div className="field">
+                                    <label htmlFor="new-password">New password</label>
+                                    <input
+                                        id="new-password"
+                                        type="password"
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        placeholder="At least 6 characters"
+                                        required
+                                        minLength={6}
+                                        autoComplete="new-password"
+                                    />
+                                </div>
+                                <div className="field">
+                                    <label htmlFor="confirm-password">Confirm password</label>
+                                    <input
+                                        id="confirm-password"
+                                        type="password"
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        placeholder="••••••••"
+                                        required
+                                        minLength={6}
+                                        autoComplete="new-password"
+                                    />
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="field">
+                                    <label htmlFor="email">Email</label>
+                                    <input
+                                        id="email"
+                                        type="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        placeholder="you@university.edu"
+                                        required
+                                        autoComplete="email"
+                                    />
+                                </div>
+
+                                {mode !== 'reset' && (
+                                    <div className="field">
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                            <label htmlFor="password" style={{ margin: 0 }}>Password</label>
+                                            {mode === 'signin' && (
+                                                <button
+                                                    type="button"
+                                                    className="btn-text"
+                                                    style={{ fontSize: 13 }}
+                                                    onClick={() => switchMode('reset')}
+                                                >
+                                                    Forgot password?
+                                                </button>
+                                            )}
+                                        </div>
+                                        <input
+                                            id="password"
+                                            type="password"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••'}
+                                            required
+                                            minLength={6}
+                                            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                                        />
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {error && <p className="form-error">{error}</p>}
+                        {success && <p className="form-success">{success}</p>}
+
+                        <button
+                            type="submit"
+                            className="btn btn-primary"
+                            style={{ width: '100%', marginTop: '4px' }}
+                            disabled={busy}
+                        >
+                            {busy && (
+                                <span
+                                    className="spinner"
+                                    style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white' }}
+                                />
+                            )}
+                            {mode === 'signup' ? 'Create account' : mode === 'reset' ? 'Send reset link' : mode === 'new-password' ? 'Set new password' : 'Sign in'}
+                        </button>
+                    </form>
+
+                    <div className="login-toggle">
+                        {mode === 'reset' ? (
+                            <>
+                                Remember your password?{' '}
+                                <button className="btn-text" onClick={() => switchMode('signin')}>
+                                    Sign in
+                                </button>
+                            </>
+                        ) : mode === 'signin' ? (
+                            <>
+                                Don't have an account?{' '}
+                                <button className="btn-text" onClick={() => switchMode('signup')}>
+                                    Sign up
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                Already have an account?{' '}
+                                <button className="btn-text" onClick={() => switchMode('signin')}>
+                                    Sign in
+                                </button>
+                            </>
+                        )}
+                    </div>
+
+                    {mode === 'signin' && (
+                        <p style={{ textAlign: 'center', marginTop: 12, fontSize: 13, color: 'var(--text-muted)' }}>
+                            Your username is your email address.
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            <style>{`
+        .login-bg {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+          background: var(--bg);
+          position: relative;
+        }
+        .login-bg::before {
+          content: '';
+          position: fixed;
+          inset: 0;
+          background:
+            radial-gradient(ellipse 60% 60% at 20% 20%, rgba(193, 123, 43, 0.07) 0%, transparent 60%),
+            radial-gradient(ellipse 50% 50% at 80% 80%, rgba(212, 82, 42, 0.06) 0%, transparent 60%);
+          pointer-events: none;
+        }
+        .login-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: var(--r-xl);
+          padding: 40px;
+          width: 100%;
+          max-width: 420px;
+          box-shadow: var(--shadow-lg);
+          position: relative;
+        }
+        .login-logo {
+          display: block;
+          font-family: var(--font-display);
+          font-size: 22px;
+          color: var(--text);
+          margin-bottom: 32px;
+          text-decoration: none;
+        }
+        .login-logo span { color: var(--accent); }
+
+        .login-title { font-size: 28px; margin-bottom: 8px; }
+        .login-sub   { font-size: 15px; color: var(--text-secondary); margin-bottom: 32px; }
+
+        .login-form  { display: flex; flex-direction: column; gap: 20px; }
+        .field       { display: flex; flex-direction: column; }
+
+        .form-error {
+          font-size: 13px;
+          color: var(--accent);
+          background: var(--accent-light);
+          border: 1px solid var(--accent-mid);
+          border-radius: var(--r-sm);
+          padding: 10px 14px;
+        }
+        .form-success {
+          font-size: 13px;
+          color: var(--green);
+          background: var(--green-light);
+          border: 1px solid var(--green-mid);
+          border-radius: var(--r-sm);
+          padding: 10px 14px;
+        }
+
+        .login-toggle {
+          margin-top: 24px;
+          text-align: center;
+          font-size: 14px;
+          color: var(--text-secondary);
+        }
+        .btn-text {
+          background: none;
+          border: none;
+          color: var(--primary);
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          padding: 0 2px;
+          text-decoration: underline;
+          font-family: var(--font-body);
+        }
+        .btn-text:hover { color: var(--accent); }
+      `}</style>
+        </>
+    );
+}
