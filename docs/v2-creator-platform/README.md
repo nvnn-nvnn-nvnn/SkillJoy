@@ -1,5 +1,13 @@
 # SkillJoy v2 — Creator Platform
 
+> ⚠️ **DEPRECATED (2026-06-22).** This Gumroad-style "digital products +
+> services" vision has been superseded by the **Skill-primitive ("Stan Store
+> for skills")** vision in [`docs/v3-skill-platform/`](../v3-skill-platform/),
+> which is now the source of truth. v2 was documentation only — no app code was
+> ever built against it — so nothing to roll back. Several v2 mechanics
+> (signed-URL delivery, webhook fulfilment, the legacy-gate flag pattern) carry
+> over into v3 and are referenced there. Kept for history, not for building.
+
 > **The rebrand:** SkillJoy moves from a campus freelance/skill-swap marketplace
 > to a **digital products & services platform for everyday creators** — think
 > Gumroad. Creators list digital *products* (sold many times, instant delivery)

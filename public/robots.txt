@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+
+# Storefronts are public and meant to be shared/indexed.
+# Disallow app-only/auth surfaces.
+Disallow: /build
+Disallow: /dashboard
+Disallow: /locker
+Disallow: /checkout
+Disallow: /storefront/edit
+Disallow: /settings
+Disallow: /admin

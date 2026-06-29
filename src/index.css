@@ -1,45 +1,68 @@
 /* ── SkillJoy — CSS Variables & Global Reset ── */
 
 :root {
-  --bg: #ec9146;
-  ;
-  --surface: #FFFEF9;
-  --surface-alt: #F5F0E8;
-  --border: #EAE0CC;
-  --border-strong: #D4C4A0;
+  /* ──────────────────────────────────────────────────────────
+     SkillJoy — Seafoam system (Stan-inspired: calm, rounded, solid)
+     Warm cream canvas + one confident solid seafoam accent.
+     No gradients, no glows — clarity and breathing room.
+     ────────────────────────────────────────────────────────── */
+
+  /* Canvas & surfaces — warm cream, clean white cards. */
+  --bg: #FBF8F2;
+  --surface: #FFFFFF;
+  --surface-alt: #F4F1EA;
+  --border: #ECE6DB;
+  --border-strong: #DCD4C6;
 
   --secretary: #c99772;
 
-  --text: #000000;
-  --text-secondary: #4A4A4A;
-  --text-muted: #999999;
+  /* Near-black warm ink. */
+  --text: #1A1916;
+  --text-secondary: #5B574E;
+  --text-muted: #97917F;
 
-  --primary: #000;
-  --primary-hover: #A86820;
-  --primary-light: #FEF3E2;
-  --primary-mid: #F0D0A0;
+  --primary: #1A1916;
+  --primary-hover: #0A6E5D;
+  --primary-light: #E5F6F1;
+  --primary-mid: #ADE4D7;
 
-  --accent: #D4522A;
-  --accent-hover: #B8401E;
-  --accent-light: #FEECE6;
-  --accent-mid: #F0B8A0;
+  /* ── Seafoam accent ──
+     --accent is the AA-safe functional green (buttons, links, focus).
+     --accent-bright is the softer decorative seafoam (fills, chips). */
+  --accent: #0C8470;
+  --accent-hover: #0A6E5D;
+  --accent-bright: #2FC4AD;
+  --accent-light: #E5F6F1;
+  --accent-mid: #ADE4D7;
+  --accent-foreground: #FFFFFF;
+
+  --accent-rgb: 12 132 112;
+  --accent-bright-rgb: 47 196 173;
 
   --green: #2A7A4B;
   --green-light: #E6F7EE;
   --green-mid: #A0D8B8;
 
-  --font-display: 'Fraunces', Georgia, serif;
+  /* One unified sans across the whole product. */
+  --font-display: 'DM Sans', system-ui, sans-serif;
   --font-body: 'DM Sans', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
 
-  --r-sm: 6px;
-  --r: 12px;
-  --r-lg: 18px;
-  --r-xl: 24px;
+  /* Generous, soft radii — the Stan roundness. */
+  --r-sm: 8px;
+  --r: 14px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-2xl: 36px;
   --r-full: 999px;
 
-  --shadow-sm: 0 1px 3px rgba(30, 18, 9, 0.06), 0 1px 2px rgba(30, 18, 9, 0.04);
-  --shadow: 0 4px 12px rgba(30, 18, 9, 0.08), 0 1px 4px rgba(30, 18, 9, 0.04);
-  --shadow-lg: 0 10px 32px rgba(30, 18, 9, 0.12), 0 2px 8px rgba(30, 18, 9, 0.06);
+  /* Soft, low-contrast shadows. */
+  --shadow-sm: 0 1px 2px rgba(20, 18, 12, 0.04), 0 1px 3px rgba(20, 18, 12, 0.05);
+  --shadow: 0 2px 8px rgba(20, 18, 12, 0.06), 0 1px 3px rgba(20, 18, 12, 0.04);
+  --shadow-lg: 0 8px 24px rgba(20, 18, 12, 0.08), 0 2px 6px rgba(20, 18, 12, 0.05);
+  --shadow-xl: 0 18px 44px rgba(20, 18, 12, 0.10), 0 6px 14px rgba(20, 18, 12, 0.06);
+  --shadow-accent: 0 6px 20px rgb(var(--accent-rgb) / 0.22);
+  --shadow-accent-lg: 0 12px 30px rgb(var(--accent-rgb) / 0.28);
 }
 
 *,
@@ -70,9 +93,9 @@ h2,
 h3,
 h4 {
   font-family: var(--font-display);
-  font-weight: 400;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
 }
 
 a {
@@ -86,4 +109,48 @@ a:hover {
 
 p {
   margin: 0;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Shared utilities — calm, solid, Stan-inspired.
+   Kept deliberately small; no decorative gimmicks.
+   ────────────────────────────────────────────────────────────── */
+
+/* Highlight a key word in a headline — solid accent, no gradient. */
+.accent-text { color: var(--accent); }
+
+/* Soft pill label — a small seafoam chip above a section heading. */
+.sj-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--r-full);
+  background: var(--accent-light);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.sj-pill .sj-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-bright);
+  flex-shrink: 0;
+}
+
+/* Soft seafoam-tinted section (alternative to plain cream). */
+.sj-tint { background: var(--accent-light); }
+
+/* Gentle, optional float for product mockups. */
+@keyframes sjFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.sj-float { animation: sjFloat 6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sj-float { animation: none !important; }
+  html { scroll-behavior: auto; }
 }

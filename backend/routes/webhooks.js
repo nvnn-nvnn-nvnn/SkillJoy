@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
+const { sendEmail, getUserEmail } = require('./../lib/email');
+const { fireAutomation } = require('./../lib/webhookout');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STRIPE WEBHOOK ENDPOINT
@@ -27,8 +29,68 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
         case 'payment_intent.succeeded': {
             const paymentIntent = event.data.object;
             console.log(`\n✅ STRIPE WEBHOOK: PaymentIntent succeeded: ${paymentIntent.id}`);
-            console.log(`📦 OrderId from metadata: ${paymentIntent.metadata?.orderId}`);
             console.log(`💰 Amount: $${paymentIntent.amount / 100}`);
+
+            // ── v3 Skill purchase (instant digital goods, no escrow) ──
+            if (paymentIntent.metadata?.kind === 'skill') {
+                const { skill_id, buyer_id } = paymentIntent.metadata;
+                console.log(`🧩 Skill purchase: skill ${skill_id} for buyer ${buyer_id}`);
+
+                const { data: paid, error: skillErr } = await supabase
+                    .from('purchases')
+                    .update({ status: 'paid', stripe_payment_id: paymentIntent.id })
+                    .eq('buyer_id', buyer_id).eq('skill_id', skill_id)
+                    .neq('status', 'paid') // idempotency guard
+                    .select('id');
+
+                if (skillErr) {
+                    console.error('❌ Failed to mark Skill purchase paid:', skillErr.message);
+                } else if (!paid || paid.length === 0) {
+                    console.warn(`⚠️ Skill purchase already paid or pending row missing (skill ${skill_id}, buyer ${buyer_id})`);
+                } else {
+                    const { data: skill } = await supabase
+                        .from('skills').select('title, creator_id').eq('id', skill_id).single();
+                    // Notify the creator of the sale.
+                    if (skill?.creator_id) {
+                        await supabase.from('notifications').insert({
+                            user_id: skill.creator_id,
+                            type: 'skill_purchase',
+                            title: 'New sale! 🎉',
+                            message: `Someone just bought "${skill.title ?? 'your Skill'}".`,
+                            related_id: skill_id, related_type: null,
+                        });
+                    }
+                    // Count a promo-code redemption, if one was used.
+                    const code = paymentIntent.metadata?.code;
+                    if (code && skill?.creator_id) {
+                        const { data: d } = await supabase.from('discounts')
+                            .select('id, times_redeemed').eq('creator_id', skill.creator_id).ilike('code', code).maybeSingle();
+                        if (d) await supabase.from('discounts').update({ times_redeemed: d.times_redeemed + 1 }).eq('id', d.id);
+                    }
+                    // Best-effort receipt to the buyer.
+                    try {
+                        const email = await getUserEmail(buyer_id);
+                        if (email) await sendEmail({
+                            to: email,
+                            subject: `Your receipt — ${skill?.title ?? 'SkillJoy purchase'}`,
+                            html: `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;">
+                                <p>Thanks for your purchase!</p>
+                                <p><strong>${skill?.title ?? 'Skill'}</strong> — $${(paymentIntent.amount / 100).toFixed(2)}</p>
+                                <p>Access it anytime in your locker:</p>
+                                <a href="${process.env.FRONTEND_URL}/locker/${skill_id}" style="display:inline-block;padding:10px 20px;background:#D4522A;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Open in Locker</a>
+                                <p style="color:#9ca3af;font-size:12px;margin-top:24px;">SkillJoy</p></div>`,
+                        });
+                    } catch (e) { console.warn('receipt email failed:', e.message); }
+                    // Outbound automation webhook (Zapier/Make/AutoDM).
+                    if (skill?.creator_id) fireAutomation(skill.creator_id, 'sale', {
+                        skill_id, title: skill.title, amount: paymentIntent.amount / 100, kind: 'onetime',
+                    });
+                    console.log(`✅ Skill purchase fulfilled (skill ${skill_id}, buyer ${buyer_id})`);
+                }
+                break;
+            }
+
+            console.log(`📦 OrderId from metadata: ${paymentIntent.metadata?.orderId}`);
 
             if (!paymentIntent.metadata?.orderId) {
                 console.log('⚠️ PaymentIntent missing orderId metadata');
@@ -259,6 +321,49 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
         }
 
         
+
+        // ── v3 Membership: subscription lifecycle ──
+        case 'checkout.session.completed': {
+            const session = event.data.object;
+            if (session.mode !== 'subscription' || session.metadata?.kind !== 'skill_sub') break;
+            const { skill_id, buyer_id } = session.metadata;
+            console.log(`🔁 Membership started: skill ${skill_id}, buyer ${buyer_id}`);
+
+            const { error } = await supabase
+                .from('purchases')
+                .update({ status: 'paid', stripe_subscription_id: session.subscription })
+                .eq('buyer_id', buyer_id).eq('skill_id', skill_id);
+            if (error) { console.error('❌ Membership grant failed:', error.message); break; }
+
+            const { data: skill } = await supabase
+                .from('skills').select('title, creator_id').eq('id', skill_id).single();
+            if (skill?.creator_id) {
+                await supabase.from('notifications').insert({
+                    user_id: skill.creator_id,
+                    type: 'skill_purchase',
+                    title: 'New member! 🎉',
+                    message: `Someone just subscribed to "${skill.title ?? 'your Skill'}".`,
+                    related_id: skill_id, related_type: null,
+                });
+                fireAutomation(skill.creator_id, 'sale', { skill_id, title: skill.title, kind: 'membership' });
+            }
+            break;
+        }
+
+        case 'customer.subscription.updated':
+        case 'customer.subscription.deleted': {
+            const sub = event.data.object;
+            if (sub.metadata?.kind !== 'skill_sub') break;
+            // active/trialing → access on; anything else → access off.
+            const active = ['active', 'trialing'].includes(sub.status);
+            const periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null;
+            console.log(`🔁 Subscription ${sub.id} → ${sub.status} (access ${active ? 'on' : 'off'})`);
+            await supabase
+                .from('purchases')
+                .update({ status: active ? 'paid' : 'expired', current_period_end: periodEnd })
+                .eq('stripe_subscription_id', sub.id);
+            break;
+        }
 
         default:
             console.log(`Unhandled event type ${event.type}`);

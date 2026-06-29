@@ -1,555 +1,291 @@
 import { useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useUser } from '@/lib/stores';
-import PairCard from '@/components/Paircard';
-
-const PAIRS = [
-  { teach: 'Python', learn: 'Guitar', a: 'Maya', b: 'Jordan' },
-  { teach: 'Oil Painting', learn: 'React', a: 'Alex', b: 'Priya' },
-  { teach: 'Spanish', learn: 'Chess', a: 'Sofia', b: 'Leo' },
-  { teach: 'Cooking', learn: 'Photography', a: 'Sam', b: 'Mia' },
-  { teach: 'Yoga', learn: 'Graphic Design', a: 'Arjun', b: 'Chloe' },
-  { teach: 'Chess', learn: 'Music Theory', a: 'Leo', b: 'Jordan' },
-];
+import { LEGACY_MODE } from '@/lib/config';
 
 const STATS = [
-  { value: '2,400+', label: 'Active students' },
-  { value: '180+', label: 'Skills listed' },
-  { value: '94%', label: 'Match satisfaction' },
-  { value: '30+', label: 'Universities' },
+  { value: '1 link', label: 'Your whole store' },
+  { value: '6-in-1', label: 'Content formats' },
+  { value: 'Instant', label: 'Delivery' },
+  { value: '$0', label: 'Monthly fees' },
+];
+
+const STEPS = [
+  { n: '1', title: 'Build a Skill', body: 'Add videos, files, prompts, workflows, guides and coaching. Set your price. Publish.' },
+  { n: '2', title: 'Share your link', body: 'Drop skilljoy.me/@you in your bio. One link, your whole storefront — made for the phone.' },
+  { n: '3', title: 'Get paid', body: 'Buyers check out on mobile and get instant access. Payouts handled by Stripe.' },
 ];
 
 const FEATURES = [
-  {
-    icon: '✦',
-    title: 'AI-powered matching',
-    body: 'Our AI reads your skill profile and surfaces your highest-compatibility matches in seconds — no browsing, no guesswork.',
-    ai: true,
-  },
-  {
-    icon: '🔒',
-    title: 'Verified students only',
-    body: 'Every account is tied to a .edu email so you only swap with real, verified college students.',
-  },
-  {
-    icon: '💬',
-    title: 'Built-in messaging',
-    body: 'Coordinate sessions, share resources, and stay in sync — all inside SkillJoy.',
-  },
-  {
-    icon: '🎯',
-    title: 'Gig marketplace',
-    body: 'Need a tutor fast? Browse the gig board and pay with real money when a direct swap isn\'t available.',
-  },
+  { icon: '🧩', title: 'One Skill, any format', body: 'Bundle videos, files, prompts, workflows, guides and coaching into a single product.' },
+  { icon: '🔄', title: 'Update anytime', body: 'Edit a published Skill and every buyer instantly gets the new version.' },
+  { icon: '💬', title: 'Built-in community', body: 'Every Skill comes with a private space for you and your buyers — no extra tools.' },
+  { icon: '🛡️', title: 'Money you can trust', body: 'Transparent payouts by Stripe. No silent freezes — you always see why.' },
 ];
+
+const PREVIEW = [
+  { emoji: '🎨', title: 'Brand Kit Starter', price: '$29' },
+  { emoji: '⚡', title: 'Notion OS Template', price: '$19' },
+  { emoji: '🎥', title: '1:1 Coaching Call', price: '$80' },
+];
+
+const Arrow = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
 
 export default function LandingPage() {
   const user = useUser();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) navigate('/matches');
+    if (user) navigate(LEGACY_MODE ? '/matches' : '/build');
   }, [user, navigate]);
 
   return (
     <>
-      <title>SkillJoy — Trade Skills, Create Joy</title>
+      <title>SkillJoy — Sell your skills from one link</title>
 
-      <main className="lp-main">
+      <main className="lp">
 
         {/* ── Hero ── */}
         <section className="lp-hero">
-          <div className="lp-hero-bg" aria-hidden="true">
-            <div className="lp-blob lp-blob-1" />
-            <div className="lp-blob lp-blob-2" />
-          </div>
-
-          <div className="lp-hero-inner">
-            <div className="lp-eyebrow">
-              <span className="lp-eyebrow-dot" />
-              AI-powered skill exchange for college students
-            </div>
-
+          <div className="lp-hero-copy">
+            <span className="sj-pill"><span className="sj-dot" />The link-in-bio store for skills</span>
             <h1 className="lp-title">
-              Teach what you love.<br />
-              <em>Learn what you crave.</em>
+              Sell what you know, <span className="accent-text">from one link.</span>
             </h1>
-
-            <p className="lp-subtitle">
-              Match with students across the world who have exactly what you want to learn —
-              and pay for it by teaching what you already know.
+            <p className="lp-sub">
+              Package your courses, templates, prompts and coaching into one Skill — and sell it
+              straight from your bio. Built for creators, not coders.
             </p>
-
-            <div className="lp-cta-row">
-              <Link to="/login" className="lp-btn-primary">
-                Find your match
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </Link>
-              <Link to="/about" className="lp-btn-ghost">How it works</Link>
+            <div className="lp-cta">
+              <Link to="/login" className="btn btn-primary lp-cta-main">Start your store <Arrow /></Link>
+              <Link to="/how-it-works" className="btn btn-secondary">How it works</Link>
             </div>
-
-            <p className="lp-free-note">Free for all students · No credit card required</p>
+            <p className="lp-note">Free to start · small fee per sale · no monthly fees</p>
           </div>
 
-          {/* Stats pill row */}
-          <div className="lp-stats-bar">
-            {STATS.map((s) => (
-              <div key={s.label} className="lp-stat">
-                <span className="lp-stat-value">{s.value}</span>
-                <span className="lp-stat-label">{s.label}</span>
+          {/* Phone mockup — the real product as the hero visual */}
+          <div className="lp-phone-wrap" aria-hidden="true">
+            <div className="lp-phone sj-float">
+              <div className="lp-phone-notch" />
+              <div className="lp-store">
+                <div className="lp-store-avatar">🌿</div>
+                <p className="lp-store-name">Maya Rivera</p>
+                <p className="lp-store-handle">@mayamakes</p>
+                <p className="lp-store-bio">Design systems, templates & 1:1 coaching for indie makers.</p>
+                <div className="lp-store-list">
+                  {PREVIEW.map((p) => (
+                    <div key={p.title} className="lp-store-card">
+                      <div className="lp-store-thumb">{p.emoji}</div>
+                      <div className="lp-store-meta">
+                        <span className="lp-store-title">{p.title}</span>
+                        <span className="lp-store-price">{p.price}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Stats strip ── */}
+        <section className="lp-stats">
+          {STATS.map((s) => (
+            <div key={s.label} className="lp-stat">
+              <span className="lp-stat-value">{s.value}</span>
+              <span className="lp-stat-label">{s.label}</span>
+            </div>
+          ))}
+        </section>
+
+        {/* ── How it works ── */}
+        <section className="lp-section">
+          <div className="lp-head">
+            <span className="sj-pill"><span className="sj-dot" />How it works</span>
+            <h2 className="lp-h2">Launch in three steps</h2>
+          </div>
+          <div className="lp-steps">
+            {STEPS.map((s) => (
+              <div key={s.n} className="lp-step">
+                <span className="lp-step-num">{s.n}</span>
+                <h3 className="lp-step-title">{s.title}</h3>
+                <p className="lp-step-body">{s.body}</p>
               </div>
             ))}
           </div>
         </section>
 
-        {/* ── How it works ── */}
-        <section className="lp-how">
-          <div className="lp-container">
-            <p className="lp-section-label">How it works</p>
-            <h2 className="lp-section-title">Three steps to your first swap</h2>
-
-            <div className="lp-steps">
-              <div className="lp-step">
-                <div className="lp-step-icon">01</div>
-                <div className="lp-step-line" aria-hidden="true" />
-                <h3 className="lp-step-title">List your skills</h3>
-                <p className="lp-step-body">Tell us what you can teach and what you want to learn — from Python to pottery.</p>
-              </div>
-              <div className="lp-step">
-                <div className="lp-step-icon">02</div>
-                <div className="lp-step-line" aria-hidden="true" />
-                <h3 className="lp-step-title">AI finds your match</h3>
-                <p className="lp-step-body">Our AI scores compatibility across skills, availability, and learning style — and surfaces your best fits instantly.</p>
-              </div>
-              <div className="lp-step lp-step-last">
-                <div className="lp-step-icon">03</div>
-                <h3 className="lp-step-title">Swap & grow</h3>
-                <p className="lp-step-body">Send a swap request, pick a time, and exchange an hour of real knowledge.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
         {/* ── Features ── */}
-        <section className="lp-features">
-          <div className="lp-container">
-            <p className="lp-section-label">Why SkillJoy</p>
-            <h2 className="lp-section-title">Everything you need to learn faster</h2>
-
-            <div className="lp-feature-grid">
-              {FEATURES.map((f) => (
-                <div key={f.title} className={`lp-feature-card${f.ai ? ' lp-feature-card-ai' : ''}`}>
-                  <div className="lp-feature-card-top">
-                    <div className="lp-feature-icon">{f.icon}</div>
-                    {f.ai && <span className="lp-ai-badge">AI</span>}
-                  </div>
-                  <h3 className="lp-feature-title">{f.title}</h3>
-                  <p className="lp-feature-body">{f.body}</p>
-                </div>
-              ))}
-            </div>
+        <section className="lp-section lp-section-alt">
+          <div className="lp-head">
+            <span className="sj-pill"><span className="sj-dot" />Why SkillJoy</span>
+            <h2 className="lp-h2">Everything in one place</h2>
+          </div>
+          <div className="lp-features">
+            {FEATURES.map((f) => (
+              <div key={f.title} className="lp-feature">
+                <div className="lp-feature-icon">{f.icon}</div>
+                <h3 className="lp-feature-title">{f.title}</h3>
+                <p className="lp-feature-body">{f.body}</p>
+              </div>
+            ))}
           </div>
         </section>
 
-        {/* ── Live swap feed ── */}
-        <section className="lp-pairs">
-          <div className="lp-container">
-            <p className="lp-section-label">Happening now</p>
-            <h2 className="lp-section-title">Skills finding their match</h2>
-            <p className="lp-pairs-sub">Real swaps happening between students across campuses.</p>
-            <div className="lp-pairs-grid">
-              {PAIRS.map((pair, i) => (
-                <PairCard key={i} pair={pair} index={i} />
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── Footer CTA ── */}
-        <section className="lp-footer-cta">
-          <div className="lp-footer-cta-inner">
-            <p className="lp-section-label lp-section-label-light">Get started</p>
-            <h2 className="lp-footer-title">Your next skill is one swap away.</h2>
-            <p className="lp-footer-body">Join thousands of students already trading knowledge — for free.</p>
-            <Link to="/login" className="lp-btn-primary lp-btn-large">
-              Create your profile
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </Link>
+        {/* ── Final CTA ── */}
+        <section className="lp-cta-block">
+          <div className="lp-cta-inner">
+            <h2 className="lp-cta-title">Your store is one link away.</h2>
+            <p className="lp-cta-sub">Turn what you know into income — no website, no code, no monthly fees.</p>
+            <Link to="/login" className="btn lp-cta-btn">Start your store <Arrow /></Link>
           </div>
         </section>
       </main>
 
       <style>{`
-        /* ── Layout ── */
-        .lp-main { display: flex; flex-direction: column; }
-        .lp-container { max-width: 1100px; margin: 0 auto; padding: 0 24px; width: 100%; }
+        .lp { background: var(--bg); }
+        .lp-section, .lp-hero, .lp-stats { max-width: 1080px; margin: 0 auto; }
 
         /* ── Hero ── */
         .lp-hero {
-          min-height: 92vh;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          text-align: center;
-          position: relative;
-          overflow: hidden;
-          padding: 100px 20px 0;
-        }
-        .lp-hero-bg { position: absolute; inset: 0; pointer-events: none; }
-        .lp-blob {
-          position: absolute;
-          border-radius: 50%;
-          filter: blur(80px);
-          opacity: 0.25;
-        }
-        .lp-blob-1 { width: 500px; height: 500px; background: #fff; top: -100px; left: -100px; }
-        .lp-blob-2 { width: 400px; height: 400px; background: var(--accent); bottom: 60px; right: -80px; }
-
-        .lp-hero-inner { position: relative; z-index: 2; max-width: 760px; width: 100%; }
-
-        .lp-eyebrow {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: var(--surface);
-          background: rgba(255,255,255,0.18);
-          border: 1px solid rgba(255,255,255,0.3);
-          border-radius: var(--r-full);
-          padding: 6px 14px;
-          margin-bottom: 28px;
-          backdrop-filter: blur(4px);
-        }
-        .lp-eyebrow-dot {
-          width: 6px; height: 6px;
-          border-radius: 50%;
-          background: var(--surface);
-          flex-shrink: 0;
-          animation: blink 2s ease-in-out infinite;
-        }
-        @keyframes blink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.3; }
-        }
-
-        .lp-title {
-          font-size: clamp(40px, 7.5vw, 84px);
-          line-height: 1.02;
-          color: #000;
-          margin-bottom: 24px;
-          letter-spacing: -0.02em;
-        }
-        .lp-title em { font-style: italic; color: rgba(255,255,255,0.75); }
-
-        .lp-subtitle {
-          font-size: clamp(15px, 2vw, 19px);
-          line-height: 1.65;
-          color: rgba(255,255,255,0.82);
-          max-width: 520px;
-          margin: 0 auto 36px;
-        }
-
-        .lp-cta-row {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 12px;
-          flex-wrap: wrap;
-          margin-bottom: 16px;
-        }
-
-        .lp-btn-primary {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          background: var(--surface);
-          color: var(--text);
-          font-weight: 600;
-          font-size: 15px;
-          padding: 14px 28px;
-          border-radius: var(--r-full);
-          border: none;
-          cursor: pointer;
-          text-decoration: none;
-          transition: all 0.2s;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.18);
-          white-space: nowrap;
-        }
-        .lp-btn-primary:hover {
-          background: #fffff5;
-          transform: translateY(-1px);
-          box-shadow: 0 8px 28px rgba(0,0,0,0.22);
-          text-decoration: none;
-          color: var(--text);
-        }
-
-        .lp-btn-ghost {
-          display: inline-flex;
-          align-items: center;
-          font-size: 15px;
-          font-weight: 500;
-          color: rgba(255,255,255,0.9);
-          padding: 14px 24px;
-          border-radius: var(--r-full);
-          border: 1px solid rgba(255,255,255,0.3);
-          text-decoration: none;
-          transition: all 0.2s;
-          backdrop-filter: blur(4px);
-          background: rgba(255,255,255,0.08);
-          white-space: nowrap;
-        }
-        .lp-btn-ghost:hover {
-          background: rgba(255,255,255,0.16);
-          border-color: rgba(255,255,255,0.5);
-          text-decoration: none;
-          color: rgba(255,255,255,0.9);
-        }
-
-        .lp-free-note {
-          font-size: 12px;
-          color: rgba(255,255,255,0.55);
-          margin-bottom: 56px;
-        }
-
-        /* Stats bar */
-        .lp-stats-bar {
-          position: relative;
-          z-index: 2;
-          width: 100%;
-          max-width: 760px;
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          background: rgba(255,255,255,0.12);
-          border: 1px solid rgba(255,255,255,0.22);
-          border-radius: var(--r-xl) var(--r-xl) 0 0;
-          backdrop-filter: blur(12px);
-          overflow: hidden;
-          margin-top: auto;
+          grid-template-columns: 1.05fr 0.95fr;
+          align-items: center;
+          gap: 56px;
+          padding: clamp(56px, 9vw, 104px) 24px clamp(40px, 6vw, 72px);
+        }
+        .lp-title {
+          font-size: clamp(38px, 5.6vw, 66px);
+          line-height: 1.06;
+          letter-spacing: -0.03em;
+          color: var(--text);
+          margin: 22px 0 20px;
+        }
+        .lp-sub {
+          font-size: clamp(16px, 1.5vw, 19px);
+          line-height: 1.6;
+          color: var(--text-secondary);
+          max-width: 480px;
+          margin-bottom: 30px;
+        }
+        .lp-cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+        .lp-cta-main { gap: 8px; }
+        .lp-note { margin-top: 16px; font-size: 13px; color: var(--text-muted); }
+
+        /* ── Phone mockup ── */
+        .lp-phone-wrap { display: flex; justify-content: center; }
+        .lp-phone {
+          position: relative;
+          width: 308px;
+          background: #1A1916;
+          border-radius: 48px;
+          padding: 12px;
+          box-shadow: var(--shadow-xl);
+        }
+        .lp-phone-notch {
+          position: absolute; top: 22px; left: 50%; transform: translateX(-50%);
+          width: 104px; height: 20px; background: #1A1916; border-radius: var(--r-full); z-index: 2;
+        }
+        .lp-store {
+          background: var(--surface);
+          border-radius: 38px;
+          padding: 38px 18px 24px;
+          text-align: center;
+        }
+        .lp-store-avatar {
+          width: 60px; height: 60px; margin: 6px auto 12px; border-radius: 50%;
+          background: var(--accent-light); display: flex; align-items: center; justify-content: center;
+          font-size: 28px; border: 1px solid var(--accent-mid);
+        }
+        .lp-store-name { font-weight: 700; font-size: 17px; color: var(--text); }
+        .lp-store-handle { font-size: 13px; color: var(--accent); margin-top: 1px; font-weight: 600; }
+        .lp-store-bio { font-size: 12.5px; color: var(--text-secondary); margin: 8px 4px 16px; line-height: 1.45; }
+        .lp-store-list { display: flex; flex-direction: column; gap: 10px; }
+        .lp-store-card {
+          display: flex; align-items: center; gap: 11px; padding: 10px;
+          background: var(--surface); border: 1px solid var(--border);
+          border-radius: var(--r); box-shadow: var(--shadow-sm); text-align: left;
+        }
+        .lp-store-thumb {
+          width: 42px; height: 42px; flex-shrink: 0; border-radius: var(--r-sm);
+          background: var(--accent-light); display: flex; align-items: center; justify-content: center; font-size: 20px;
+        }
+        .lp-store-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .lp-store-title { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .lp-store-price { font-size: 13px; font-weight: 700; color: var(--accent); }
+
+        /* ── Stats strip ── */
+        .lp-stats {
+          display: grid; grid-template-columns: repeat(4, 1fr);
+          gap: 16px; padding: 0 24px clamp(16px, 4vw, 40px);
         }
         .lp-stat {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          padding: 20px 12px;
-          border-right: 1px solid rgba(255,255,255,0.15);
+          background: var(--surface); border: 1px solid var(--border);
+          border-radius: var(--r-lg); padding: 22px 18px; text-align: center;
         }
-        .lp-stat:last-child { border-right: none; }
-        .lp-stat-value {
-          font-family: var(--font-display);
-          font-size: clamp(20px, 3vw, 28px);
-          font-weight: 600;
-          color: var(--surface);
-          line-height: 1;
-          margin-bottom: 4px;
-        }
-        .lp-stat-label {
-          font-size: 10px;
-          font-weight: 500;
-          color: rgba(255,255,255,0.6);
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-          text-align: center;
-        }
+        .lp-stat-value { display: block; font-size: clamp(22px, 3vw, 30px); font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+        .lp-stat-label { display: block; margin-top: 6px; font-size: 13px; color: var(--text-muted); }
 
-        /* ── Section shared ── */
-        .lp-section-label {
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-          color: var(--accent);
-          margin-bottom: 12px;
-        }
-        .lp-section-label-light { color: rgba(255,255,255,0.65); }
-        .lp-section-title {
-          font-size: clamp(26px, 4vw, 42px);
-          color: var(--text);
-          margin-bottom: 48px;
-          letter-spacing: -0.015em;
-        }
+        /* ── Sections ── */
+        .lp-section { padding: clamp(56px, 8vw, 96px) 24px; }
+        .lp-section-alt { max-width: none; background: var(--surface); }
+        .lp-section-alt > .lp-head, .lp-section-alt > .lp-features { max-width: 1080px; margin-left: auto; margin-right: auto; }
+        .lp-head { text-align: center; margin-bottom: 48px; }
+        .lp-h2 { font-size: clamp(28px, 3.6vw, 42px); color: var(--text); margin-top: 16px; letter-spacing: -0.025em; }
 
-        /* ── How it works ── */
-        .lp-how { padding: 80px 0; background: var(--surface); }
-        .lp-steps {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 0;
-          position: relative;
+        /* ── Steps ── */
+        .lp-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+        .lp-step { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 30px; }
+        .lp-step-num {
+          display: flex; align-items: center; justify-content: center;
+          width: 42px; height: 42px; border-radius: 50%;
+          background: var(--accent); color: var(--accent-foreground);
+          font-weight: 700; font-size: 17px; margin-bottom: 18px;
         }
-        .lp-step { padding: 0 32px 0 0; position: relative; }
-        .lp-step-last { padding-right: 0; }
-        .lp-step-icon {
-          font-family: var(--font-display);
-          font-size: 13px;
-          font-weight: 600;
-          letter-spacing: 0.05em;
-          color: var(--surface);
-          background: var(--text);
-          width: 40px; height: 40px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin-bottom: 20px;
-        }
-        .lp-step-line {
-          position: absolute;
-          top: 20px;
-          left: 40px;
-          right: 0;
-          height: 1px;
-          background: var(--border);
-        }
-        .lp-step-title { font-size: 18px; margin-bottom: 10px; color: var(--text); }
-        .lp-step-body { font-size: 14px; line-height: 1.65; color: var(--text-secondary); }
+        .lp-step-title { font-size: 19px; color: var(--text); margin-bottom: 8px; }
+        .lp-step-body { font-size: 14.5px; line-height: 1.6; color: var(--text-secondary); }
 
         /* ── Features ── */
-        .lp-features {
-          padding: 80px 0;
-          background: var(--surface-alt);
-          border-top: 1px solid var(--border);
-          border-bottom: 1px solid var(--border);
+        .lp-features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+        .lp-feature { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 28px; transition: box-shadow 0.2s ease, transform 0.2s ease; }
+        .lp-feature:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+        .lp-feature-icon {
+          width: 50px; height: 50px; border-radius: var(--r); margin-bottom: 16px;
+          background: var(--accent-light); display: flex; align-items: center; justify-content: center; font-size: 24px;
         }
-        .lp-feature-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 16px;
-        }
-        .lp-feature-card {
-          background: var(--surface);
-          border: 1px solid var(--border);
-          border-radius: var(--r-lg);
-          padding: 28px 28px 28px 28px;
-          transition: all 0.2s;
-        }
-        .lp-feature-card:hover {
-          box-shadow: var(--shadow);
-          border-color: var(--border-strong);
-          transform: translateY(-2px);
-        }
-        .lp-feature-card-ai {
-          border-color: var(--border-strong);
-          background: linear-gradient(135deg, var(--surface) 80%, var(--primary-light));
-        }
-        .lp-feature-card-top {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 16px;
-        }
-        .lp-feature-icon { font-size: 26px; line-height: 1; }
-        .lp-ai-badge {
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.1em;
-          color: var(--surface);
-          background: var(--text);
-          border-radius: var(--r-full);
-          padding: 3px 9px;
-        }
-        .lp-feature-title { font-size: 17px; margin-bottom: 8px; color: var(--text); }
-        .lp-feature-body { font-size: 14px; line-height: 1.65; color: var(--text-secondary); }
+        .lp-feature-title { font-size: 18px; color: var(--text); margin-bottom: 8px; }
+        .lp-feature-body { font-size: 14.5px; line-height: 1.6; color: var(--text-secondary); }
 
-        /* ── Pairs ── */
-        .lp-pairs { padding: 80px 0; background: var(--surface); }
-        .lp-pairs-sub {
-          font-size: 15px;
-          color: var(--text-secondary);
-          margin-top: -32px;
-          margin-bottom: 48px;
+        /* ── Final CTA ── */
+        .lp-cta-block { padding: 0 24px clamp(56px, 8vw, 96px); }
+        .lp-cta-inner {
+          max-width: 1080px; margin: 0 auto; text-align: center;
+          background: var(--accent); color: var(--accent-foreground);
+          border-radius: var(--r-2xl); padding: clamp(48px, 7vw, 84px) 24px;
         }
-        .lp-pairs-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-          gap: 12px;
+        .lp-cta-title { font-size: clamp(28px, 4vw, 46px); color: #fff; letter-spacing: -0.025em; }
+        .lp-cta-sub { font-size: 16px; color: rgb(255 255 255 / 0.85); max-width: 460px; margin: 14px auto 28px; line-height: 1.55; }
+        .lp-cta-btn { background: #fff; color: var(--accent); padding: 14px 30px; font-size: 15px; gap: 8px; box-shadow: var(--shadow); }
+        .lp-cta-btn:hover { background: #fff; transform: translateY(-1px); box-shadow: var(--shadow-lg); text-decoration: none; color: var(--accent); }
+
+        /* ── Responsive ── */
+        @media (max-width: 880px) {
+          .lp-hero { grid-template-columns: 1fr; gap: 40px; text-align: center; padding-top: clamp(40px, 8vw, 72px); }
+          .lp-hero-copy { display: flex; flex-direction: column; align-items: center; }
+          .lp-sub { max-width: 520px; }
+          .lp-stats { grid-template-columns: repeat(2, 1fr); }
+          .lp-features { grid-template-columns: 1fr; }
         }
-
-        /* ── Footer CTA ── */
-        .lp-footer-cta {
-          background: var(--text);
-          padding: 80px 24px;
-          display: flex;
-          justify-content: center;
-        }
-        .lp-footer-cta-inner {
-          max-width: 600px;
-          text-align: center;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 16px;
-        }
-        .lp-footer-title {
-          font-size: clamp(28px, 5vw, 52px);
-          color: var(--surface);
-          letter-spacing: -0.02em;
-          line-height: 1.08;
-        }
-        .lp-footer-body { font-size: 16px; color: rgba(255,255,255,0.55); max-width: 400px; }
-        .lp-btn-large { font-size: 16px; padding: 16px 36px; margin-top: 8px; }
-
-        /* ── Animations ── */
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        .lp-hero-inner { animation: fadeUp 0.7s ease both; }
-        .lp-stats-bar  { animation: fadeUp 0.7s 0.25s ease both; }
-
-        /* ── Tablet (≤900px) ── */
-        @media (max-width: 900px) {
-          .lp-pairs-grid { grid-template-columns: repeat(2, 1fr); }
-        }
-
-        /* ── Mobile (≤640px) ── */
-        @media (max-width: 640px) {
-          .lp-hero { min-height: 100svh; padding: 80px 16px 0; }
-          .lp-eyebrow { font-size: 10px; padding: 5px 12px; text-align: center; }
-          .lp-free-note { margin-bottom: 36px; }
-
-          .lp-stats-bar {
-            grid-template-columns: repeat(2, 1fr);
-            border-radius: var(--r-lg) var(--r-lg) 0 0;
-          }
-          .lp-stat { padding: 16px 10px; }
-          .lp-stat:nth-child(2) { border-right: none; }
-          .lp-stat:nth-child(3),
-          .lp-stat:nth-child(4) { border-top: 1px solid rgba(255,255,255,0.15); }
-
-          .lp-how, .lp-features, .lp-pairs, .lp-footer-cta { padding: 60px 0; }
-          .lp-container { padding: 0 16px; }
-
-          .lp-steps { grid-template-columns: 1fr; gap: 36px; }
-          .lp-step  { padding: 0; }
-          .lp-step-line { display: none; }
-
-          .lp-feature-grid { grid-template-columns: 1fr; gap: 12px; }
-          .lp-feature-card { padding: 22px; }
-
-          .lp-pairs-grid { grid-template-columns: 1fr; }
-
-          .lp-cta-row { flex-direction: column; width: 100%; }
-          .lp-btn-primary, .lp-btn-ghost { width: 100%; justify-content: center; }
-
-          .lp-section-title { margin-bottom: 32px; }
-          .lp-pairs-sub { margin-bottom: 32px; }
-
-          .lp-footer-cta { padding: 60px 20px; }
-          .lp-btn-large  { width: 100%; justify-content: center; }
-        }
-
-        /* ── Very small (≤380px) ── */
-        @media (max-width: 380px) {
-          .lp-stats-bar { grid-template-columns: 1fr 1fr; }
-          .lp-stat-value { font-size: 18px; }
+        @media (max-width: 560px) {
+          .lp-hero { padding-left: 16px; padding-right: 16px; }
+          .lp-section, .lp-cta-block, .lp-stats { padding-left: 16px; padding-right: 16px; }
+          .lp-cta { flex-direction: column; align-items: stretch; width: 100%; }
+          .lp-cta .btn { width: 100%; justify-content: center; }
+          .lp-steps { grid-template-columns: 1fr; }
         }
       `}</style>
     </>

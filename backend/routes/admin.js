@@ -372,4 +372,36 @@ router.post('/dismiss-report', async (req, res) => {
     }
 });
 
+// ── v3 trust layer: human-set payout hold ──────────────────────────────────
+// POST /api/admin/payout-hold { userId, held, reason }
+router.post('/payout-hold', async (req, res) => {
+    try {
+        if (req.user.email !== ADMIN_EMAIL) return res.status(403).json({ error: 'Forbidden' });
+        const { userId, held, reason } = req.body;
+        if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+        const { error } = await supabase
+            .from('profiles')
+            .update({ payout_held: !!held, payout_hold_reason: held ? (reason || null) : null })
+            .eq('id', userId);
+        if (error) return res.status(500).json({ error: error.message });
+
+        // Surface the decision to the creator (the trust promise: no silent freeze).
+        await supabase.from('notifications').insert({
+            user_id: userId,
+            type: 'payout_setup_required',
+            title: held ? 'Payouts paused — under review' : 'Payouts resumed',
+            message: held
+                ? (reason || 'Your payouts are paused pending a manual review. A team member will follow up.')
+                : 'Good news — your payouts have been resumed.',
+            related_type: null,
+        });
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Payout hold error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

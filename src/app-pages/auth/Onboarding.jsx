@@ -2,10 +2,30 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth, SKILL_CATEGORIES, AVAILABILITY_OPTIONS, hasSkill, setSkillStars, removeSkill, getSkillName, normalizeSkills } from '@/lib/stores';
+import { LEGACY_MODE } from '@/lib/config';
 import ProfileView from '@/components/Profileview';
 import SkillEditor from '@/components/Skillededitor';
 
 const TOTAL_STEPS = 4;
+
+// Handles that collide with app routes — can't be claimed as a @username.
+const RESERVED_USERNAMES = new Set([
+    'build', 'locker', 'dashboard', 'login', 'onboarding', 'about', 'contact',
+    'profile', 'settings', 'admin', 'terms', 'privacy', 'how-it-works',
+    'refund-policy', 'gigs', 'swaps', 'matches', 'chat', 'disputes', 'my-orders',
+    'my-listings', 'my-swaps', 'verify-college', 'main-search', 'api', 'health',
+]);
+
+function normalizeUsername(raw) {
+    return (raw || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+}
+
+function usernameError(name) {
+    if (!name) return 'Pick a username for your storefront link.';
+    if (name.length < 3) return 'At least 3 characters.';
+    if (RESERVED_USERNAMES.has(name)) return 'That handle is reserved — try another.';
+    return null;
+}
 
 const STEP_LABELS = ['About You', 'Teach', 'Learn', 'Availability'];
 
@@ -41,6 +61,8 @@ export default function OnboardingPage() {
     const navigate = useNavigate();
 
     const [fullName, setFullName] = useState('');
+    const [username, setUsername] = useState('');
+    const [usernameStatus, setUsernameStatus] = useState(null); // null | 'checking' | 'available' | 'taken'
     const [bio, setBio] = useState('');
     const [skillsTeach, setSkillsTeach] = useState([]);
     const [skillsLearn, setSkillsLearn] = useState([]);
@@ -57,6 +79,7 @@ export default function OnboardingPage() {
         if (!user) { navigate('/login'); return; }
         if (profile) {
             setFullName(profile.full_name ?? '');
+            setUsername(profile.username ?? '');
             setBio(profile.bio ?? '');
             setSkillsTeach(normalizeSkills(profile.skills_teach ?? []));
             setSkillsLearn(normalizeSkills(profile.skills_learn ?? []).map(s => getSkillName(s)));
@@ -65,6 +88,28 @@ export default function OnboardingPage() {
             if (profile.full_name) setViewMode(true);
         }
     }, [user, profile]);
+
+    // ── Username availability (debounced) ────────────────────────────────────
+
+    function handleUsernameChange(raw) {
+        const n = normalizeUsername(raw);
+        setUsername(n);
+        setUsernameStatus(usernameError(n) ? null : 'checking'); // status set here, not in the effect
+    }
+
+    useEffect(() => {
+        if (usernameError(username)) return; // invalid → status already cleared by handler
+        const name = username;
+        let cancelled = false;
+        const t = setTimeout(async () => {
+            const { data, error } = await supabase
+                .from('profiles').select('id').ilike('username', name).maybeSingle();
+            if (cancelled) return;
+            if (error) { setUsernameStatus(null); return; }
+            setUsernameStatus(!data || data.id === user?.id ? 'available' : 'taken');
+        }, 400);
+        return () => { cancelled = true; clearTimeout(t); };
+    }, [username, user?.id]);
 
     // ── Teach helpers ────────────────────────────────────────────────────────
 
@@ -115,14 +160,21 @@ export default function OnboardingPage() {
 
     async function save() {
         if (!fullName.trim()) { setError('Please enter your name.'); return; }
-        if (!skillsTeach.length) { setError('Add at least one skill you can teach.'); setStep(2); return; }
-        if (!skillsLearn.length) { setError('Add at least one skill you want to learn.'); setStep(3); return; }
+        const uErr = usernameError(username);
+        if (uErr) { setError(uErr); setStep(1); return; }
+        if (usernameStatus === 'taken') { setError('That username is taken — try another.'); setStep(1); return; }
+        // Teach/learn skills only matter for the legacy campus swap flow.
+        if (LEGACY_MODE) {
+            if (!skillsTeach.length) { setError('Add at least one skill you can teach.'); setStep(2); return; }
+            if (!skillsLearn.length) { setError('Add at least one skill you want to learn.'); setStep(3); return; }
+        }
 
         setError(''); setBusy(true);
         const { error: e } = await supabase.from('profiles').upsert({
             id: user.id,
             email: user.email,
             full_name: fullName.trim(),
+            username,
             bio: bio.trim(),
             skills_teach: skillsTeach,
             skills_learn: skillsLearn,
@@ -130,10 +182,14 @@ export default function OnboardingPage() {
             service_type: serviceType,
         });
         setBusy(false);
-        if (e) { setError(e.message); return; }
+        if (e) {
+            // Unique-index violation on username races past the live check.
+            setError(/duplicate|unique/i.test(e.message) ? 'That username was just taken — try another.' : e.message);
+            return;
+        }
         const { data: updated } = await supabase.from('profiles').select('*').eq('id', user.id).single();
         if (updated) setProfile(updated);
-        navigate('/matches');
+        navigate(LEGACY_MODE ? '/matches' : '/build');
     }
 
     // ── Service type options ─────────────────────────────────────────────────
@@ -194,6 +250,26 @@ export default function OnboardingPage() {
                                     <div className="field">
                                         <label htmlFor="name">Your full name</label>
                                         <input id="name" type="text" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="e.g. Maya Chen" autoComplete="name" />
+                                    </div>
+                                    <div className="field" style={{ marginTop: 20 }}>
+                                        <label htmlFor="username">Your storefront link</label>
+                                        <div className="username-input">
+                                            <span className="username-prefix">skilljoy.me/@</span>
+                                            <input
+                                                id="username"
+                                                type="text"
+                                                value={username}
+                                                onChange={e => handleUsernameChange(e.target.value)}
+                                                placeholder="mayachen"
+                                                autoComplete="off"
+                                                autoCapitalize="none"
+                                                spellCheck={false}
+                                            />
+                                        </div>
+                                        {username && usernameStatus === 'checking' && <p className="username-hint">Checking…</p>}
+                                        {username && usernameStatus === 'available' && <p className="username-hint ok">✓ @{username} is available</p>}
+                                        {username && usernameStatus === 'taken' && <p className="username-hint bad">That handle is taken</p>}
+                                        {username && usernameError(username) && <p className="username-hint bad">{usernameError(username)}</p>}
                                     </div>
                                     <div className="field" style={{ marginTop: 20 }}>
                                         <label htmlFor="bio">
@@ -428,6 +504,35 @@ export default function OnboardingPage() {
             font-weight: 400;
             text-transform: none;
         }
+
+        /* ── Username / storefront handle ── */
+        .username-input {
+            display: flex;
+            align-items: center;
+            border: 1.5px solid var(--border-strong);
+            border-radius: var(--r);
+            background: var(--surface);
+            overflow: hidden;
+        }
+        .username-input:focus-within { border-color: var(--accent); }
+        .username-prefix {
+            padding: 0 4px 0 12px;
+            font-size: 14px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            user-select: none;
+        }
+        .username-input input {
+            border: none;
+            outline: none;
+            flex: 1;
+            padding: 10px 12px 10px 0;
+            background: transparent;
+            font-size: 14px;
+        }
+        .username-hint { font-size: 13px; margin-top: 6px; color: var(--text-muted); }
+        .username-hint.ok { color: #16a34a; }
+        .username-hint.bad { color: var(--accent); }
 
         /* ── Skills ── */
         .skill-group { margin-bottom: 24px; }

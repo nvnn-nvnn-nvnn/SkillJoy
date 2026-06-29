@@ -14,7 +14,10 @@ CREATE TABLE IF NOT EXISTS notifications (
         'message', 'swap_request', 'gig_request',
         'swap_accepted', 'gig_accepted', 'swap_completed', 'gig_completed',
         'dispute_filed', 'dispute_resolved',
-        'order_update', 'order_cancelled'
+        'order_update', 'order_cancelled', 'payout_setup_required',
+        'chargeback', 'gig_removed',
+        -- v3 Skill platform (see migrations/001):
+        'skill_update', 'skill_purchase', 'community_reply'
     )),
     title TEXT NOT NULL,
     message TEXT NOT NULL,
@@ -240,3 +243,82 @@ ALTER TABLE profiles
     ADD COLUMN IF NOT EXISTS stripe_account_id TEXT,
     ADD COLUMN IF NOT EXISTS stripe_onboarded BOOLEAN DEFAULT false,
     ADD COLUMN IF NOT EXISTS offers_gigs BOOLEAN DEFAULT false;
+
+
+-- ── v3 Skill platform ─────────────────────────────────────────────────────────
+-- Full DDL + RLS lives in docs/v3-skill-platform/migrations/001_skill_platform.sql.
+-- Mirrored here so this file stays a complete reproduction of the DB.
+
+ALTER TABLE profiles
+    ADD COLUMN IF NOT EXISTS username         TEXT,
+    ADD COLUMN IF NOT EXISTS bio              TEXT,
+    ADD COLUMN IF NOT EXISTS storefront_theme JSONB;
+CREATE UNIQUE INDEX IF NOT EXISTS profiles_username_lower_idx
+    ON profiles (lower(username)) WHERE username IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS skills (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    creator_id   UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    title        TEXT NOT NULL,
+    outcome      TEXT,
+    cover_url    TEXT,
+    price_cents  INTEGER NOT NULL DEFAULT 0 CHECK (price_cents >= 0),
+    pricing_type TEXT NOT NULL DEFAULT 'onetime' CHECK (pricing_type IN ('onetime','membership')),
+    version      INTEGER NOT NULL DEFAULT 1,
+    status       TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published')),
+    created_at   TIMESTAMPTZ DEFAULT now(),
+    updated_at   TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS skills_creator_idx   ON skills(creator_id);
+CREATE INDEX IF NOT EXISTS skills_published_idx ON skills(creator_id, status);
+
+CREATE TABLE IF NOT EXISTS content_blocks (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    skill_id     UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    type         TEXT NOT NULL CHECK (type IN ('video','file','prompt','workflow','text','coaching')),
+    position     INTEGER NOT NULL DEFAULT 0,
+    title        TEXT,
+    body_text    TEXT,
+    file_key     TEXT,
+    external_url TEXT,
+    created_at   TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS content_blocks_skill_idx ON content_blocks(skill_id, position);
+
+CREATE TABLE IF NOT EXISTS purchases (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    buyer_id            UUID NOT NULL REFERENCES profiles(id),
+    skill_id            UUID NOT NULL REFERENCES skills(id),
+    version_at_purchase INTEGER NOT NULL,
+    amount_cents        INTEGER NOT NULL,
+    stripe_payment_id   TEXT,
+    status              TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','refunded')),
+    created_at          TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (buyer_id, skill_id)
+);
+CREATE INDEX IF NOT EXISTS purchases_buyer_idx ON purchases(buyer_id);
+CREATE INDEX IF NOT EXISTS purchases_skill_idx ON purchases(skill_id);
+
+CREATE TABLE IF NOT EXISTS community_posts (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    skill_id       UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    author_id      UUID NOT NULL REFERENCES profiles(id),
+    body           TEXT NOT NULL,
+    parent_post_id UUID REFERENCES community_posts(id) ON DELETE CASCADE,
+    created_at     TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS community_posts_skill_idx ON community_posts(skill_id, created_at);
+
+CREATE TABLE IF NOT EXISTS analytics_events (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    skill_id   UUID REFERENCES skills(id) ON DELETE CASCADE,
+    creator_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    type       TEXT NOT NULL CHECK (type IN ('storefront_view','skill_view','checkout_start','purchase','block_open')),
+    buyer_id   UUID REFERENCES profiles(id),
+    block_id   UUID REFERENCES content_blocks(id),
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS analytics_skill_type_idx ON analytics_events(skill_id, type, created_at);
+CREATE INDEX IF NOT EXISTS analytics_creator_idx    ON analytics_events(creator_id, type, created_at);
+
+-- RLS policies for the above: see migrations/001_skill_platform.sql.

@@ -17,6 +17,7 @@ class ErrorBoundary extends Component {
 }
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './lib/stores'
+import { LEGACY_MODE } from './lib/config'
 import './index.css'
 import './App.css'
 
@@ -51,6 +52,16 @@ import Settings from './app-pages/Settings'
 import Admin from './app-pages/Admin'
 import VerifyCollege from './app-pages/VerifyCollege'
 import NotFound from './app-pages/NotFound'
+// v3 Skill-platform pages
+import SkillBuilder from './app-pages/SkillBuilder'
+import Locker from './app-pages/Locker'
+import Dashboard from './app-pages/Dashboard'
+import Storefront from './app-pages/Storefront'
+import StorefrontEditor from './app-pages/StorefrontEditor'
+import SkillPublic from './app-pages/SkillPublic'
+import Checkout from './app-pages/Checkout'
+import Unsubscribe from './app-pages/Unsubscribe'
+import AdminPayouts from './app-pages/AdminPayouts'
 
 function AppRoutes() {
   return (
@@ -61,29 +72,50 @@ function AppRoutes() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/onboarding" element={<Onboarding />} />
-          <Route path="/matches" element={<MatchesPage />} />
-          <Route path="/main-search" element={<Swaps />} />
-          <Route path="/chat" element={<ChatPage />} />
-          <Route path="/swaps" element={<Swaps />} />
-          <Route path="/my-swaps" element={<MySwaps />} />
-          {/* <Route path="/rewards" element={<Rewards />} /> */}
-          <Route path="/gigs" element={<Gigs />} />
-          <Route path="/gigs/:gigId" element={<GigDetails />} />
-          <Route path="/my-listings" element={<MyListings />} />
-          <Route path="/my-orders" element={<MyOrders />} />
-          <Route path="/disputes" element={<Disputes />} />
-          <Route path="/disputes/:disputeId" element={<DisputeDetail />} />
+
+          {/* ── v3 Skill-platform routes ── */}
+          <Route path="/build" element={<SkillBuilder />} />
+          <Route path="/build/:skillId" element={<SkillBuilder />} />
+          <Route path="/locker" element={<Locker />} />
+          <Route path="/locker/:skillId" element={<Locker />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/storefront/edit" element={<StorefrontEditor />} />
+          <Route path="/checkout/:skillId" element={<Checkout />} />
+
+          {/* ── v1 legacy routes — parked behind LEGACY_MODE, never deleted ── */}
+          {LEGACY_MODE && <>
+            <Route path="/matches" element={<MatchesPage />} />
+            <Route path="/main-search" element={<Swaps />} />
+            <Route path="/chat" element={<ChatPage />} />
+            <Route path="/swaps" element={<Swaps />} />
+            <Route path="/my-swaps" element={<MySwaps />} />
+            {/* <Route path="/rewards" element={<Rewards />} /> */}
+            <Route path="/gigs" element={<Gigs />} />
+            <Route path="/gigs/:gigId" element={<GigDetails />} />
+            <Route path="/my-listings" element={<MyListings />} />
+            <Route path="/my-orders" element={<MyOrders />} />
+            <Route path="/disputes" element={<Disputes />} />
+            <Route path="/disputes/:disputeId" element={<DisputeDetail />} />
+            <Route path="/verify-college" element={<VerifyCollege />} />
+          </>}
+
           <Route path="/profile" element={<Profile />} />
           <Route path="/profile/:userId" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/admin" element={<Admin />} />
-          <Route path="/verify-college" element={<VerifyCollege />} />
+          <Route path="/admin/payouts" element={<AdminPayouts />} />
+          <Route path="/unsubscribe" element={<Unsubscribe />} />
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/how-it-works" element={<HowItWorks />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/refund-policy" element={<RefundPolicy />} />
+
+          {/* Public storefront — must be LAST before catch-all so static
+              routes win. Matches /@username (handle keeps the leading @). */}
+          <Route path="/:handle" element={<Storefront />} />
+          <Route path="/:handle/:skillId" element={<SkillPublic />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </div>

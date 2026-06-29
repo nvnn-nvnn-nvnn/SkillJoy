@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { LEGACY_MODE } from '@/lib/config';
 import SkillJoyLogo from '../assets/skilljoy-logo3.svg'
 
 export default function Footer() {
@@ -22,7 +23,7 @@ export default function Footer() {
                         </div> */}
                         <img src={SkillJoyLogo} alt="" style={{width: "150px"}} />
                         <p style={{ fontSize: 13, lineHeight: 1.6, color: '#a3a3a3', margin: 0 }}>
-                            The campus marketplace for skill swaps and paid gigs. Learn, earn, and connect.
+                            Sell your skills from one link — courses, templates, prompts, and coaching, all from one storefront.
                         </p>
                     </div>
 
@@ -30,10 +31,20 @@ export default function Footer() {
                     <div>
                         <h4 style={{ color: '#fff', fontSize: 13, fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Platform</h4>
                         <nav style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            <FooterLink to="/gigs">Browse Gigs</FooterLink>
-                            <FooterLink to="/swaps">Skill Swaps</FooterLink>
-                            <FooterLink to="/my-listings">My Listings</FooterLink>
-                            <FooterLink to="/my-orders">My Orders</FooterLink>
+                            {LEGACY_MODE ? (
+                                <>
+                                    <FooterLink to="/gigs">Browse Gigs</FooterLink>
+                                    <FooterLink to="/swaps">Skill Swaps</FooterLink>
+                                    <FooterLink to="/my-listings">My Listings</FooterLink>
+                                    <FooterLink to="/my-orders">My Orders</FooterLink>
+                                </>
+                            ) : (
+                                <>
+                                    <FooterLink to="/login">Start your store</FooterLink>
+                                    <FooterLink to="/build">Build a Skill</FooterLink>
+                                    <FooterLink to="/how-it-works">How It Works</FooterLink>
+                                </>
+                            )}
                         </nav>
                     </div>
 

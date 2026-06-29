@@ -14,6 +14,11 @@ const contactRoutes = require('./routes/contact.js');
 const verifyCollegeRoutes = require('./routes/verify-college.js');
 const reportRoutes = require('./routes/reports.js');
 const blockRoutes = require('./routes/blocks.js');
+const checkoutRoutes = require('./routes/checkout.js');
+const lockerRoutes = require('./routes/locker.js');
+const skillRoutes = require('./routes/skills.js');
+const marketingRoutes = require('./routes/marketing.js');
+const publicRoutes = require('./routes/public.js');
 const rateLimit = require('express-rate-limit');
 const { sendEmail, getUserEmail, templates } = require('./lib/email');
 const { feeCentsFromTotal } = require('./config/fees');
@@ -57,9 +62,16 @@ app.use('/api/users', authMiddleware, userRoutes);
 
 app.use('/api/stripe-connect', authMiddleware, stripeConnectRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/public', publicRoutes);
 app.use('/api/verify-college', verifyCollegeRoutes);
 app.use('/api/reports', authMiddleware, reportRoutes);
 app.use('/api/blocks', authMiddleware, blockRoutes);
+
+// v3 Skill platform
+app.use('/api/checkout', strictLimiter, authMiddleware, checkoutRoutes);
+app.use('/api/locker', authMiddleware, lockerRoutes);
+app.use('/api/skills', authMiddleware, skillRoutes);
+app.use('/api/marketing', strictLimiter, authMiddleware, marketingRoutes);
 
 
 // Health check
@@ -258,4 +270,35 @@ cron.schedule('0 * * * *', () => {
         if (error) console.error('Chat archive cron error:', error.message);
         else console.log('✅ Chat archive cron ran');
     }).catch(err => console.error('Chat archive cron error:', err.message));
+});
+
+// ── Booking reminder cron (v3) ─────────────────────────────────────────────────
+// Runs hourly. In-app reminders for bookings starting within the next 24h.
+cron.schedule('0 * * * *', () => {
+    withTimeout(5 * 60 * 1000, async () => {
+        const now = new Date();
+        const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+        const { data: due, error } = await supabase
+            .from('bookings')
+            .select('id, start_time, buyer_id, creator_id, skill:skills(title)')
+            .eq('status', 'booked')
+            .eq('reminder_sent', false)
+            .gte('start_time', now.toISOString())
+            .lte('start_time', in24h);
+        if (error) { console.error('Booking reminder cron error:', error.message); return; }
+        if (!due?.length) { console.log('No bookings to remind.'); return; }
+
+        for (const b of due) {
+            const when = new Date(b.start_time).toLocaleString();
+            const title = b.skill?.title ?? 'your session';
+            await supabase.from('notifications').insert([
+                { user_id: b.buyer_id, type: 'booking_reminder', title: 'Session reminder ⏰',
+                  message: `Your "${title}" session is coming up at ${when}.`, related_type: null },
+                { user_id: b.creator_id, type: 'booking_reminder', title: 'Session reminder ⏰',
+                  message: `You have a "${title}" session at ${when}.`, related_type: null },
+            ]);
+            await supabase.from('bookings').update({ reminder_sent: true }).eq('id', b.id);
+        }
+        console.log(`✅ Booking reminders sent for ${due.length} booking(s).`);
+    }).catch(err => console.error('Booking reminder cron error:', err.message));
 });

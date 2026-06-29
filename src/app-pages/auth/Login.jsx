@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/stores';
-import { useNavigate } from 'react-router-dom';
+import { LEGACY_MODE } from '@/lib/config';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import SkillJoyLogo3 from '../../assets/SkillJoy-Logo2.svg'
 
 export default function LoginPage() {
@@ -19,6 +20,9 @@ export default function LoginPage() {
 
     const user = useUser();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    // Where to land after auth: an explicit ?redirect=, else the v3 creator home.
+    const redirectTo = searchParams.get('redirect') || (LEGACY_MODE ? '/matches' : '/build');
 
     // Intercept Supabase's PASSWORD_RECOVERY event before the redirect fires
     useEffect(() => {
@@ -32,8 +36,8 @@ export default function LoginPage() {
     }, []);
 
     useEffect(() => {
-        if (user && !isRecovery.current) navigate('/matches');
-    }, [user, navigate]);
+        if (user && !isRecovery.current) navigate(redirectTo);
+    }, [user, navigate, redirectTo]);
 
     async function submit(e) {
         e.preventDefault();
@@ -64,11 +68,12 @@ export default function LoginPage() {
                 const { error: e } = await supabase.auth.signInWithPassword({ email, password });
                 if (e) throw e;
                 const { data: { user: signedInUser } } = await supabase.auth.getUser();
-                const { data: userProfile } = await supabase.from('profiles').select('full_name').eq('id', signedInUser.id).single();
-                if (!userProfile?.full_name) {
+                const { data: userProfile } = await supabase.from('profiles').select('full_name, username').eq('id', signedInUser.id).single();
+                // v3 needs a name + a storefront @username; otherwise finish onboarding.
+                if (!userProfile?.full_name || (!LEGACY_MODE && !userProfile?.username)) {
                     navigate('/onboarding');
                 } else {
-                    navigate('/matches');
+                    navigate(redirectTo);
                 }
             }
         } catch (e) {
@@ -86,8 +91,8 @@ export default function LoginPage() {
 
     const titles = { signup: 'Create your account', signin: 'Welcome back', reset: 'Reset your password', 'new-password': 'Set a new password' };
     const subs = {
-        signup: 'Start swapping skills with students on your campus.',
-        signin: 'Sign in to see your matches and swaps.',
+        signup: 'Start selling your skills from one link.',
+        signin: 'Sign in to your storefront and Skills.',
         reset: "Enter your email and we'll send you a reset link.",
         'new-password': 'Choose a new password for your account.',
     };
@@ -144,7 +149,7 @@ export default function LoginPage() {
                                         type="email"
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
-                                        placeholder="you@university.edu"
+                                        placeholder="you@email.com"
                                         required
                                         autoComplete="email"
                                     />
