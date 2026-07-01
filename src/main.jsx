@@ -56,6 +56,7 @@ import NotFound from './app-pages/NotFound'
 import SkillBuilder from './app-pages/SkillBuilder'
 import Locker from './app-pages/Locker'
 import Dashboard from './app-pages/Dashboard'
+import ServicesDashboard from './app-pages/ServicesDashboard'
 import Storefront from './app-pages/Storefront'
 import StorefrontEditor from './app-pages/StorefrontEditor'
 import SkillPublic from './app-pages/SkillPublic'
@@ -79,6 +80,7 @@ function AppRoutes() {
           <Route path="/locker" element={<Locker />} />
           <Route path="/locker/:skillId" element={<Locker />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/services" element={<ServicesDashboard />} />
           <Route path="/storefront/edit" element={<StorefrontEditor />} />
           <Route path="/checkout/:skillId" element={<Checkout />} />
 

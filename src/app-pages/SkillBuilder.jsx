@@ -9,6 +9,19 @@ import { uploadCover } from '@/lib/storage';
 import { BLOCK_TYPES } from '@/lib/blockTypes';
 import BlockEditor from '@/components/BlockEditor';
 
+// Product kinds — what a Skill *is* (powers the /services type tabs). Independent
+// of pricing_type (how it bills). Keep in sync with the skills.kind CHECK in
+// migration 011_service_kinds.sql.
+const SKILL_KINDS = [
+  ['digital', 'Digital product'],
+  ['course', 'Online course'],
+  ['coaching', '1:1 coaching'],
+  ['membership', 'Membership'],
+  ['webinar', 'Webinar'],
+  ['lead', 'Lead magnet'],
+  ['bundle', 'Bundle'],
+];
+
 // Phase 2 — the make-or-break screen. /build lists my Skills; /build/:skillId
 // edits one (meta + cover + price + reorderable mixed blocks + publish).
 export default function SkillBuilder() {
@@ -254,6 +267,15 @@ function SkillEditor({ skillId, userId }) {
         </div>
       </div>
 
+      {/* Type — what this Skill is (powers the Services dashboard tabs) */}
+      <div className="sb-kindrow">
+        <label className="sb-kindlabel" htmlFor="sb-kind">Type</label>
+        <select id="sb-kind" className="sb-kind-select" value={skill.kind ?? 'digital'}
+          onChange={e => patchSkill({ kind: e.target.value })}>
+          {SKILL_KINDS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </div>
+
       {/* Blocks */}
       <div className="sb-blockshead">
         <h2 className="sb-h2">Content</h2>
@@ -336,6 +358,11 @@ function BuilderStyles() {
     .sb-segmented { display:flex; border:1px solid var(--border-strong); border-radius:var(--r-full); overflow:hidden; }
     .sb-segmented button { border:none; background:var(--surface); padding:8px 18px; font-size:13px; font-weight:600; color:var(--text-muted); cursor:pointer; }
     .sb-segmented button.on { background:var(--accent); color:#fff; }
+
+    .sb-kindrow { display:flex; gap:12px; align-items:center; padding:8px 0 4px; }
+    .sb-kindlabel { font-size:13px; font-weight:600; color:var(--text-muted); }
+    .sb-kind-select { border:1.5px solid var(--border-strong); border-radius:var(--r); padding:8px 12px; font-size:14px; font-weight:600; color:var(--text); background:var(--surface); cursor:pointer; font-family:inherit; }
+    .sb-kind-select:focus { outline:none; border-color:var(--accent); }
 
     .sb-blockshead { display:flex; justify-content:space-between; align-items:baseline; margin:24px 0 12px; }
 

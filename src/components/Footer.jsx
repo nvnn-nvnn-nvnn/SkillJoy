@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { LEGACY_MODE } from '@/lib/config';
 import SkillJoyLogo from '../assets/skilljoy-logo3.svg'
+import SkillJoyGreenWhite from "../assets/skilljoy-green-White.svg"
 
 export default function Footer() {
     const { pathname } = useLocation();
@@ -21,7 +22,7 @@ export default function Footer() {
                         {/* <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 10 }}>
                             Skill<span style={{ color: '#ec9146' }}>Joy</span>
                         </div> */}
-                        <img src={SkillJoyLogo} alt="" style={{width: "150px"}} />
+                        <img src={SkillJoyGreenWhite} alt="" style={{width: "150px"}} />
                         <p style={{ fontSize: 13, lineHeight: 1.6, color: '#a3a3a3', margin: 0 }}>
                             Sell your skills from one link — courses, templates, prompts, and coaching, all from one storefront.
                         </p>

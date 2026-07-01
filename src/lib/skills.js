@@ -7,7 +7,7 @@ import { apiFetch } from './api';
 // be brokered server-side (publish-side effects, version bump + buyer notify)
 // calls the backend, which lands in Phase 2/3.
 
-const SKILL_COLS = 'id, creator_id, title, outcome, cover_url, price_cents, pricing_type, version, status, sort_order, created_at, updated_at';
+const SKILL_COLS = 'id, creator_id, title, outcome, cover_url, price_cents, pricing_type, kind, version, status, sort_order, created_at, updated_at';
 
 /** All skills owned by the current creator (any status). */
 export async function listMySkills(creatorId) {
@@ -74,11 +74,12 @@ export async function getSkillWithBlocks(skillId) {
   return { ...skill, blocks };
 }
 
-/** Create a draft skill, returns the new row. */
+/** Create a draft skill, returns the new row. `kind` defaults to 'digital'
+ *  (DB also defaults it) — pass fields.kind to create a course/coaching/etc. */
 export async function createSkill(creatorId, fields = {}) {
   const { data, error } = await supabase
     .from('skills')
-    .insert({ creator_id: creatorId, status: 'draft', ...fields })
+    .insert({ creator_id: creatorId, status: 'draft', kind: 'digital', ...fields })
     .select(SKILL_COLS).single();
   if (error) throw error;
   return data;

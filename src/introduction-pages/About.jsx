@@ -11,95 +11,90 @@ export default function AboutPage() {
                 <section className="ab-header">
                     <Link to="/" className="ab-back">← Back to Home</Link>
                     <p className="ab-eyebrow">About SkillJoy</p>
-                    <h1 className="ab-title">Two ways to exchange skills.<br /><em>One platform.</em></h1>
+                    <h1 className="ab-title">Everything you sell.<br /><em>One link.</em></h1>
                     <p className="ab-subtitle">
-                        SkillJoy is built for college students — whether you want to trade knowledge for free
-                        or hire someone and get paid for what you're good at.
+                        SkillJoy is the creator storefront for turning what you know into income — courses,
+                        templates, prompts, and coaching, all from a single link you share everywhere.
                     </p>
                 </section>
 
-                {/* ── Two modes ── */}
+                {/* ── Two value props ── */}
                 <section className="ab-modes">
                     <div className="ab-container">
 
-                        {/* Skill Swap */}
+                        {/* Sell anything */}
                         <div className="ab-mode ab-mode-swap">
-                            <div className="ab-mode-badge">Free</div>
-                            <div className="ab-mode-icon" aria-hidden="true">⇄</div>
-                            <h2 className="ab-mode-title">Skill Swap</h2>
+                            <div className="ab-mode-badge">Create</div>
+                            <div className="ab-mode-icon" aria-hidden="true">🧩</div>
+                            <h2 className="ab-mode-title">Sell what you know</h2>
                             <p className="ab-mode-desc">
-                                Trade what you know for what you want to learn — no money changes hands.
-                                SkillJoy's AI matches you with students whose skills perfectly complement yours.
+                                Package your expertise into Skills — mix files, videos, prompts, guides, and live
+                                coaching into one product, set a price, and publish in minutes.
                             </p>
 
                             <ul className="ab-mode-list">
                                 <li>
                                     <span className="ab-check">✓</span>
-                                    <span>List what you can <strong>teach</strong> and what you want to <strong>learn</strong></span>
+                                    <span>Digital downloads, <strong>courses</strong>, and <strong>coaching</strong> calls</span>
                                 </li>
                                 <li>
                                     <span className="ab-check">✓</span>
-                                    <span>AI surfaces your best-fit matches across campus</span>
+                                    <span>Build a Skill from drag-and-drop content blocks</span>
                                 </li>
                                 <li>
                                     <span className="ab-check">✓</span>
-                                    <span>Send a swap request and agree on a session time</span>
+                                    <span>One-time prices or recurring memberships</span>
                                 </li>
                                 <li>
                                     <span className="ab-check">✓</span>
-                                    <span>Exchange an hour of real knowledge — completely free</span>
+                                    <span>Push updates to buyers and keep earning over time</span>
                                 </li>
                             </ul>
 
                             <div className="ab-mode-example">
-                                <span className="ab-example-chip ab-chip-teach">teaches Python</span>
-                                <span className="ab-example-arrow">⇄</span>
-                                <span className="ab-example-chip ab-chip-learn">learns Guitar</span>
+                                <span className="ab-example-chip ab-chip-teach">skilljoy.me/@you</span>
+                                <span className="ab-example-arrow">→</span>
+                                <span className="ab-example-chip ab-chip-learn">your storefront</span>
                             </div>
 
-                            <Link to="/matches" className="ab-mode-cta ab-cta-swap">Find your match →</Link>
+                            <Link to="/login" className="ab-mode-cta ab-cta-swap">Start your store →</Link>
                         </div>
 
-                        {/* Gig Marketplace */}
+                        {/* Run your business */}
                         <div className="ab-mode ab-mode-gig">
-                            <div className="ab-mode-badge ab-badge-gig">Paid</div>
-                            <div className="ab-mode-icon" aria-hidden="true">🎯</div>
-                            <h2 className="ab-mode-title">Gig Marketplace</h2>
+                            <div className="ab-mode-badge ab-badge-gig">Grow</div>
+                            <div className="ab-mode-icon" aria-hidden="true">📈</div>
+                            <h2 className="ab-mode-title">Run your whole business</h2>
                             <p className="ab-mode-desc">
-                                Post a service, set your price, and get paid. Or hire a student for a one-off task
-                                when you need help fast. Payments are protected by Stripe escrow.
+                                Your storefront comes with everything you need to sell and grow — secure checkout,
+                                analytics, an email audience, and automatic payouts.
                             </p>
 
                             <ul className="ab-mode-list">
                                 <li>
                                     <span className="ab-check ab-check-gig">✓</span>
-                                    <span>List a gig — tutoring, design, coding, anything</span>
+                                    <span>One-tap checkout powered by <strong>Stripe</strong></span>
                                 </li>
                                 <li>
                                     <span className="ab-check ab-check-gig">✓</span>
-                                    <span>Buyer's payment is held in <strong>Stripe escrow</strong> until delivery</span>
+                                    <span>Sales analytics, discount codes, and upsells</span>
                                 </li>
                                 <li>
                                     <span className="ab-check ab-check-gig">✓</span>
-                                    <span>14-day clearance window protects both sides from chargebacks</span>
+                                    <span>Build an email list and capture leads automatically</span>
                                 </li>
                                 <li>
                                     <span className="ab-check ab-check-gig">✓</span>
-                                    <span>Funds transferred to your Stripe Connect account automatically</span>
+                                    <span>Earnings paid out straight to your bank</span>
                                 </li>
                             </ul>
 
                             <div className="ab-escrow-note">
                                 <span className="ab-escrow-icon">🔒</span>
-                                <span>A flat <strong>$3.50 service fee</strong> per transaction covers platform and Stripe costs.</span>
+                                <span>Keep the bulk of every sale — SkillJoy charges only a small platform fee, shown transparently at checkout.</span>
                             </div>
 
-                            <div className="ab-local-note">
-                                <span className="ab-local-icon">📍</span>
-                                <span>Gigs are intended for students at your local university or college. Meeting in person to complete a gig is at your own discretion and risk — SkillJoy is not responsible for in-person interactions.</span>
-                            </div>
-
-                            <Link to="/gigs" className="ab-mode-cta ab-cta-gig">Browse gigs →</Link>
+                            <Link to="/how-it-works" className="ab-mode-cta ab-cta-gig">See how it works →</Link>
                         </div>
 
                     </div>
@@ -110,12 +105,12 @@ export default function AboutPage() {
                     <div className="ab-container ab-story-inner">
                         <div>
                             <p className="ab-section-label">The story</p>
-                            <h2 className="ab-story-title">Built at a hackathon.<br />Kept going.</h2>
+                            <h2 className="ab-story-title">Built for creators.<br />Kept going.</h2>
                             <p className="ab-story-body">
-                                SkillJoy started with a simple observation: every campus is packed with untapped expertise.
-                                Someone great at graphic design needs help with their resume. Someone who gives rides wants
-                                to learn to code. We built a platform that connects those dots — with AI-powered matching
-                                for swaps and Stripe escrow for paid gigs — so students can learn, earn, and grow together.
+                                SkillJoy started with a simple observation: the people who teach, design, and create
+                                the most online often have the hardest time getting paid for it — juggling link-in-bios,
+                                checkout tools, and payment processors. We built one place to do it all: a storefront
+                                where you can package your expertise, sell it from a single link, and get paid.
                             </p>
                         </div>
                         <div className="ab-founder">
@@ -132,8 +127,7 @@ export default function AboutPage() {
                 {/* ── Footer links ── */}
                 <section className="ab-footer-links">
                     <div className="ab-container">
-                        <Link to="/matches" className="ab-footer-btn ab-footer-btn-primary">Find a swap match</Link>
-                        <Link to="/gigs" className="ab-footer-btn">Browse gigs</Link>
+                        <Link to="/login" className="ab-footer-btn ab-footer-btn-primary">Start your store</Link>
                         <Link to="/how-it-works" className="ab-footer-btn">How it works</Link>
                         <Link to="/contact" className="ab-footer-btn">Contact</Link>
                     </div>

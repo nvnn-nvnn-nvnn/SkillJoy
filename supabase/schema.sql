@@ -264,6 +264,7 @@ CREATE TABLE IF NOT EXISTS skills (
     cover_url    TEXT,
     price_cents  INTEGER NOT NULL DEFAULT 0 CHECK (price_cents >= 0),
     pricing_type TEXT NOT NULL DEFAULT 'onetime' CHECK (pricing_type IN ('onetime','membership')),
+    kind         TEXT NOT NULL DEFAULT 'digital' CHECK (kind IN ('digital','course','coaching','membership','webinar','lead','bundle')),
     version      INTEGER NOT NULL DEFAULT 1,
     status       TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published')),
     created_at   TIMESTAMPTZ DEFAULT now(),
@@ -271,6 +272,7 @@ CREATE TABLE IF NOT EXISTS skills (
 );
 CREATE INDEX IF NOT EXISTS skills_creator_idx   ON skills(creator_id);
 CREATE INDEX IF NOT EXISTS skills_published_idx ON skills(creator_id, status);
+CREATE INDEX IF NOT EXISTS skills_kind_idx      ON skills(creator_id, kind);
 
 CREATE TABLE IF NOT EXISTS content_blocks (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),

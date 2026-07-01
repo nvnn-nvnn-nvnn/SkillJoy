@@ -88,11 +88,11 @@ export default function SettingsPage() {
             await supabase.from('notifications').insert({
                 user_id: user.id,
                 type: 'order_update',
-                title: 'Gig services are now paused',
-                message: 'Your gigs are no longer visible to buyers. No new requests will come in until you re-enable gig services in Settings. Your gig listings and payout info are safe.',
+                title: 'Selling is now paused',
+                message: 'Your storefront is no longer visible to buyers. No new sales will come in until you re-enable selling in Settings. Your Skills and payout info are safe.',
             });
         }
-        showToast('Gig settings saved!', 'success');
+        showToast('Settings saved!', 'success');
     }
 
     async function saveNotificationPrefs() {
@@ -172,13 +172,13 @@ export default function SettingsPage() {
                 </div>
             </section>
 
-            {/* Gig Settings */}
+            {/* Selling */}
             <section className="sj-card">
-                <h2 className="sj-section-title">Gig Settings</h2>
+                <h2 className="sj-section-title">Selling</h2>
                 <div className="sj-toggle-row">
                     <div>
-                        <p className="sj-toggle-label">Offer gig services</p>
-                        <p className="sj-hint">Show your profile as a seller and allow buyers to hire you</p>
+                        <p className="sj-toggle-label">Enable selling</p>
+                        <p className="sj-hint">Publish your storefront and let people buy your Skills</p>
                     </div>
                     <label className="sj-switch">
                         <input type="checkbox" checked={offersGigs} onChange={e => setOffersGigs(e.target.checked)} />
@@ -195,8 +195,8 @@ export default function SettingsPage() {
                 <h2 className="sj-section-title">Notifications</h2>
 
                 {[
-                    { key: 'swapRequests', label: 'Swap requests', hint: 'When someone wants to swap skills with you' },
-                    { key: 'gigRequests', label: 'Gig requests', hint: 'When someone requests your gig services' },
+                    { key: 'swapRequests', label: 'New sales', hint: 'When someone buys one of your Skills' },
+                    { key: 'gigRequests', label: 'Booking requests', hint: 'When someone books a coaching call or session' },
                     { key: 'messages', label: 'New messages', hint: 'When you receive a direct message' },
                     { key: 'reviews', label: 'Reviews & ratings', hint: 'When someone leaves you a review' },
                 ].map(({ key, label, hint }) => (

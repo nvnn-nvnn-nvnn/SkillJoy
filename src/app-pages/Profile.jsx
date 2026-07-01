@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useUser, useAuth, useProfile, getSkillName, normalizeSkills, DAYS_OF_WEEK, TIME_PERIODS } from '@/lib/stores';
+import { useUser, useAuth, getSkillName, normalizeSkills } from '@/lib/stores';
+import { listPublishedSkills } from '@/lib/skills';
 import { apiFetch } from '@/lib/api';
-import SkillEditor from '@/components/Skillededitor';
 import ReportModal from '@/components/ReportModal';
 import BlockButton from '@/components/BlockButton';
 import Comments from '@/components/Comments';
@@ -11,13 +11,11 @@ import Comments from '@/components/Comments';
 export default function ProfilePage() {
     const user = useUser();
     const { setProfile, loading: authLoading } = useAuth();
-    const myProfile = useProfile();
     const navigate = useNavigate();
     const { userId } = useParams();
-    const [AllGigs, setAllGigs] = useState([]);
 
     const [profile, setProfileData] = useState(null);
-    const [stats, setStats] = useState({ swapsCompleted: 0, gigsCompleted: 0, avgRating: 0, totalRatings: 0 });
+    const [stats, setStats] = useState({ skillsCount: 0, avgRating: 0, totalRatings: 0 });
     const [ratings, setRatings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [editMode, setEditMode] = useState(false);
@@ -39,16 +37,6 @@ export default function ProfilePage() {
     // Stripe Status
     const [stripeStatus, setStripeStatus] = useState(null);
     const [stripeEarnings, setStripeEarnings] = useState(null);
-
-    // College verification
-    const [collegeEmail, setCollegeEmail] = useState('');
-    const [collegeSending, setCollegeSending] = useState(false);
-    const [collegeSent, setCollegeSent] = useState(false);
-    const [collegeError, setCollegeError] = useState('');
-    const [showDisconnectModal, setShowDisconnectModal] = useState(false);
-
-
-
 
 
     const isOwnProfile = !userId || userId === user?.id;
@@ -98,18 +86,16 @@ export default function ProfilePage() {
         );
         setAvailability(cleanAvailability);
 
-        const [swapsRes, gigsRes, ratingsRes] = await Promise.all([
-            supabase.from('swaps').select('id').or(`requester_id.eq.${targetId},receiver_id.eq.${targetId}`).eq('status', 'completed'),
-            supabase.from('gig_requests').select('id').or(`requester_id.eq.${targetId},provider_id.eq.${targetId}`).eq('status', 'completed'),
+        const [skillsRes, ratingsRes] = await Promise.all([
+            listPublishedSkills(targetId).catch(() => []),
             supabase.from('ratings').select('rating, comment, created_at, rater:profiles!rater_id(full_name)').eq('rated_id', targetId).order('created_at', { ascending: false })
         ]);
 
-        const swapsCompleted = swapsRes.data?.length || 0;
-        const gigsCompleted = gigsRes.data?.length || 0;
+        const skillsCount = skillsRes?.length || 0;
         const ratingsData = ratingsRes.data || [];
         const avgRating = ratingsData.length > 0 ? ratingsData.reduce((sum, r) => sum + r.rating, 0) / ratingsData.length : 0;
 
-        setStats({ swapsCompleted, gigsCompleted, avgRating, totalRatings: ratingsData.length });
+        setStats({ skillsCount, avgRating, totalRatings: ratingsData.length });
         setRatings(ratingsData);
 
         // Check if this other user is blocked by us
@@ -182,78 +168,11 @@ export default function ProfilePage() {
 
 // Stripe Load End
 
-    async function loadGigs(collegeVerified, universityDomain) {
-        const targetId = userId || user.id;
-        const isOther = userId && userId !== user.id;
-
-        let query = supabase
-            .from('gigs')
-            .select('*, profile:profiles!user_id(id, full_name, bio, service_type)')
-            .eq('user_id', targetId)
-            .neq('active', false)
-            .order('created_at', { ascending: false });
-
-        // When viewing someone else's profile, only show gigs from the same university
-        if (isOther && collegeVerified && universityDomain) {
-            query = query.eq('university_domain', universityDomain);
-        } else if (isOther && !collegeVerified) {
-            // Viewer has no verified domain — hide all gigs from other users
-            setAllGigs([]);
-            return;
-        }
-
-        const { data, error } = await query;
-
-        if (!error && data) {
-            setAllGigs(data);
-        }
-    }
-
     useEffect(() => {
         if (authLoading) return;
         if (!user) { navigate('/login'); return; }
         loadProfile(); // eslint-disable-line react-hooks/set-state-in-effect
-        loadGigs(myProfile?.college_verified, myProfile?.university_domain);
-    }, [user, userId, authLoading, myProfile?.college_verified, myProfile?.university_domain]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    async function handleSendCollegeVerification() {
-        setCollegeError('');
-        if (!collegeEmail.trim()) { setCollegeError('Enter your .edu email.'); return; }
-        if (!collegeEmail.toLowerCase().endsWith('.edu')) { setCollegeError('Must be a .edu email address.'); return; }
-        setCollegeSending(true);
-        const res = await apiFetch('/api/verify-college/send', {
-            method: 'POST',
-            body: JSON.stringify({ collegeEmail }),
-        });
-        const data = await res.json();
-        setCollegeSending(false);
-        if (!res.ok) { setCollegeError(data.error || 'Failed to send.'); return; }
-        setCollegeSent(true);
-    }
-
-
-    // Remove College info
-
-    async function disconnectCollegeEmail() {
-        const { error } = await supabase
-            .from('profiles')
-            .update({
-                college_email: null,
-                college_verified: false,
-                university_domain: null,
-                college_verify_token: null,
-                college_verify_expires_at: null,
-            })
-            .eq('id', user.id);
-
-        if (error) { console.error('Could not disconnect College Email'); return; }
-
-        const updated = { ...profile, college_email: null, college_verified: false, university_domain: null, college_verify_token: null, college_verify_expires_at: null };
-        setProfile(updated);
-        setProfileData(updated);
-        setCollegeSent(false);
-        setCollegeEmail('');
-    }
+    }, [user, userId, authLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
 
@@ -262,8 +181,6 @@ export default function ProfilePage() {
 
     async function handleSave() {
         if (!fullName.trim()) { setError('Name is required'); return; }
-        if (!skillsTeach.length) { setError('Add at least one skill you can teach'); return; }
-        if (!skillsLearn.length) { setError('Add at least one skill you want to learn'); return; }
 
         setSaving(true);
         setError('');
@@ -304,16 +221,6 @@ export default function ProfilePage() {
         setAvailability(profile.availability || []);
         setAvatarUrl(profile.avatar_url || '');
         setError('');
-    }
-
-    function toggleAvailability(slot) {
-        console.log('Toggling availability:', slot);
-        setAvailability(prev => {
-            const newAvail = prev.includes(slot) ? prev.filter(s => s !== slot) : [...prev, slot];
-            console.log('Previous availability:', prev);
-            console.log('New availability:', newAvail);
-            return newAvail;
-        });
     }
 
     if (loading) {
@@ -447,22 +354,14 @@ export default function ProfilePage() {
                         )}
                         <div className="profile-stats">
                             <div className="stat">
-                                <span className="stat-value">{profile.points || 0}</span>
-                                <span className="stat-label">Points</span>
-                            </div>
-                            <div className="stat">
-                                <span className="stat-value">{stats.swapsCompleted}</span>
-                                <span className="stat-label">Swaps</span>
-                            </div>
-                            <div className="stat">
-                                <span className="stat-value">{stats.gigsCompleted}</span>
-                                <span className="stat-label">Gigs</span>
+                                <span className="stat-value">{stats.skillsCount}</span>
+                                <span className="stat-label">Skills</span>
                             </div>
                             <div className="stat">
                                 <span className="stat-value">
                                     {stats.avgRating > 0 ? stats.avgRating.toFixed(1) : 'N/A'}
                                 </span>
-                                <span className="stat-label">⭐ {stats.totalRatings} ratings</span>
+                                <span className="stat-label">⭐ {stats.totalRatings} reviews</span>
                             </div>
                         </div>
                     </div>
@@ -591,221 +490,30 @@ export default function ProfilePage() {
                     </div>
                 )}
 
-                {isOwnProfile && (
-                    <div style={{
-                        padding: '16px 20px',
-                        background: profile?.college_verified ? '#f0fdf4' : '#fff7ed',
-                        border: `1px solid ${profile?.college_verified ? '#86efac' : '#fdba74'}`,
-                        borderRadius: 10,
-                        marginBottom: 20,
-                    }}>
-                        {profile?.college_verified ? (
-                            <div>
-                                <p style={{ color: '#15803d', fontWeight: 600, margin: 0 }}>
-                                    🎓 College verified — {profile.university_domain}. You're seeing students at your school.
-                                </p>
-                                <button
-                                    className='btn btn-secondary'
-                                    style={{ marginTop: 10, fontSize: 13, color: '#dc2626', borderColor: '#fca5a5' }}
-                                    onClick={() => setShowDisconnectModal(true)}
-                                >
-                                    Disconnect university email
-                                </button>
-
-                            </div>
-                         
-                                
-                            
-                        ) : collegeSent ? (
-                            <div>
-                                <p style={{ color: '#92400e', fontWeight: 600, margin: '0 0 4px' }}>📧 Verification email sent!</p>
-                                <p style={{ color: '#92400e', fontSize: 13, margin: 0 }}>Check your .edu inbox and click the link to verify.</p>
-                            </div>
-                        ) : (
-                            <>
-                                <p style={{ color: '#92400e', fontWeight: 600, margin: '0 0 10px' }}>
-                                    🎓 Verify your college email to connect with students at your university.
-                                </p>
-                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    <input
-                                        type="email"
-                                        value={collegeEmail}
-                                        onChange={e => setCollegeEmail(e.target.value)}
-                                        placeholder="you@university.edu"
-                                        style={{ flex: 1, minWidth: 200, padding: '8px 12px', borderRadius: 8, border: '1px solid #fdba74', fontSize: 14 }}
-                                    />
-                                    <button className="btn btn-primary" onClick={handleSendCollegeVerification} disabled={collegeSending}>
-                                        {collegeSending ? 'Sending…' : 'Send verification'}
-                                    </button>
-                                </div>
-                                {collegeError && <p style={{ color: '#ef4444', fontSize: 13, margin: '8px 0 0' }}>{collegeError}</p>}
-                            </>
-                        )}
-                    </div>
-                )}
-
                 <div className="profile-section">
-                    <h2 className="section-title">About</h2>
-                    {editMode ? (
-                        <textarea
-                            value={bio}
-                            onChange={e => setBio(e.target.value)}
-                            placeholder="Tell others about yourself..."
-                            className="profile-bio-input"
-                            rows={4}
-                        />
-                    ) : (
-                        <p className="profile-bio">{profile.bio || 'No bio yet.'}</p>
-                    )}
-                </div>
-
-                <div className="profile-section">
-                    <h2 className="section-title">Availability</h2>
-                    {editMode ? (
-                        <div>
-                            <div style={{ marginBottom: '20px' }}>
-                                <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px', color: 'var(--text-primary)' }}>Days of the Week</h3>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                    {DAYS_OF_WEEK.map(day => (
-                                        <button
-                                            key={day}
-                                            onClick={() => toggleAvailability(day)}
-                                            style={{
-                                                padding: '8px 16px',
-                                                background: availability.includes(day) ? 'var(--primary)' : 'var(--surface-alt)',
-                                                color: availability.includes(day) ? '#fff' : 'var(--text-primary)',
-                                                border: '1px solid',
-                                                borderColor: availability.includes(day) ? 'var(--primary)' : 'var(--border)',
-                                                borderRadius: '8px',
-                                                fontSize: '13px',
-                                                fontWeight: 500,
-                                                cursor: 'pointer',
-                                                transition: 'all 0.15s'
-                                            }}
-                                        >
-                                            {day}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
+                    <h2 className="section-title">Storefront</h2>
+                    {profile.username ? (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                             <div>
-                                <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px', color: 'var(--text-primary)' }}>Time Periods</h3>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                    {TIME_PERIODS.map(time => (
-                                        <button
-                                            key={time}
-                                            onClick={() => toggleAvailability(time)}
-                                            style={{
-                                                padding: '8px 16px',
-                                                background: availability.includes(time) ? 'var(--primary)' : 'var(--surface-alt)',
-                                                color: availability.includes(time) ? '#fff' : 'var(--text-primary)',
-                                                border: '1px solid',
-                                                borderColor: availability.includes(time) ? 'var(--primary)' : 'var(--border)',
-                                                borderRadius: '8px',
-                                                fontSize: '13px',
-                                                fontWeight: 500,
-                                                cursor: 'pointer',
-                                                transition: 'all 0.15s'
-                                            }}
-                                        >
-                                            {time}
-                                        </button>
-                                    ))}
-                                </div>
+                                <p style={{ margin: '0 0 2px', fontWeight: 600 }}>skilljoy.me/@{profile.username}</p>
+                                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>Your public page where people discover and buy your Skills.</p>
+                            </div>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <Link to={`/@${profile.username}`} className="btn btn-secondary">View storefront</Link>
+                                {isOwnProfile && <Link to="/services" className="btn btn-primary">Manage services</Link>}
                             </div>
                         </div>
                     ) : (
-                        profile?.availability && profile.availability.length > 0 ? (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                {profile.availability.map((time, i) => (
-                                    <span key={i} style={{
-                                        padding: '4px 10px',
-                                        backgroundColor: 'var(--surface)',
-                                        border: '1px solid var(--border)',
-                                        borderRadius: '6px',
-                                        fontSize: '13px',
-                                        color: 'var(--text-secondary)'
-                                    }}>
-                                        {time}
-                                    </span>
-                                ))}
+                        isOwnProfile ? (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                                <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)' }}>Claim your storefront link and start selling your Skills.</p>
+                                <Link to="/onboarding" className="btn btn-primary">Set up storefront</Link>
                             </div>
                         ) : (
-                            <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>No availability set yet.</p>
+                            <p style={{ color: 'var(--text-muted)', fontSize: 14, margin: 0 }}>No storefront yet.</p>
                         )
                     )}
                 </div>
-
-                <div className="profile-section">
-                    <h2 className="section-title">Can Teach</h2>
-                    {editMode ? (
-                        <SkillEditor
-                            skills={skillsTeach}
-                            onChange={setSkillsTeach}
-                            type="teach"
-                        />
-                    ) : (
-                        <div className="skill-tags">
-                            {skillsTeach.map((s, i) => (
-                                <span key={i} className="skill-tag skill-teach">
-                                    {getSkillName(s)}
-                                    {typeof s === 'object' && s.stars && (
-                                        <span className="skill-stars"> {'⭐'.repeat(s.stars)}</span>
-                                    )}
-                                </span>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                <div className="profile-section">
-                    <h2 className="section-title">Wants to Learn</h2>
-                    {editMode ? (
-                        <SkillEditor
-                            skills={skillsLearn}
-                            onChange={setSkillsLearn}
-                            type="learn"
-                        />
-                    ) : (
-                        <div className="skill-tags">
-                            {skillsLearn.map((s, i) => (
-                                <span key={i} className="skill-tag skill-learn">{s}</span>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {AllGigs.length > 0 && (
-                    <div className="profile-section">
-                        <h2 className="section-title">{isOwnProfile ? 'My Gigs' : 'Gigs'} ({AllGigs.length})</h2>
-                        <div className="profile-gigs-grid">
-                            {AllGigs.map((gig) => (
-                                <div
-                                    key={gig.id}
-                                    className="profile-gig-card"
-                                    onClick={() => navigate(`/gigs/${gig.id}`)}
-                                    style={{ cursor: 'pointer' }}
-                                >
-                                    <div className="profile-gig-header">
-                                        <h3 className="profile-gig-title">{gig.title}</h3>
-                                        {gig.category && (
-                                            <span className="profile-gig-category">{gig.category}</span>
-                                        )}
-                                    </div>
-                                    {gig.description && (
-                                        <p className="profile-gig-desc">{gig.description.slice(0, 120)}{gig.description.length > 120 ? '...' : ''}</p>
-                                    )}
-                                    <div className="profile-gig-footer">
-                                        <span className="profile-gig-price">${gig.price?.toFixed(2)}</span>
-                                        <span className="profile-gig-arrow">→</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-
 
                 {ratings.length > 0 && (
                     <div className="profile-section">
@@ -1078,22 +786,6 @@ export default function ProfilePage() {
                 reportedId={profile?.id}
                 reportedName={profile?.full_name}
             />
-
-            {showDisconnectModal && (
-                <div className="modal-backdrop" onClick={() => setShowDisconnectModal(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-                    <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 16, padding: '32px 28px 24px', maxWidth: 420, width: '90%', textAlign: 'center', boxShadow: 'var(--shadow-lg)', position: 'relative' }}>
-                        <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
-                        <h3 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700 }}>Disconnect university email?</h3>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6, margin: '0 0 24px' }}>
-                            You'll lose access to university-only matching and will need to re-verify to reconnect.
-                        </p>
-                        <div style={{ display: 'flex', gap: 10 }}>
-                            <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowDisconnectModal(false)}>Cancel</button>
-                            <button className="btn" style={{ flex: 1, background: '#dc2626', color: '#fff', border: 'none' }} onClick={() => { setShowDisconnectModal(false); disconnectCollegeEmail(); }}>Disconnect</button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </>
     );
 }

@@ -2,29 +2,29 @@ import { Link } from 'react-router-dom';
 
 const steps = [
     {
-        emoji: '📝',
-        title: 'Create your profile',
-        desc: 'Sign up and set your skills, availability, and whether you want to swap, offer gigs, or both.',
+        emoji: '🔗',
+        title: 'Claim your storefront',
+        desc: 'Sign up and grab your link — skilljoy.me/@you. It\'s the one link you\'ll share everywhere.',
     },
     {
-        emoji: '🔍',
-        title: 'Browse or list',
-        desc: 'Search for gigs from other students, or list your own services for others to hire you.',
+        emoji: '🧩',
+        title: 'Build a Skill',
+        desc: 'Add what you sell — a digital download, course, coaching call, or membership — with content blocks and a price.',
     },
     {
-        emoji: '💬',
-        title: 'Chat & agree',
-        desc: 'Message the other person, clarify expectations, and accept the request when you\'re ready.',
+        emoji: '🚀',
+        title: 'Publish & share',
+        desc: 'Publish your storefront and drop your link in your bio across Instagram, TikTok, YouTube, and X.',
     },
     {
         emoji: '💳',
-        title: 'Secure payment',
-        desc: 'Buyers pay upfront — funds are held in escrow by Stripe until the work is delivered.',
+        title: 'Get paid',
+        desc: 'Buyers check out in one tap. Payments are processed securely by Stripe and paid out to your bank.',
     },
     {
-        emoji: '✅',
-        title: 'Deliver & release',
-        desc: 'The seller marks the work as done. The buyer reviews and releases payment. Both parties can rate each other.',
+        emoji: '📈',
+        title: 'Grow',
+        desc: 'Track sales and views, build your email list, offer discounts, and add more Skills as you grow.',
     },
 ];
 
@@ -33,7 +33,7 @@ export default function HowItWorksPage() {
         <div className="page" style={{ maxWidth: 800 }}>
             <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>How It Works</h1>
             <p style={{ color: 'var(--text-secondary)', marginBottom: 48, fontSize: 16 }}>
-                SkillJoy is a campus marketplace where students can exchange skills for free or hire each other for paid gigs — all with secure Stripe-powered escrow.
+                SkillJoy is the creator storefront for selling what you know — courses, templates, prompts, and coaching, all from one link, with secure Stripe-powered checkout.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24, marginBottom: 48 }}>
@@ -50,32 +50,23 @@ export default function HowItWorksPage() {
             </div>
 
             <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: 12, padding: '28px 32px', marginBottom: 40 }}>
-                <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Skill Swaps</h2>
+                <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Payments & payouts</h2>
                 <p style={{ color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 0 }}>
-                    Swaps work a little differently — no money changes hands. You and another user agree to teach each other a skill.
-                    When you've both completed the exchange and marked it done, you each earn points and can rate each other.
-                </p>
-            </div>
-
-            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '24px 28px', marginBottom: 40 }}>
-                <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: '#92400e' }}>🕐 14-Day Clearance Period</h2>
-                <p style={{ color: '#78350f', lineHeight: 1.7, marginBottom: 0 }}>
-                    Once payment is released by the buyer, your earnings enter a <strong>14-day safety clearance</strong> before
-                    being transferred to your Stripe account. This protects sellers from chargebacks — if a buyer disputes
-                    a charge with their bank after completion, SkillJoy has a window to manage it before funds are sent.
-                    After 14 days with no issues, your money is automatically paid out. You can track the countdown in the chat.
+                    Checkout is powered by Stripe, so card details never touch SkillJoy. After a sale, your earnings are
+                    transferred to your connected Stripe account and paid out to your bank on Stripe's schedule. You keep
+                    the bulk of every sale — SkillJoy only takes a small platform fee, shown transparently at checkout.
                 </p>
             </div>
 
             <div style={{ display: 'flex', gap: 12 }}>
-                <Link to="/gigs" className="btn btn-primary">Browse Gigs</Link>
-                <Link to="/swaps" 
+                <Link to="/login" className="btn btn-primary">Start your store</Link>
+                <Link to="/about"
                 className="btn btn-secondary"
                 style={{
                     color: "#000",
                     backgroundColor: "#fff"
                 }}
-                >Explore Swaps</Link>
+                >About SkillJoy</Link>
             </div>
         </div>
     );

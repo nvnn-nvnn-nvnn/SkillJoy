@@ -7,6 +7,8 @@ import Notifications from './Notifications';
 import SkillJoyLogo from '../assets/SkillJoy-Logo.svg'
 import SkillJoyLogo2 from '../assets/SkillJoy-Logo2.svg'
 import SkillJoyLogo3 from '../assets/skilljoy-logo3.svg'
+import SkillJoyPurpleBlack from '../assets/skilljoypurple.svg'
+import SkillJoyGreen from '../assets/skilljoy-green.svg'
 
 
 export default function Header() {
@@ -26,7 +28,7 @@ export default function Header() {
     <>
     <nav className="nav">
       <Link to="/" className="nav-logo" onClick={closeMenu}>
-        <img src={SkillJoyLogo3} alt="SkillJoy Logo" style={{ height: 35, width: 'auto' }} />
+        <img src={SkillJoyGreen} alt="SkillJoy Logo" style={{ height: 40, width: 'auto' }} />
       </Link>
 
       <button className={`nav-hamburger${menuOpen ? ' open' : ''}`} onClick={() => setMenuOpen(o => !o)} aria-label="Toggle menu">
@@ -41,6 +43,7 @@ export default function Header() {
         <Link to="/build" className={`nav-link${currentPath.startsWith('/build') ? ' active' : ''}`}>Build</Link>
         <Link to="/locker" className={`nav-link${currentPath.startsWith('/locker') ? ' active' : ''}`}>Locker</Link>
         <Link to="/dashboard" className={`nav-link${currentPath.startsWith('/dashboard') ? ' active' : ''}`}>Dashboard</Link>
+        <Link to="/services" className={`nav-link${currentPath.startsWith('/services') ? ' active' : ''}`}>Services</Link>
         {profile?.username && (
           <Link to={`/@${profile.username}`} className={`nav-link${currentPath === `/@${profile.username}` ? ' active' : ''}`}>Storefront</Link>
         )}
@@ -83,6 +86,7 @@ export default function Header() {
           <Link to="/build" className={`nav-link${currentPath.startsWith('/build') ? ' active' : ''}`} onClick={closeMenu}>Build</Link>
           <Link to="/locker" className={`nav-link${currentPath.startsWith('/locker') ? ' active' : ''}`} onClick={closeMenu}>Locker</Link>
           <Link to="/dashboard" className={`nav-link${currentPath.startsWith('/dashboard') ? ' active' : ''}`} onClick={closeMenu}>Dashboard</Link>
+          <Link to="/services" className={`nav-link${currentPath.startsWith('/services') ? ' active' : ''}`} onClick={closeMenu}>Services</Link>
           {profile?.username && (
             <Link to={`/@${profile.username}`} className={`nav-link${currentPath === `/@${profile.username}` ? ' active' : ''}`} onClick={closeMenu}>Storefront</Link>
           )}

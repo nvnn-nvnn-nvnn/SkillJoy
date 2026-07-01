@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useUser, useProfile, useAuth, SKILL_CATEGORIES, AVAILABILITY_OPTIONS, hasSkill, setSkillStars, removeSkill, getSkillName, normalizeSkills } from '@/lib/stores';
+import { useUser, useProfile, useAuth, AVAILABILITY_OPTIONS } from '@/lib/stores';
 import { LEGACY_MODE } from '@/lib/config';
 import ProfileView from '@/components/Profileview';
-import SkillEditor from '@/components/Skillededitor';
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 2;
 
 // Handles that collide with app routes — can't be claimed as a @username.
 const RESERVED_USERNAMES = new Set([
@@ -27,30 +26,7 @@ function usernameError(name) {
     return null;
 }
 
-const STEP_LABELS = ['About You', 'Teach', 'Learn', 'Availability'];
-
-// Reusable chip-grid for both Teach (step 2) and Learn (step 3)
-function SkillChipGrid({ categories, selected, isSelected, onToggle }) {
-    return categories.map(cat => (
-        <div key={cat.label} className="skill-group">
-            <p className="section-label">{cat.label}</p>
-            <div className="skill-chips">
-                {cat.skills.map(name => {
-                    const active = isSelected(name);
-                    return (
-                        <button
-                            key={name}
-                            className={`skill-tag skill-select ${active ? (selected === 'teach' ? 'active-teach' : 'active-learn') : (selected === 'teach' ? 'skill-teach' : 'skill-learn')}`}
-                            onClick={() => onToggle(name)}
-                        >
-                            {active && <span>&#10003; </span>}{name}
-                        </button>
-                    );
-                })}
-            </div>
-        </div>
-    ));
-}
+const STEP_LABELS = ['About You', 'Availability'];
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -64,12 +40,7 @@ export default function OnboardingPage() {
     const [username, setUsername] = useState('');
     const [usernameStatus, setUsernameStatus] = useState(null); // null | 'checking' | 'available' | 'taken'
     const [bio, setBio] = useState('');
-    const [skillsTeach, setSkillsTeach] = useState([]);
-    const [skillsLearn, setSkillsLearn] = useState([]);
     const [availability, setAvailability] = useState([]);
-    const [customTeach, setCustomTeach] = useState('');
-    const [customLearn, setCustomLearn] = useState('');
-    const [serviceType, setServiceType] = useState('swap');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [step, setStep] = useState(1);
@@ -78,16 +49,14 @@ export default function OnboardingPage() {
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
         if (profile) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setFullName(profile.full_name ?? '');
             setUsername(profile.username ?? '');
             setBio(profile.bio ?? '');
-            setSkillsTeach(normalizeSkills(profile.skills_teach ?? []));
-            setSkillsLearn(normalizeSkills(profile.skills_learn ?? []).map(s => getSkillName(s)));
             setAvailability(profile.availability ?? []);
-            setServiceType(profile.service_type ?? 'swap');
             if (profile.full_name) setViewMode(true);
         }
-    }, [user, profile]);
+    }, [user, profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Username availability (debounced) ────────────────────────────────────
 
@@ -111,43 +80,6 @@ export default function OnboardingPage() {
         return () => { cancelled = true; clearTimeout(t); };
     }, [username, user?.id]);
 
-    // ── Teach helpers ────────────────────────────────────────────────────────
-
-    function toggleTeach(name) {
-        setSkillsTeach(prev =>
-            hasSkill(prev, name) ? removeSkill(prev, name) : setSkillStars(prev, name, 3)
-        );
-    }
-
-    function addCustomTeach() {
-        const val = customTeach.trim().slice(0, 50);
-        if (!val) return;
-        if (!hasSkill(skillsTeach, val)) setSkillsTeach(prev => setSkillStars(prev, val, 3));
-        setCustomTeach('');
-    }
-
-    // ── Learn helpers ────────────────────────────────────────────────────────
-
-    function toggleLearn(skill) {
-        setSkillsLearn(prev =>
-            prev.includes(skill) ? prev.filter(s => s !== skill) : [...prev, skill]
-        );
-    }
-
-    function addCustomLearn() {
-        const val = customLearn.trim().slice(0, 50);
-        if (!val || skillsLearn.includes(val)) return;
-        setSkillsLearn(prev => [...prev, val]);
-        setCustomLearn('');
-    }
-
-    function handleKey(e, type) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            type === 'teach' ? addCustomTeach() : addCustomLearn();
-        }
-    }
-
     // ── Availability toggle ──────────────────────────────────────────────────
 
     function toggleAvailability(opt) {
@@ -163,11 +95,6 @@ export default function OnboardingPage() {
         const uErr = usernameError(username);
         if (uErr) { setError(uErr); setStep(1); return; }
         if (usernameStatus === 'taken') { setError('That username is taken — try another.'); setStep(1); return; }
-        // Teach/learn skills only matter for the legacy campus swap flow.
-        if (LEGACY_MODE) {
-            if (!skillsTeach.length) { setError('Add at least one skill you can teach.'); setStep(2); return; }
-            if (!skillsLearn.length) { setError('Add at least one skill you want to learn.'); setStep(3); return; }
-        }
 
         setError(''); setBusy(true);
         const { error: e } = await supabase.from('profiles').upsert({
@@ -176,10 +103,7 @@ export default function OnboardingPage() {
             full_name: fullName.trim(),
             username,
             bio: bio.trim(),
-            skills_teach: skillsTeach,
-            skills_learn: skillsLearn,
             availability,
-            service_type: serviceType,
         });
         setBusy(false);
         if (e) {
@@ -191,14 +115,6 @@ export default function OnboardingPage() {
         if (updated) setProfile(updated);
         navigate(LEGACY_MODE ? '/matches' : '/build');
     }
-
-    // ── Service type options ─────────────────────────────────────────────────
-
-    const serviceOptions = [
-        { value: 'swap', label: 'Skill Swap', desc: 'Exchange skills with others for free' },
-        { value: 'gigs', label: 'Paid Services', desc: 'Offer your skills for money (gig work)' },
-        { value: 'both', label: 'Both', desc: 'Open to swapping and paid gigs' },
-    ];
 
     // ── Render ───────────────────────────────────────────────────────────────
 
@@ -245,8 +161,8 @@ export default function OnboardingPage() {
                             {/* ── Step 1: Name + Bio ── */}
                             {step === 1 && (
                                 <div className="step-body">
-                                    <h1 className="onboard-title">Let's set up your profile</h1>
-                                    <p className="onboard-sub">Tell other students a little about yourself.</p>
+                                    <h1 className="onboard-title">Let's set up your storefront</h1>
+                                    <p className="onboard-sub">Tell your audience a little about you and claim your link.</p>
                                     <div className="field">
                                         <label htmlFor="name">Your full name</label>
                                         <input id="name" type="text" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="e.g. Maya Chen" autoComplete="name" />
@@ -280,56 +196,11 @@ export default function OnboardingPage() {
                                 </div>
                             )}
 
-                            {/* ── Step 2: Skills to Teach ── */}
+                            {/* ── Step 2: Availability ── */}
                             {step === 2 && (
                                 <div className="step-body">
-                                    <h1 className="onboard-title">What can you teach?</h1>
-                                    <p className="onboard-sub">Pick skills you can share, then rate your level with stars.</p>
-                                    {/* SkillEditor has its own add input + Browse modal — no need for a second input */}
-                                    {/* <div className="custom-input">
-                                        <input type="text" value={customTeach} onChange={e => setCustomTeach(e.target.value)} onKeyDown={e => handleKey(e, 'teach')} placeholder="Add a custom skill..." />
-                                        <button className="btn btn-secondary btn-sm" onClick={addCustomTeach}>Add</button>
-                                    </div> */}
-                                    <SkillEditor skills={skillsTeach} onChange={setSkillsTeach} />
-                                </div>
-                            )}
-
-                            {/* ── Step 3: Skills to Learn ── */}
-                            {step === 3 && (
-                                <div className="step-body">
-                                    <h1 className="onboard-title">What do you want to learn?</h1>
-                                    <p className="onboard-sub">Pick skills you've always wanted to pick up.</p>
-                                    {/* SkillChipGrid kept for the browse-by-category view */}
-                                    <SkillChipGrid
-                                        categories={SKILL_CATEGORIES}
-                                        selected="learn"
-                                        isSelected={name => skillsLearn.includes(name)}
-                                        onToggle={toggleLearn}
-                                    />
-                                    <div className="custom-input">
-                                        <input type="text" value={customLearn} onChange={e => setCustomLearn(e.target.value)} onKeyDown={e => handleKey(e, 'learn')} placeholder="Add a custom skill..." />
-                                        <button className="btn btn-secondary btn-sm" onClick={addCustomLearn}>Add</button>
-                                    </div>
-                                    {skillsLearn.length > 0 && (
-                                        <div className="selected-preview">
-                                            <p className="section-label" style={{ marginBottom: 8 }}>Selected ({skillsLearn.length})</p>
-                                            <div className="skill-chips">
-                                                {skillsLearn.map(s => (
-                                                    <button key={s} className="skill-tag active-learn" onClick={() => toggleLearn(s)}>
-                                                        {s} <span style={{ opacity: 0.6 }}>&times;</span>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* ── Step 4: Availability + Service Type ── */}
-                            {step === 4 && (
-                                <div className="step-body">
-                                    <h1 className="onboard-title">When are you free?</h1>
-                                    <p className="onboard-sub">Help matches know when to reach out.</p>
+                                    <h1 className="onboard-title">When are you available?</h1>
+                                    <p className="onboard-sub">Optional — helps buyers know when you can take coaching calls or sessions.</p>
                                     <div className="avail-grid">
                                         {AVAILABILITY_OPTIONS.map(opt => (
                                             <button
@@ -340,30 +211,6 @@ export default function OnboardingPage() {
                                                 {opt}
                                             </button>
                                         ))}
-                                    </div>
-
-                                    <div className="service-section">
-                                        <p className="section-label" style={{ marginBottom: 12 }}>What are you open to?</p>
-                                        <div className="service-options">
-                                            {serviceOptions.map(opt => (
-                                                <label
-                                                    key={opt.value}
-                                                    className={`service-option ${serviceType === opt.value ? 'selected' : ''}`}
-                                                >
-                                                    <input
-                                                        type="radio"
-                                                        name="serviceType"
-                                                        value={opt.value}
-                                                        checked={serviceType === opt.value}
-                                                        onChange={e => setServiceType(e.target.value)}
-                                                    />
-                                                    <div>
-                                                        <p className="service-label">{opt.label}</p>
-                                                        <p className="service-desc">{opt.desc}</p>
-                                                    </div>
-                                                </label>
-                                            ))}
-                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -382,7 +229,7 @@ export default function OnboardingPage() {
                                 ) : (
                                     <button className="btn btn-primary" onClick={save} disabled={busy}>
                                         {busy && <span className="spinner" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white', width: 16, height: 16 }} />}
-                                        Save & find matches
+                                        Save & start building
                                     </button>
                                 )}
                             </div>
