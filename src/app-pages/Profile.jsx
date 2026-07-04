@@ -7,6 +7,7 @@ import { apiFetch } from '@/lib/api';
 import ReportModal from '@/components/ReportModal';
 import BlockButton from '@/components/BlockButton';
 import Comments from '@/components/Comments';
+import BackLink from '@/components/BackLink';
 
 export default function ProfilePage() {
     const user = useUser();
@@ -264,26 +265,7 @@ export default function ProfilePage() {
                 <div style={{
                     margin: '24px 0',
                 }}>
-                    <Link to="/"
-                    className='btn btn-secondary'
-                    style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        color: 'var(--text-secondary)',
-                        textDecoration: 'none',
-                        transition: 'color 0.15s',
-                        backgroundColor:  "#fff",
-                        border: "solid 1px #000",
-                        padding: "10px",
-                        borderRadius: "10px"
-
-                    
-                    }}>
-                        ← Back to Home
-                    </Link>
+                    <BackLink to="/" className="bl-inline">Back to Home</BackLink>
                 </div>
                 <div className="profile-header" style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid var(--border)' }}>
                     <div style={{ position: 'relative', flexShrink: 0 }}>

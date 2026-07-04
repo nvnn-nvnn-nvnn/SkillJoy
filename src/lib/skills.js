@@ -7,7 +7,7 @@ import { apiFetch } from './api';
 // be brokered server-side (publish-side effects, version bump + buyer notify)
 // calls the backend, which lands in Phase 2/3.
 
-const SKILL_COLS = 'id, creator_id, title, outcome, cover_url, price_cents, pricing_type, kind, version, status, sort_order, created_at, updated_at';
+const SKILL_COLS = 'id, creator_id, title, outcome, description, cover_url, price_cents, pricing_type, kind, version, status, sort_order, promo_video_url, confirmation_message, reviews_enabled, created_at, updated_at';
 
 /** All skills owned by the current creator (any status). */
 export async function listMySkills(creatorId) {
@@ -67,7 +67,7 @@ export async function getSkillWithBlocks(skillId) {
   if (error) throw error;
   const { data: blocks, error: be } = await supabase
     .from('content_blocks')
-    .select('id, skill_id, type, position, title, body_text, file_key, external_url, booking_minutes, created_at')
+    .select('id, skill_id, section_id, type, position, title, body_text, file_key, external_url, booking_minutes, buffer_minutes, min_notice_minutes, created_at')
     .eq('skill_id', skillId)
     .order('position', { ascending: true });
   if (be) throw be;

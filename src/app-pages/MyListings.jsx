@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile } from '@/lib/stores';
+import { useDialog } from '@/components/Dialog';
 import { Plus, Trash2 } from "lucide-react";
 
 const GIG_CATEGORIES = [
@@ -46,6 +47,7 @@ function PayBadge({ status }) {
 export default function MyListingsPage() {
     const user = useUser();
     const profile = useProfile();
+    const { confirm } = useDialog();
     const navigate = useNavigate();
 
     const [tab, setTab] = useState('listings');
@@ -216,7 +218,7 @@ export default function MyListingsPage() {
 
     // ── Cancel sent request ──
     async function cancelRequest(requestId) {
-        if (!window.confirm('Cancel this hire request?')) return;
+        if (!(await confirm({ title: 'Cancel this hire request?', confirmLabel: 'Cancel request', danger: true }))) return;
         const { data, error } = await supabase.from('gig_requests').delete().eq('id', requestId).eq('requester_id', user.id).select();
         if (error) { showToast(error.message, 'error'); return; }
         if (!data || data.length === 0) { showToast('Failed to cancel — check RLS policies', 'error'); return; }

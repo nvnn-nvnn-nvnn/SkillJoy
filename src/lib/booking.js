@@ -40,16 +40,32 @@ function zonedWallClockToUtc(tz, y, mZero, d, hh, mm) {
 
 /**
  * Open slots for the next `daysAhead` days given a creator's availability.
- * @returns array of { start: Date, end: Date } sorted ascending, future-only,
- *          excluding times already in `bookedISO` (a Set of ISO start strings).
+ * @param opts { daysAhead=14, minutes, bufferMinutes=0, minNoticeMinutes=0,
+ *              booked=[{start,end}] }
+ * @returns array of { start: Date, end: Date } sorted ascending, honoring
+ *          minimum notice and skipping anything within `buffer` of a booking.
  */
-export function generateSlots(availability, tz, daysAhead = 14, bookedISO = new Set(), minutesOverride) {
+export function generateSlots(availability, tz, opts = {}) {
+  const {
+    daysAhead = 14,
+    minutes: minutesOverride,
+    bufferMinutes = 0,
+    minNoticeMinutes = 0,
+    booked = [],
+  } = opts;
   const av = availability || DEFAULT_AVAILABILITY;
   const minutes = minutesOverride || av.slot_minutes || 30;
-  const now = Date.now();
-  const out = [];
+  const cutoff = Date.now() + minNoticeMinutes * 60000; // no bookings before this
+  const bufMs = bufferMinutes * 60000;
 
-  // Iterate calendar days starting today (in the creator's tz).
+  // Each existing booking blocks its own time PLUS a buffer on both sides.
+  const blocked = (booked || []).map(b => {
+    const bs = new Date(b.start).getTime();
+    const be = b.end ? new Date(b.end).getTime() : bs + minutes * 60000;
+    return [bs - bufMs, be + bufMs];
+  });
+
+  const out = [];
   const nowParts = new Date().toLocaleString('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
   const [mm0, dd0, yy0] = nowParts.split(/[/,]/).map(s => parseInt(s, 10));
   const base = Date.UTC(yy0, mm0 - 1, dd0);
@@ -66,8 +82,11 @@ export function generateSlots(availability, tz, daysAhead = 14, bookedISO = new 
       const end = eh * 60 + em;
       while (t + minutes <= end) {
         const start = zonedWallClockToUtc(tz, y, mZero, d, Math.floor(t / 60), t % 60);
-        if (start.getTime() > now && !bookedISO.has(start.toISOString())) {
-          out.push({ start, end: new Date(start.getTime() + minutes * 60000) });
+        const startMs = start.getTime();
+        const endMs = startMs + minutes * 60000;
+        const clashes = blocked.some(([bs, be]) => startMs < be && endMs > bs);
+        if (startMs > cutoff && !clashes) {
+          out.push({ start, end: new Date(endMs) });
         }
         t += minutes;
       }
@@ -80,7 +99,7 @@ export function generateSlots(availability, tz, daysAhead = 14, bookedISO = new 
 export async function listBlockBookings(skillId, blockId) {
   const { data, error } = await supabase
     .from('bookings')
-    .select('start_time')
+    .select('start_time, end_time')
     .eq('skill_id', skillId).eq('block_id', blockId).eq('status', 'booked');
   if (error) throw error;
   return data;
@@ -115,8 +134,8 @@ export async function createBooking({ skillId, blockId, creatorId, buyerId, star
               start_time: start.toISOString(), end_time: end.toISOString() })
     .select().single();
   if (error) {
-    // Unique-index violation = slot taken between fetch and book.
-    if (/duplicate|unique/i.test(error.message)) throw new Error('That slot was just taken — pick another.');
+    // Unique-index or exclusion (overlap) violation = slot taken / clashes.
+    if (/duplicate|unique|exclu|overlap|conflict/i.test(error.message)) throw new Error('That slot was just taken — pick another.');
     throw error;
   }
   // Best-effort notify the creator (client notification inserts are allowed by RLS).

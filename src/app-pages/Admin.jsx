@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useAuth } from '@/lib/stores';
+import { useDialog } from '@/components/Dialog';
 import { apiFetch } from '@/lib/api';
 
 const ADMIN_EMAIL = 'techkage@proton.me';
@@ -47,6 +48,7 @@ function initials(name) {
 export default function AdminPage() {
     const user = useUser();
     const { loading: authLoading } = useAuth();
+    const { confirm } = useDialog();
     const navigate = useNavigate();
 
     const [orders, setOrders] = useState([]);
@@ -709,7 +711,7 @@ export default function AdminPage() {
                                             {r.reported_type === 'comment' && r.status === 'pending' && (
                                                 <button
                                                     onClick={async () => {
-                                                        if (!window.confirm('Delete this comment?')) return;
+                                                        if (!(await confirm({ title: 'Delete this comment?', confirmLabel: 'Delete', danger: true }))) return;
                                                         const res = await apiFetch('/api/admin/remove-comment', { method: 'POST', body: JSON.stringify({ commentId: r.reported_id }) });
                                                         const data = await res.json();
                                                         if (!res.ok) { showToast('Failed: ' + (data.error || 'unknown'), 'error'); return; }

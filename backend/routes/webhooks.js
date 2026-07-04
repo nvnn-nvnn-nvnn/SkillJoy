@@ -49,7 +49,7 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
                     console.warn(`⚠️ Skill purchase already paid or pending row missing (skill ${skill_id}, buyer ${buyer_id})`);
                 } else {
                     const { data: skill } = await supabase
-                        .from('skills').select('title, creator_id').eq('id', skill_id).single();
+                        .from('skills').select('title, creator_id, confirmation_message').eq('id', skill_id).single();
                     // Notify the creator of the sale.
                     if (skill?.creator_id) {
                         await supabase.from('notifications').insert({
@@ -67,15 +67,20 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
                             .select('id, times_redeemed').eq('creator_id', skill.creator_id).ilike('code', code).maybeSingle();
                         if (d) await supabase.from('discounts').update({ times_redeemed: d.times_redeemed + 1 }).eq('id', d.id);
                     }
-                    // Best-effort receipt to the buyer.
+                    // Best-effort receipt to the buyer. Includes the creator's
+                    // custom confirmation message (escaped) if they set one.
                     try {
                         const email = await getUserEmail(buyer_id);
+                        const note = skill?.confirmation_message
+                            ? `<p style="background:#f4f1ea;border-radius:8px;padding:12px 14px;white-space:pre-wrap;">${String(skill.confirmation_message).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`
+                            : '';
                         if (email) await sendEmail({
                             to: email,
                             subject: `Your receipt — ${skill?.title ?? 'SkillJoy purchase'}`,
                             html: `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;">
                                 <p>Thanks for your purchase!</p>
                                 <p><strong>${skill?.title ?? 'Skill'}</strong> — $${(paymentIntent.amount / 100).toFixed(2)}</p>
+                                ${note}
                                 <p>Access it anytime in your locker:</p>
                                 <a href="${process.env.FRONTEND_URL}/locker/${skill_id}" style="display:inline-block;padding:10px 20px;background:#D4522A;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Open in Locker</a>
                                 <p style="color:#9ca3af;font-size:12px;margin-top:24px;">SkillJoy</p></div>`,

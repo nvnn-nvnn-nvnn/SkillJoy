@@ -29,7 +29,7 @@
   /* ── Seafoam accent ──
      --accent is the AA-safe functional green (buttons, links, focus).
      --accent-bright is the softer decorative seafoam (fills, chips). */
-  --accent: #0C8470;
+  --accent: #20B366;
   --accent-hover: #0A6E5D;
   --accent-bright: #2FC4AD;
   --accent-light: #E5F6F1;
@@ -104,7 +104,7 @@ a {
 }
 
 a:hover {
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 p {

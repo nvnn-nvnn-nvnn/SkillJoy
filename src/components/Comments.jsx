@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/stores';
 import ReportModal from '@/components/ReportModal';
+import { useDialog } from '@/components/Dialog';
 import { Flag, Trash2 } from 'lucide-react';
 
 function initials(name) {
@@ -21,6 +22,7 @@ function timeAgo(iso) {
 
 export default function Comments({ targetType, targetId }) {
     const user = useUser();
+    const { confirm } = useDialog();
     const [comments, setComments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [body, setBody] = useState('');
@@ -66,7 +68,7 @@ export default function Comments({ targetType, targetId }) {
     }
 
     async function handleDelete(commentId) {
-        if (!window.confirm('Delete this comment?')) return;
+        if (!(await confirm({ title: 'Delete this comment?', confirmLabel: 'Delete', danger: true }))) return;
         const { error: deleteError } = await supabase.from('comments').delete().eq('id', commentId).eq('author_id', user.id);
         if (deleteError) { setError(deleteError.message); return; }
         setComments(prev => prev.filter(c => c.id !== commentId));

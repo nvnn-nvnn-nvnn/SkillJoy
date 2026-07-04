@@ -1,6 +1,8 @@
 import React from "react";
+import { useDialog } from "@/components/Dialog";
 
 function Contact() {
+  const { alert } = useDialog();
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [message, setMessage] = React.useState("");
@@ -27,11 +29,11 @@ function Contact() {
         setSubmitted(true);
       } else {
         console.error("Form submission failed:", data);
-        alert("Failed to send message. Please try again.");
+        alert({ title: "Couldn’t send message", message: "Something went wrong. Please try again.", tone: "danger" });
       }
     } catch (error) {
       console.error("Form submission error:", error);
-      alert("Failed to send message. Please try again.");
+      alert({ title: "Couldn’t send message", message: "Something went wrong. Please try again.", tone: "danger" });
     } finally {
       setLoading(false);
     }

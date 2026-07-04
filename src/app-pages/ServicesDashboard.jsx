@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useUser, useProfile } from '@/lib/stores';
-import { listMySkills, createSkill, updateSkill, deleteSkill, publishSkill } from '@/lib/skills';
+import { useDialog } from '@/components/Dialog';
+import { listMySkills, updateSkill, deleteSkill, publishSkill } from '@/lib/skills';
 import { listCreatorSales } from '@/lib/purchases';
 import { getCreatorEvents } from '@/lib/analytics';
 import {
   Plus, Search, Eye, Pencil, Share2, MoreHorizontal, Trash2,
-  FileText, GraduationCap, CalendarClock, Repeat, Video, Magnet,
-  Boxes, DollarSign, TrendingUp, Users, X,
+  Repeat, DollarSign, TrendingUp, Users, Boxes,
 } from 'lucide-react';
+import { PRODUCT_TYPES, TYPE_BY_ID } from '@/lib/productTypes';
 
 /*
  * ServicesDashboard — /services
@@ -18,22 +19,11 @@ import {
  * (src/lib/purchases.js). Cards filter by skill.kind (migration 011). `views`
  * and `conv` have no source yet, so they render "—" rather than fabricated.
  * Duplicate is intentionally omitted (no server-side clone of blocks yet).
+ *
+ * "New" now routes to the dedicated Add-product page (/build/new) — the
+ * type-first picker replaced the old in-page modal (see PRODUCT_TYPES in
+ * src/lib/productTypes.js, the shared source of truth).
  */
-
-// ── Product types (the Stan-style catalog of what a creator can sell) ──────
-// `id` matches the skills.kind enum (migration 011). `built` = has a real
-// builder + checkout path today; unbuilt kinds can be tagged but not yet sold.
-const PRODUCT_TYPES = [
-  { id: 'digital',    label: 'Digital product', icon: FileText,      blurb: 'Sell a downloadable file, PDF, template, or preset.',        built: true },
-  { id: 'course',     label: 'Online course',   icon: GraduationCap, blurb: 'Multi-module lessons with progress tracking.',              built: false },
-  { id: 'coaching',   label: '1:1 coaching',    icon: CalendarClock, blurb: 'Bookable call slots synced to your availability.',          built: true },
-  { id: 'membership', label: 'Membership',      icon: Repeat,        blurb: 'Recurring subscription for ongoing access.',                built: false },
-  { id: 'webinar',    label: 'Webinar',         icon: Video,         blurb: 'Live or evergreen ticketed online event.',                  built: false },
-  { id: 'lead',       label: 'Lead magnet',     icon: Magnet,        blurb: 'Free freebie that captures emails to your list.',           built: false },
-  { id: 'bundle',     label: 'Bundle',          icon: Boxes,         blurb: 'Package several services together at one price.',           built: false },
-];
-
-const TYPE_BY_ID = Object.fromEntries(PRODUCT_TYPES.map(t => [t.id, t]));
 
 const STATUS_META = {
   active: { label: 'Active', cls: 'sv-st-active' },
@@ -48,13 +38,13 @@ const statusOf = (skill) => (skill.status === 'published' ? 'active' : 'draft');
 export default function ServicesDashboard() {
   const user = useUser();
   const profile = useProfile();
+  const { confirm } = useDialog();
   const navigate = useNavigate();
   const [skills, setSkills] = useState(null);   // null = loading
   const [sales, setSales] = useState([]);
   const [events, setEvents] = useState([]);
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
-  const [showNew, setShowNew] = useState(false);
   const [menuFor, setMenuFor] = useState(null);
   const [toast, setToast] = useState('');
 
@@ -142,13 +132,6 @@ export default function ServicesDashboard() {
   // Public URL for a skill's sales page: /@handle/:skillId (see main.jsx).
   const publicUrl = (id) => profile?.username ? `${window.location.origin}/@${profile.username}/${id}` : null;
 
-  async function createOfKind(kind) {
-    setShowNew(false);
-    try {
-      const s = await createSkill(user.id, { title: 'Untitled Skill', kind });
-      navigate(`/build/${s.id}`);
-    } catch (e) { ping(e.message); }
-  }
 
   function preview(id) {
     const url = publicUrl(id);
@@ -174,7 +157,7 @@ export default function ServicesDashboard() {
 
   async function remove(id) {
     setMenuFor(null);
-    if (!confirm('Delete this service and all its content? This cannot be undone.')) return;
+    if (!(await confirm({ title: 'Delete this product?', message: 'This deletes the product and all its content. This cannot be undone.', confirmLabel: 'Delete', danger: true }))) return;
     try {
       await deleteSkill(id);
       setSkills(prev => prev.filter(x => x.id !== id));
@@ -197,7 +180,7 @@ export default function ServicesDashboard() {
         </div>
         <div className="sv-head-actions">
           <Link to="/dashboard" className="btn btn-secondary btn-sm">View earnings</Link>
-          <button className="sv-new" onClick={() => setShowNew(true)}><Plus size={16} /> New service</button>
+          <button className="sv-new" onClick={() => navigate('/build/new')}><Plus size={16} /> New product</button>
         </div>
       </div>
 
@@ -236,7 +219,7 @@ export default function ServicesDashboard() {
           <div className="sv-empty-icon">🗂️</div>
           <h3>No services here yet</h3>
           <p>{query ? 'Nothing matches your search.' : 'Create your first service to start selling.'}</p>
-          <button className="sv-new" onClick={() => setShowNew(true)}><Plus size={16} /> New service</button>
+          <button className="sv-new" onClick={() => navigate('/build/new')}><Plus size={16} /> New product</button>
         </div>
       ) : (
         <div className="sv-grid">
@@ -286,33 +269,6 @@ export default function ServicesDashboard() {
         </div>
       )}
       </>
-      )}
-
-      {/* ── New-service modal (product-type picker) ── */}
-      {showNew && (
-        <div className="sv-modal-bg" onClick={() => setShowNew(false)}>
-          <div className="sv-modal" onClick={e => e.stopPropagation()}>
-            <button className="sv-modal-close" onClick={() => setShowNew(false)}><X size={18} /></button>
-            <h2 className="sv-modal-title">What do you want to sell?</h2>
-            <p className="sv-modal-sub">Pick a product type to get started.</p>
-            <div className="sv-type-grid">
-              {PRODUCT_TYPES.map(t => {
-                const Icon = t.icon;
-                return (
-                  <button
-                    key={t.id}
-                    className="sv-type-card"
-                    onClick={() => { if (t.built) createOfKind(t.id); else { setShowNew(false); ping(`${t.label} isn't built yet`); } }}
-                  >
-                    <span className="sv-type-icon"><Icon size={20} /></span>
-                    <span className="sv-type-name">{t.label}{!t.built && <span className="sv-soon">Soon</span>}</span>
-                    <span className="sv-type-blurb">{t.blurb}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
       )}
 
       {toast && <div className="sv-toast">{toast}</div>}

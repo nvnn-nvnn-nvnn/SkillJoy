@@ -1,12 +1,23 @@
 import { useState } from 'react';
+import { UploadCloud, Link2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { uploadBlockFile } from '@/lib/storage';
 import { BLOCK_META } from '@/lib/blockTypes';
+import GoogleCalendarConnect from '@/components/GoogleCalendarConnect';
 
 // ── Per-type content-block editor (v3 Skill builder) ────────────────────────
 // Edits ONE content_block. The parent (SkillBuilder) owns the blocks array and
 // persistence; this component calls onPatch(patch) with column changes and
 // onRemove()/onMove(dir) for list ops. NOTE: named BlockEditor (not Block*) to
 // stay clear of BlockButton.jsx / routes/blocks.js, which mean user-blocking.
+
+const MAX_FILE_MB = 50; // keep uploads snappy; bigger files → use a link
+const isHttpUrl = (s) => /^https?:\/\/.+/i.test((s || '').trim());
+
+// Coaching scheduling options.
+const DURATIONS = [15, 30, 45, 60, 90, 120, 180, 240, 360, 480]; // up to 480 min
+const BUFFERS = [0, 5, 10, 15, 30];
+const NOTICE_OPTS = [[0, 'No minimum'], [60, '1 hour'], [120, '2 hours'], [240, '4 hours'], [720, '12 hours'], [1440, '1 day'], [2880, '2 days']];
+const fmtDuration = (m) => m < 60 ? `${m} min` : m % 60 === 0 ? `${m / 60} hr` : `${Math.floor(m / 60)} hr ${m % 60} min`;
 
 export default function BlockEditor({ block, index, total, creatorId, skillId, onPatch, onRemove, onMove }) {
   const meta = BLOCK_META[block.type] ?? { icon: '•', label: block.type };
@@ -17,6 +28,10 @@ export default function BlockEditor({ block, index, total, creatorId, skillId, o
   async function handleFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_FILE_MB * 1024 * 1024) {
+      setUploadErr(`That file is ${(file.size / 1048576).toFixed(0)}MB — max is ${MAX_FILE_MB}MB. For bigger files, use “Link” instead.`);
+      return;
+    }
     setUploadErr(''); setUploading(true);
     try {
       const { key, name } = await uploadBlockFile(creatorId, skillId, file);
@@ -73,13 +88,30 @@ export default function BlockEditor({ block, index, total, creatorId, skillId, o
                 onClick={() => onPatch({ external_url: '', booking_minutes: block.booking_minutes || 30 })}>Native booking</button>
             </div>
             {native ? (
-              <label className="be-native">
-                Session length:&nbsp;
-                <select value={block.booking_minutes || 30} onChange={e => onPatch({ booking_minutes: Number(e.target.value) })}>
-                  {[15, 30, 45, 60, 90].map(m => <option key={m} value={m}>{m} min</option>)}
-                </select>
-                <span className="be-hint">Buyers pick a time from your availability (set it on the Dashboard).</span>
-              </label>
+              <>
+                <div className="be-schedule">
+                  <label className="be-sched-field">
+                    <span className="be-sched-label">Session length</span>
+                    <select value={block.booking_minutes || 30} onChange={e => onPatch({ booking_minutes: Number(e.target.value) })}>
+                      {DURATIONS.map(m => <option key={m} value={m}>{fmtDuration(m)}</option>)}
+                    </select>
+                  </label>
+                  <label className="be-sched-field">
+                    <span className="be-sched-label">Buffer after</span>
+                    <select value={block.buffer_minutes || 0} onChange={e => onPatch({ buffer_minutes: Number(e.target.value) })}>
+                      {BUFFERS.map(m => <option key={m} value={m}>{m ? `${m} min` : 'None'}</option>)}
+                    </select>
+                  </label>
+                  <label className="be-sched-field">
+                    <span className="be-sched-label">Minimum notice</span>
+                    <select value={block.min_notice_minutes || 0} onChange={e => onPatch({ min_notice_minutes: Number(e.target.value) })}>
+                      {NOTICE_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <span className="be-hint">Buyers pick a time from your weekly availability (set your hours + timezone on the Dashboard). Buffer adds a gap after each call; minimum notice blocks last-minute bookings.</span>
+                <GoogleCalendarConnect />
+              </>
             ) : (
               <input className="be-field" value={block.external_url ?? ''}
                 onChange={e => onPatch({ external_url: e.target.value })}
@@ -102,11 +134,36 @@ export default function BlockEditor({ block, index, total, creatorId, skillId, o
         />
       )}
 
-      {/* ── File: upload to the private bucket ── */}
-      {block.type === 'file' && (
-        <FileField uploading={uploading} fileKey={block.file_key} name={uploadName || block.body_text}
-          err={uploadErr} onFile={handleFile} />
-      )}
+      {/* ── File: upload to the private bucket OR link to an external file ── */}
+      {block.type === 'file' && (() => {
+        const linkMode = block.external_url != null; // null = upload mode (default)
+        return (
+          <div className="be-workflow">
+            <div className="be-segmented">
+              <button className={!linkMode ? 'on' : ''}
+                onClick={() => onPatch({ external_url: null })}><UploadCloud size={14} /> Upload</button>
+              <button className={linkMode ? 'on' : ''}
+                onClick={() => onPatch({ file_key: null, external_url: block.external_url || '' })}><Link2 size={14} /> Link</button>
+            </div>
+            {linkMode ? (
+              <>
+                <div className={`be-linkfield${block.external_url && !isHttpUrl(block.external_url) ? ' bad' : ''}`}>
+                  <Link2 size={16} className="be-linkfield-icon" />
+                  <input className="be-linkinput" value={block.external_url ?? ''}
+                    onChange={e => onPatch({ external_url: e.target.value })}
+                    placeholder="https://drive.google.com/… or any download link" />
+                </div>
+                {block.external_url && !isHttpUrl(block.external_url) && (
+                  <span className="be-file-err"><AlertCircle size={14} /> Enter a full link starting with http:// or https://</span>
+                )}
+              </>
+            ) : (
+              <FileField uploading={uploading} fileKey={block.file_key} name={uploadName || block.body_text}
+                err={uploadErr} onFile={handleFile} />
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Workflow: text OR file ── */}
       {block.type === 'workflow' && (
@@ -142,17 +199,46 @@ export default function BlockEditor({ block, index, total, creatorId, skillId, o
         .be-title { width:100%; font-weight:600; margin-bottom:8px; }
         .be-field { width:100%; }
         .be-textarea { resize:vertical; font-family:inherit; }
-        .be-workflow { display:flex; flex-direction:column; gap:8px; }
+        .be-workflow { display:flex; flex-direction:column; gap:10px; }
         .be-segmented { display:flex; gap:0; border:1px solid var(--border-strong); border-radius:var(--r-full); overflow:hidden; width:fit-content; }
-        .be-segmented button { border:none; background:var(--surface); padding:6px 16px; font-size:13px; font-weight:600; color:var(--text-muted); cursor:pointer; }
+        .be-segmented button { display:inline-flex; align-items:center; gap:6px; border:none; background:var(--surface); padding:7px 15px; font-size:13px; font-weight:700; color:var(--text-muted); cursor:pointer; }
         .be-segmented button.on { background:var(--accent); color:#fff; }
-        .be-file { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-        .be-file-label { padding:8px 14px; border:1px dashed var(--border-strong); border-radius:var(--r); background:var(--surface-alt); cursor:pointer; font-size:14px; font-weight:600; color:var(--text-secondary); }
-        .be-file-label:hover { border-color:var(--accent-mid); }
-        .be-file-name { font-size:13px; color:var(--green); font-weight:600; }
-        .be-file-err { font-size:13px; color:var(--accent); }
+
+        .be-file { display:flex; flex-direction:column; gap:8px; }
+
+        /* Upload dropzone — stands out from the panel; accent on hover. */
+        .be-dropzone { display:flex; align-items:center; gap:13px; width:100%; padding:16px; border:2px dashed var(--border-strong); border-radius:var(--r); background:var(--surface); cursor:pointer; transition:border-color .12s ease, background .12s ease; }
+        .be-dropzone:hover { border-color:var(--accent); background:var(--accent-light); }
+        .be-dropzone-icon { display:flex; align-items:center; justify-content:center; width:42px; height:42px; border-radius:var(--r-full); background:var(--accent-light); color:var(--accent-hover); flex-shrink:0; }
+        .be-dropzone-text { display:flex; flex-direction:column; gap:2px; min-width:0; }
+        .be-dropzone-text b { font-size:14px; color:var(--text); }
+        .be-dropzone-hint { font-size:12px; color:var(--text-muted); }
+
+        /* Attached — redundant cues: checkmark icon + shape + "File attached". */
+        .be-file-done { display:flex; align-items:center; gap:12px; width:100%; padding:13px 15px; border:1.5px solid var(--green-mid); border-radius:var(--r); background:var(--green-light); }
+        .be-file-done-icon { display:flex; color:var(--green); flex-shrink:0; }
+        .be-file-done-text { display:flex; flex-direction:column; gap:1px; flex:1; min-width:0; }
+        .be-file-done-text b { font-size:14px; color:var(--text); }
+        .be-file-done-name { font-size:12.5px; color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .be-file-replace { flex-shrink:0; padding:6px 13px; border:1px solid var(--border-strong); border-radius:var(--r-sm); background:var(--surface); font-size:12px; font-weight:700; color:var(--text-secondary); cursor:pointer; }
+        .be-file-replace:hover { border-color:var(--accent); color:var(--accent); }
+
+        /* Link field — icon prefix so it reads as a URL input. */
+        .be-linkfield { display:flex; align-items:center; gap:8px; border:1.5px solid var(--border-strong); border-radius:var(--r); padding:0 12px; background:var(--surface); }
+        .be-linkfield:focus-within { border-color:var(--accent); }
+        .be-linkfield.bad { border-color:#CE4A3E; }
+        .be-linkfield-icon { color:var(--text-muted); flex-shrink:0; }
+        .be-linkinput { flex:1; border:none; padding:10px 0; background:transparent; font-size:14px; }
+        .be-linkinput:focus { outline:none; }
+
+        .be-file-err { display:inline-flex; align-items:center; gap:5px; font-size:13px; color:var(--accent); font-weight:600; }
         .be-native { display:flex; align-items:center; flex-wrap:wrap; gap:6px; font-size:14px; font-weight:600; }
         .be-native select { padding:5px 8px; }
+        .be-schedule { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+        .be-sched-field { display:flex; flex-direction:column; gap:5px; }
+        .be-sched-label { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); }
+        .be-sched-field select { padding:8px 10px; border:1.5px solid var(--border-strong); border-radius:var(--r-sm); background:var(--surface); font-size:14px; font-weight:600; color:var(--text); font-family:inherit; cursor:pointer; }
+        .be-sched-field select:focus { outline:none; border-color:var(--accent); }
         .be-hint { flex-basis:100%; font-weight:400; font-size:12px; color:var(--text-muted); margin-top:4px; }
       `}</style>
     </div>
@@ -160,14 +246,31 @@ export default function BlockEditor({ block, index, total, creatorId, skillId, o
 }
 
 function FileField({ uploading, fileKey, name, err, onFile }) {
+  const attached = fileKey && !uploading;
   return (
     <div className="be-file">
-      <label className="be-file-label">
-        {uploading ? 'Uploading…' : fileKey ? 'Replace file' : 'Choose file'}
-        <input type="file" hidden onChange={onFile} disabled={uploading} />
-      </label>
-      {fileKey && !uploading && <span className="be-file-name">✓ {name || 'File attached'}</span>}
-      {err && <span className="be-file-err">{err}</span>}
+      {attached ? (
+        <div className="be-file-done">
+          <span className="be-file-done-icon"><CheckCircle2 size={20} /></span>
+          <span className="be-file-done-text">
+            <b>File attached</b>
+            <span className="be-file-done-name">{name || 'Ready to deliver'}</span>
+          </span>
+          <label className="be-file-replace">
+            Replace<input type="file" hidden onChange={onFile} />
+          </label>
+        </div>
+      ) : (
+        <label className="be-dropzone">
+          <span className="be-dropzone-icon"><UploadCloud size={22} /></span>
+          <span className="be-dropzone-text">
+            <b>{uploading ? 'Uploading…' : 'Choose a file to upload'}</b>
+            <span className="be-dropzone-hint">PDF, ZIP, video, image — this is what buyers download</span>
+          </span>
+          <input type="file" hidden onChange={onFile} disabled={uploading} />
+        </label>
+      )}
+      {err && <span className="be-file-err"><AlertCircle size={14} /> {err}</span>}
     </div>
   );
 }

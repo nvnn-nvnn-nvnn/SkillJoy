@@ -97,7 +97,11 @@ export default function BlockRenderer({ block, skillId, creatorId, buyerId }) {
       )}
 
       {block.type === 'file' && (
-        <button className="btn btn-secondary" onClick={download} disabled={downloading}>{downloading ? 'Preparing…' : `⬇ Download${block.body_text ? ` ${block.body_text}` : ''}`}</button>
+        block.external_url ? (
+          <a className="btn btn-secondary" href={block.external_url} target="_blank" rel="noopener noreferrer" onClick={markOpen}>⬇ Get your download</a>
+        ) : block.file_key ? (
+          <button className="btn btn-secondary" onClick={download} disabled={downloading}>{downloading ? 'Preparing…' : `⬇ Download${block.body_text ? ` ${block.body_text}` : ''}`}</button>
+        ) : <p className="br-muted">No file added yet.</p>
       )}
 
       {block.type === 'coaching' && (

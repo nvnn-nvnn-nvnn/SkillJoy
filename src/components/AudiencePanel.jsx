@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@/lib/stores';
+import { useDialog } from '@/components/Dialog';
 import { listSubscribers, sendBroadcast } from '@/lib/subscribers';
 
 // ── Audience: subscribers + broadcast composer (v3, Phase 9) ────────────────
 export default function AudiencePanel() {
   const user = useUser();
+  const { confirm } = useDialog();
   const [subs, setSubs] = useState(null);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -26,7 +28,7 @@ export default function AudiencePanel() {
 
   async function send() {
     if (!subject.trim() || !body.trim()) { setErr('Add a subject and a message.'); return; }
-    if (!confirm(`Send to ${subs.length} subscriber${subs.length === 1 ? '' : 's'}?`)) return;
+    if (!(await confirm({ title: 'Send broadcast?', message: `This emails ${subs.length} subscriber${subs.length === 1 ? '' : 's'}.`, confirmLabel: 'Send' }))) return;
     setBusy(true); setErr(''); setMsg('');
     try {
       const { sent, failed } = await sendBroadcast(subject.trim(), body.trim());

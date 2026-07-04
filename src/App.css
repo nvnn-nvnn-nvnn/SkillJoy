@@ -66,6 +66,36 @@ button,
   padding: 8px 14px;
 }
 
+/* ── Shared back button (BackLink.jsx) ── */
+.bl {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 15px 7px 12px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: color .14s ease, border-color .14s ease, background .14s ease;
+  margin-bottom: 18px;
+}
+.bl:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-alt);
+  text-decoration: none;
+}
+.bl-icon { transition: transform .14s ease; }
+.bl:hover .bl-icon { transform: translateX(-2px); }
+.bl-label { white-space: nowrap; }
+/* Inline variant for toolbars/rows — no page-top spacing. */
+.bl.bl-inline { margin-bottom: 0; }
+
 .btn-ghost:hover {
   color: var(--text);
   background: var(--surface-alt);

@@ -2,25 +2,57 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useUser } from '@/lib/stores';
 import {
-  listMySkills, getSkillWithBlocks, createSkill, updateSkill, deleteSkill,
+  listMySkills, getSkillWithBlocks, updateSkill, deleteSkill,
   addBlock, updateBlock, deleteBlock, reorderBlocks, publishSkill, publishUpdate,
 } from '@/lib/skills';
+import {
+  listSections, createSection, updateSection, deleteSection, reorderSections,
+} from '@/lib/course';
+import { Trash2, Send, EyeOff } from 'lucide-react';
 import { uploadCover } from '@/lib/storage';
 import { BLOCK_TYPES } from '@/lib/blockTypes';
+import { PRODUCT_TYPES } from '@/lib/productTypes';
 import BlockEditor from '@/components/BlockEditor';
+import CourseStructure from '@/components/CourseStructure';
+import BackLink from '@/components/BackLink';
+import { useDialog } from '@/components/Dialog';
 
-// Product kinds — what a Skill *is* (powers the /services type tabs). Independent
-// of pricing_type (how it bills). Keep in sync with the skills.kind CHECK in
-// migration 011_service_kinds.sql.
-const SKILL_KINDS = [
-  ['digital', 'Digital product'],
-  ['course', 'Online course'],
-  ['coaching', '1:1 coaching'],
-  ['membership', 'Membership'],
-  ['webinar', 'Webinar'],
-  ['lead', 'Lead magnet'],
-  ['bundle', 'Bundle'],
+// Product `kind` (what a Skill *is*) is picked from the shared PRODUCT_TYPES
+// catalog — same source as the /build/new picker. Independent of pricing_type.
+// Keep in sync with the skills.kind CHECK in migration 011_service_kinds.sql.
+
+// Per-kind copy that makes the builder feel type-aware. `content` nudges the
+// creator toward the block(s) that matter for that product type. Keyed by
+// skills.kind; falls back to `digital`.
+const KIND_HINTS = {
+  digital:    { content: 'Add a File block for the download buyers get, plus any guide or video that explains it.' },
+  coaching:   { content: 'Add a Coaching block with your booking link so buyers can schedule after paying.' },
+  course:     { content: 'Break your course into sections, then add video, guide, or file lessons inside each — in the order students should follow.' },
+  membership: { content: 'Add the content members get ongoing access to — you can push updates any time.' },
+  webinar:    { content: 'Add a Video block for the recording or a Guide with the join link and details.' },
+  lead:       { content: 'Keep it light — a single File or Guide block is enough for a free lead magnet.' },
+  bundle:     { content: 'Add everything included in the bundle as separate blocks.' },
+};
+
+// The 5 builder steps. The middle step (index 1) is type-aware: its label +
+// heading swap by product kind, so a digital product walks through "Delivery"
+// while coaching walks through "Scheduling" — same shell, different body.
+const MIDDLE_LABEL = { digital: 'Delivery', coaching: 'Scheduling', course: 'Curriculum' };
+const stepsFor = (kind) => ['Basics', MIDDLE_LABEL[kind] || 'Content', 'Pricing', 'Options', 'Publish'];
+
+// Post-purchase / marketing features that need dedicated backend passes
+// (money + 3rd-party). Shown as "Soon" cards in the Options tab for now.
+const SOON_OPTIONS = [
+  ['🛒', 'Order bump', 'Offer an add-on at checkout to lift order value.'],
+  ['🤝', 'Affiliate share', 'Let others promote this for a commission.'],
+  ['📧', 'Email integration', 'Sync buyers to Mailchimp, ConvertKit & more.'],
 ];
+
+// A digital product must deliver something: a File block with either an
+// uploaded file (file_key) or a VALID external link (a malformed link would
+// ship a broken download, so it doesn't count).
+const hasDelivery = (blocks) => blocks.some(b =>
+  b.type === 'file' && (b.file_key || /^https?:\/\/.+/i.test((b.external_url || '').trim())));
 
 // Phase 2 — the make-or-break screen. /build lists my Skills; /build/:skillId
 // edits one (meta + cover + price + reorderable mixed blocks + publish).
@@ -35,19 +67,9 @@ export default function SkillBuilder() {
 
 // ── List view ───────────────────────────────────────────────────────────────
 function SkillList({ userId }) {
-  const navigate = useNavigate();
   const [skills, setSkills] = useState(null);
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => { listMySkills(userId).then(setSkills).catch(() => setSkills([])); }, [userId]);
-
-  async function newSkill() {
-    setCreating(true);
-    try {
-      const s = await createSkill(userId, { title: 'Untitled Skill' });
-      navigate(`/build/${s.id}`);
-    } catch (e) { alert(e.message); setCreating(false); }
-  }
 
   return (
     <div className="sb-wrap">
@@ -56,9 +78,7 @@ function SkillList({ userId }) {
           <h1 className="sb-h1">Your Skills</h1>
           <p className="sb-sub">Each Skill is one thing you sell — mix video, files, prompts, guides & coaching.</p>
         </div>
-        <button className="btn btn-primary" onClick={newSkill} disabled={creating}>
-          {creating ? 'Creating…' : '+ New Skill'}
-        </button>
+        <Link to="/build/new" className="btn btn-primary">+ New product</Link>
       </div>
 
       {skills === null && <p className="sb-muted">Loading…</p>}
@@ -67,6 +87,7 @@ function SkillList({ userId }) {
           <p style={{ fontSize: 40 }}>🧩</p>
           <p className="sb-empty-t">No Skills yet</p>
           <p className="sb-muted">Create your first Skill and drop in some content blocks.</p>
+          <Link to="/build/new" className="btn btn-primary" style={{ marginTop: 16 }}>+ New product</Link>
         </div>
       )}
 
@@ -95,6 +116,7 @@ function SkillList({ userId }) {
 // ── Editor view ───────────────────────────────────────────────────────────────
 function SkillEditor({ skillId, userId }) {
   const navigate = useNavigate();
+  const { confirm, alert } = useDialog();
   const [skill, setSkill] = useState(null);
   const [blocks, setBlocks] = useState([]);
   const [loadErr, setLoadErr] = useState('');
@@ -107,11 +129,34 @@ function SkillEditor({ skillId, userId }) {
   const pendingBlock = useRef({});   // { [blockId]: accumulated patch }
   const addMenu = useRef(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [step, setStep] = useState(0);
+  const [sections, setSections] = useState([]);   // course sections (course kind)
+  const sectionTimers = useRef({});                // debounced section-title saves
 
   useEffect(() => {
-    getSkillWithBlocks(skillId)
-      .then(s => { setSkill(s); setBlocks(s.blocks ?? []); })
-      .catch(e => setLoadErr(e.message));
+    let alive = true;
+    (async () => {
+      try {
+        const s = await getSkillWithBlocks(skillId);
+        if (!alive) return;
+        let loaded = s.blocks ?? [];
+        // Coaching products always need a booking block — seed one if missing.
+        // (Creators can still add other blocks; this just guarantees the core.)
+        if (s.kind === 'coaching' && !loaded.some(b => b.type === 'coaching')) {
+          const created = await addBlock(skillId, { type: 'coaching', position: loaded.length, title: '', booking_minutes: 30 });
+          if (!alive) return;
+          loaded = [...loaded, created];
+        }
+        if (s.kind === 'course') {
+          const secs = await listSections(skillId);
+          if (!alive) return;
+          setSections(secs);
+        }
+        setSkill(s);
+        setBlocks(loaded);
+      } catch (e) { if (alive) setLoadErr(e.message); }
+    })();
+    return () => { alive = false; };
   }, [skillId]);
 
   // Debounced skill-meta save. Accumulate patches so editing several fields
@@ -158,7 +203,7 @@ function SkillEditor({ skillId, userId }) {
       const url = await uploadCover(userId, skillId, file);
       await updateSkill(skillId, { cover_url: url });
       setSkill(prev => ({ ...prev, cover_url: url }));
-    } catch (err) { alert(err.message); }
+    } catch (err) { alert({ title: 'Upload failed', message: err.message, tone: 'danger' }); }
     finally { setSavingCover(false); }
   }
 
@@ -167,10 +212,17 @@ function SkillEditor({ skillId, userId }) {
     try {
       const created = await addBlock(skillId, { type, position: blocks.length, title: '' });
       setBlocks(prev => [...prev, created]);
-    } catch (e) { alert(e.message); }
+    } catch (e) { alert({ title: 'Couldn’t add block', message: e.message, tone: 'danger' }); }
   }
 
   async function removeBlock(blockId) {
+    // A coaching product must keep at least one coaching block (the booking core).
+    const target = blocks.find(b => b.id === blockId);
+    if (skill.kind === 'coaching' && target?.type === 'coaching'
+        && blocks.filter(b => b.type === 'coaching').length <= 1) {
+      await alert({ title: 'Keep the booking block', message: 'Coaching products need a coaching block so buyers can book a time. You can add other blocks around it, but this one has to stay.', tone: 'warning' });
+      return;
+    }
     setBlocks(prev => prev.filter(b => b.id !== blockId));
     try { await deleteBlock(blockId); } catch (e) { console.warn(e.message); }
   }
@@ -184,125 +236,399 @@ function SkillEditor({ skillId, userId }) {
     try { await reorderBlocks(next.map(b => b.id)); } catch (e) { console.warn(e.message); }
   }
 
+  // ── Course: section + lesson handlers ──────────────────────────────────────
+  async function addSection() {
+    try {
+      const created = await createSection(skillId, sections.length);
+      setSections(prev => [...prev, created]);
+    } catch (e) { alert({ title: 'Couldn’t add section', message: e.message, tone: 'danger' }); }
+  }
+
+  function patchSection(id, patch) {
+    setSections(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
+    clearTimeout(sectionTimers.current[id]);
+    sectionTimers.current[id] = setTimeout(() => {
+      updateSection(id, patch).catch(e => console.warn('save section', e.message));
+    }, 500);
+  }
+
+  async function removeSection(id) {
+    const ok = await confirm({ title: 'Delete this section?', message: 'This removes the section and every lesson inside it. This cannot be undone.', confirmLabel: 'Delete', danger: true });
+    if (!ok) return;
+    setSections(prev => prev.filter(s => s.id !== id));
+    setBlocks(prev => prev.filter(b => b.section_id !== id)); // DB cascades; mirror in state
+    try { await deleteSection(id); } catch (e) { console.warn(e.message); }
+  }
+
+  async function moveSection(id, dir) {
+    const idx = sections.findIndex(s => s.id === id);
+    const j = idx + dir;
+    if (j < 0 || j >= sections.length) return;
+    const next = [...sections];
+    [next[idx], next[j]] = [next[j], next[idx]];
+    setSections(next);
+    try { await reorderSections(next.map(s => s.id)); } catch (e) { console.warn(e.message); }
+  }
+
+  async function addLesson(sectionId, type) {
+    try {
+      const pos = blocks.filter(b => b.section_id === sectionId).length;
+      const created = await addBlock(skillId, { type, section_id: sectionId, position: pos, title: '' });
+      setBlocks(prev => [...prev, created]);
+    } catch (e) { alert({ title: 'Couldn’t add lesson', message: e.message, tone: 'danger' }); }
+  }
+
+  async function moveLesson(blockId, dir) {
+    const b = blocks.find(x => x.id === blockId);
+    if (!b) return;
+    const sibs = blocks.filter(x => x.section_id === b.section_id).sort((a, c) => a.position - c.position);
+    const idx = sibs.findIndex(x => x.id === blockId);
+    const j = idx + dir;
+    if (j < 0 || j >= sibs.length) return;
+    [sibs[idx], sibs[j]] = [sibs[j], sibs[idx]];
+    const posById = new Map(sibs.map((x, i) => [x.id, i]));
+    setBlocks(prev => prev.map(x => posById.has(x.id) ? { ...x, position: posById.get(x.id) } : x));
+    try { await reorderBlocks(sibs.map(x => x.id)); } catch (e) { console.warn(e.message); }
+  }
+
   async function togglePublish() {
-    if (skill.status !== 'published') {
-      if (!skill.title?.trim()) { alert('Add a title before publishing.'); return; }
-      if (blocks.length === 0) { alert('Add at least one content block before publishing.'); return; }
+    const publishing = skill.status !== 'published';
+    if (publishing) {
+      const k = skill.kind ?? 'digital';
+      if (!skill.title?.trim()) { await alert({ title: 'Add a title first', message: 'Give your product a title before publishing.', tone: 'warning' }); return; }
+      if (k === 'course') {
+        if (!sections.some(sec => blocks.some(b => b.section_id === sec.id))) {
+          await alert({ title: 'Add a lesson', message: 'A course needs at least one section with a lesson inside it before publishing.', tone: 'warning' });
+          return;
+        }
+      } else if (blocks.length === 0) {
+        await alert({ title: 'Add some content', message: 'Add at least one content block before publishing.', tone: 'warning' }); return;
+      }
+      if (k === 'digital' && !hasDelivery(blocks)) {
+        await alert({ title: 'Add your download', message: 'A digital product needs a File block with an uploaded file or a link, so buyers actually get something after paying.', tone: 'warning' });
+        return;
+      }
     }
+
+    // Confirm the state change (reflects what will happen).
+    const ok = await confirm(publishing
+      ? { title: 'Publish this product?', message: 'It’ll go live on your storefront and anyone can buy it.', confirmLabel: 'Publish' }
+      : { title: 'Unpublish this product?', message: 'It’ll be hidden from your storefront and can’t be bought. Existing buyers keep their access.', confirmLabel: 'Unpublish', danger: true });
+    if (!ok) return;
+
     setBusy(true);
     try {
-      const updated = skill.status === 'published'
-        ? await updateSkill(skillId, { status: 'draft' })
-        : await publishSkill(skillId);
+      const updated = publishing
+        ? await publishSkill(skillId)
+        : await updateSkill(skillId, { status: 'draft' });
       setSkill(prev => ({ ...prev, status: updated.status }));
-    } catch (e) { alert(e.message); }
+      // Reflect the new state.
+      await alert(publishing
+        ? { title: 'You’re live! 🎉', message: `“${skill.title || 'Your product'}” is now on your storefront.` }
+        : { title: 'Unpublished', message: `“${skill.title || 'Your product'}” is hidden from your storefront.`, tone: 'warning' });
+    } catch (e) { alert({ title: 'Couldn’t publish', message: e.message, tone: 'danger' }); }
     finally { setBusy(false); }
   }
 
   async function pushUpdate() {
-    if (!confirm('Push an update? Everyone who bought this Skill gets the new version and a notification.')) return;
+    const ok = await confirm({
+      title: 'Push an update?',
+      message: 'Everyone who bought this product gets the new version and a notification.',
+      confirmLabel: 'Push update',
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       const { version } = await publishUpdate(skillId);
       setSkill(prev => ({ ...prev, version }));
-      alert(`Update pushed — buyers are now on v${version}.`);
-    } catch (e) { alert(e.message); }
+      await alert({ title: 'Update pushed', message: `Buyers are now on v${version}.` });
+    } catch (e) { alert({ title: 'Couldn’t push update', message: e.message, tone: 'danger' }); }
     finally { setBusy(false); }
   }
 
   async function removeSkill() {
-    if (!confirm('Delete this Skill and all its content? This cannot be undone.')) return;
+    const ok = await confirm({
+      title: 'Delete this product?',
+      message: 'This deletes the product and all its content. This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     try { await deleteSkill(skillId); navigate('/build'); }
-    catch (e) { alert(e.message); }
+    catch (e) { alert({ title: 'Couldn’t delete', message: e.message, tone: 'danger' }); }
   }
 
-  if (loadErr) return <div className="sb-wrap"><p className="sb-muted">Couldn’t load this Skill: {loadErr}</p><Link to="/build" className="btn btn-secondary">← Back</Link></div>;
+  if (loadErr) return <div className="sb-wrap"><p className="sb-muted">Couldn’t load this Skill: {loadErr}</p><BackLink to="/build">All products</BackLink></div>;
   if (!skill) return <div className="sb-wrap"><p className="sb-muted">Loading…</p></div>;
+
+  const kind = skill.kind ?? 'digital';
+  const courseHasLesson = sections.some(sec => blocks.some(b => b.section_id === sec.id));
+  const contentOk = kind === 'course' ? courseHasLesson : blocks.length > 0;
+  const ready = !!skill.title?.trim() && contentOk && (kind !== 'digital' || hasDelivery(blocks));
+  const steps = stepsFor(kind);
+  const last = steps.length - 1;
+  const midHeading = steps[1]; // Delivery | Scheduling | Content
 
   return (
     <div className="sb-wrap">
       <div className="sb-editbar">
-        <Link to="/build" className="btn btn-ghost btn-sm">← All Skills</Link>
+        <BackLink to="/build" className="bl-inline">All products</BackLink>
         <span className="sb-saved">
           {skill.status === 'published' && <span className="sb-ver">v{skill.version}</span>}
           {savedAt ? 'Saved ✓' : ''}
         </span>
         <div className="sb-editbar-actions">
-          <button className="btn btn-ghost btn-sm sb-danger" onClick={removeSkill}>Delete</button>
+          <button className="sb-actbtn sb-act-delete" onClick={removeSkill}>
+            <Trash2 size={16} /> Delete
+          </button>
           {skill.status === 'published' && (
-            <button className="btn btn-secondary btn-sm" onClick={pushUpdate} disabled={busy} title="Bump version + notify buyers">
-              Push update
+            <button className="sb-actbtn sb-act-update" onClick={togglePublish} disabled={busy} title="Hide from your storefront">
+              <EyeOff size={16} /> Unpublish
             </button>
           )}
-          <button className="btn btn-primary btn-sm" onClick={togglePublish} disabled={busy}>
-            {skill.status === 'published' ? 'Unpublish' : 'Publish'}
+        </div>
+      </div>
+
+      {/* Stepper — the middle step is type-aware; save engine unchanged. */}
+      <nav className="sb-steps">
+        {steps.map((label, i) => (
+          <button key={label} type="button"
+            className={`sb-step${i === step ? ' on' : ''}${i < step ? ' done' : ''}`}
+            onClick={() => setStep(i)}>
+            <span className="sb-step-num">{i < step ? '✓' : i + 1}</span>
+            <span className="sb-step-label">{label}</span>
           </button>
-        </div>
-      </div>
+        ))}
+      </nav>
 
-      {/* Cover */}
-      <label className="sb-coveredit" style={skill.cover_url ? { backgroundImage: `url(${skill.cover_url})` } : {}}>
-        <input type="file" accept="image/*" hidden onChange={onCover} />
-        <span className="sb-cover-cta">{savingCover ? 'Uploading…' : skill.cover_url ? 'Change cover' : '+ Add cover image'}</span>
-      </label>
+      {/* ── 0 · Basics ── */}
+      {step === 0 && (
+        <div className="sb-panel">
+          <label className="sb-coveredit" style={skill.cover_url ? { backgroundImage: `url(${skill.cover_url})` } : {}}>
+            <input type="file" accept="image/*" hidden onChange={onCover} />
+            <span className="sb-cover-cta">{savingCover ? 'Uploading…' : skill.cover_url ? 'Change cover' : '+ Add cover image'}</span>
+          </label>
 
-      {/* Meta */}
-      <input className="sb-titleinput" value={skill.title ?? ''}
-        onChange={e => patchSkill({ title: e.target.value })} placeholder="Skill title" />
-      <input className="sb-outcomeinput" value={skill.outcome ?? ''}
-        onChange={e => patchSkill({ outcome: e.target.value })}
-        placeholder="One-line promise (e.g. “Ship your first AI app in a weekend”)" />
+          <input className="sb-titleinput" value={skill.title ?? ''}
+            onChange={e => patchSkill({ title: e.target.value })} placeholder="Product title" />
+          <input className="sb-outcomeinput" value={skill.outcome ?? ''}
+            onChange={e => patchSkill({ outcome: e.target.value })}
+            placeholder="One-line header (e.g. “Ship your first AI app in a weekend”)" />
 
-      <div className="sb-pricerow">
-        <div className="sb-pricefield">
-          <span className="sb-dollar">$</span>
-          <input type="number" min="0" step="1" className="sb-price-in"
-            value={skill.price_cents ? skill.price_cents / 100 : ''}
-            onChange={e => patchSkill({ price_cents: Math.max(0, Math.round((parseFloat(e.target.value) || 0) * 100)) })}
-            placeholder="0" />
-        </div>
-        <div className="sb-segmented">
-          <button className={skill.pricing_type === 'onetime' ? 'on' : ''} onClick={() => patchSkill({ pricing_type: 'onetime' })}>One-time</button>
-          <button className={skill.pricing_type === 'membership' ? 'on' : ''} onClick={() => patchSkill({ pricing_type: 'membership' })}>Membership</button>
-        </div>
-      </div>
-
-      {/* Type — what this Skill is (powers the Services dashboard tabs) */}
-      <div className="sb-kindrow">
-        <label className="sb-kindlabel" htmlFor="sb-kind">Type</label>
-        <select id="sb-kind" className="sb-kind-select" value={skill.kind ?? 'digital'}
-          onChange={e => patchSkill({ kind: e.target.value })}>
-          {SKILL_KINDS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select>
-      </div>
-
-      {/* Blocks */}
-      <div className="sb-blockshead">
-        <h2 className="sb-h2">Content</h2>
-        <span className="sb-muted">{blocks.length} block{blocks.length === 1 ? '' : 's'}</span>
-      </div>
-
-      {blocks.map((b, i) => (
-        <BlockEditor key={b.id} block={b} index={i} total={blocks.length}
-          creatorId={userId} skillId={skillId}
-          onPatch={(patch) => patchBlock(b.id, patch)}
-          onRemove={() => removeBlock(b.id)}
-          onMove={(dir) => moveBlock(i, dir)} />
-      ))}
-
-      {/* Add block */}
-      <div className="sb-add" ref={addMenu}>
-        <button className="btn btn-secondary sb-addbtn" onClick={() => setMenuOpen(o => !o)}>+ Add content block</button>
-        {menuOpen && (
-          <div className="sb-addmenu">
-            {BLOCK_TYPES.map(t => (
-              <button key={t.type} className="sb-addmenu-item" onClick={() => addContentBlock(t.type)}>
-                <span className="sb-addmenu-icon">{t.icon}</span>
-                <span><b>{t.label}</b><span className="sb-addmenu-hint">{t.hint}</span></span>
-              </button>
-            ))}
+          <div className="sb-typefield">
+            <span className="sb-fieldlabel">Description</span>
+            <textarea className="sb-field sb-textarea" rows={5} value={skill.description ?? ''}
+              onChange={e => patchSkill({ description: e.target.value })}
+              placeholder="Tell buyers what this is, who it’s for, and what they’ll get. This is your pitch on the sales page." />
           </div>
-        )}
+
+          {/* Read-only display of the chosen product type (set on /build/new). */}
+          <div className="sb-typefield">
+            <span className="sb-fieldlabel">Type</span>
+            {(() => {
+              const t = PRODUCT_TYPES.find(x => x.id === kind) || PRODUCT_TYPES[0];
+              const Icon = t.icon;
+              return (
+                <div className="sb-typedisplay">
+                  <span className="sb-typedisplay-icon"><Icon size={18} /></span>
+                  <span>{t.label}</span>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Type SELECTOR — commented out for now (may re-introduce so creators
+              can re-classify from the builder). Kept intentionally, do not delete.
+          <div className="sb-typefield">
+            <span className="sb-fieldlabel">Type</span>
+            <div className="sb-typegrid">
+              {PRODUCT_TYPES.map(t => {
+                const Icon = t.icon;
+                return (
+                  <button key={t.id} type="button"
+                    className={`sb-typetile${kind === t.id ? ' on' : ''}`}
+                    onClick={() => patchSkill({ kind: t.id })}>
+                    <span className="sb-typetile-icon"><Icon size={17} /></span>
+                    <span className="sb-typetile-label">{t.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          */}
+        </div>
+      )}
+
+      {/* ── 1 · Delivery / Scheduling / Curriculum / Content (type-aware) ── */}
+      {step === 1 && (
+        <div className="sb-panel">
+          <div className="sb-blockshead">
+            <h2 className="sb-h2">{midHeading}</h2>
+            <span className="sb-muted">
+              {kind === 'course'
+                ? `${sections.length} section${sections.length === 1 ? '' : 's'}`
+                : `${blocks.length} block${blocks.length === 1 ? '' : 's'}`}
+            </span>
+          </div>
+          <p className="sb-hint">{KIND_HINTS[kind]?.content ?? KIND_HINTS.digital.content}</p>
+
+          {kind === 'course' ? (
+            <CourseStructure
+              skillId={skillId} creatorId={userId} sections={sections} blocks={blocks}
+              onAddSection={addSection} onPatchSection={patchSection}
+              onRemoveSection={removeSection} onMoveSection={moveSection}
+              onAddLesson={addLesson} patchBlock={patchBlock}
+              onRemoveLesson={removeBlock} onMoveLesson={moveLesson} />
+          ) : (
+            <>
+              {blocks.map((b, i) => (
+                <BlockEditor key={b.id} block={b} index={i} total={blocks.length}
+                  creatorId={userId} skillId={skillId}
+                  onPatch={(patch) => patchBlock(b.id, patch)}
+                  onRemove={() => removeBlock(b.id)}
+                  onMove={(dir) => moveBlock(i, dir)} />
+              ))}
+
+              <div className="sb-add" ref={addMenu}>
+                {!menuOpen ? (
+                  <button className="sb-addtrigger" onClick={() => setMenuOpen(true)}>+ Add content block</button>
+                ) : (
+                  <div className="sb-addpicker">
+                    <div className="sb-addpicker-head">
+                      <span className="sb-addpicker-title">Add a content block</span>
+                      <button className="sb-addpicker-cancel" onClick={() => setMenuOpen(false)}>Cancel</button>
+                    </div>
+                    <div className="sb-addgrid">
+                      {BLOCK_TYPES.map(t => (
+                        <button key={t.type} className="sb-addtile" onClick={() => addContentBlock(t.type)}>
+                          <span className="sb-addtile-icon">{t.icon}</span>
+                          <span className="sb-addtile-label">{t.label}</span>
+                          <span className="sb-addtile-hint">{t.hint}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── 2 · Pricing ── */}
+      {step === 2 && (
+        <div className="sb-panel">
+          <h2 className="sb-h2">Pricing</h2>
+          <div className="sb-pricerow">
+            <div className="sb-pricefield">
+              <span className="sb-dollar">$</span>
+              <input type="number" min="0" step="1" className="sb-price-in"
+                value={skill.price_cents ? skill.price_cents / 100 : ''}
+                onChange={e => patchSkill({ price_cents: Math.max(0, Math.round((parseFloat(e.target.value) || 0) * 100)) })}
+                placeholder="0" />
+            </div>
+            <div className="sb-segmented">
+              <button className={skill.pricing_type === 'onetime' ? 'on' : ''} onClick={() => patchSkill({ pricing_type: 'onetime' })}>One-time</button>
+              <button className={skill.pricing_type === 'membership' ? 'on' : ''} onClick={() => patchSkill({ pricing_type: 'membership' })}>Membership</button>
+            </div>
+          </div>
+          <p className="sb-hint">
+            {!skill.price_cents
+              ? 'Free — buyers get instant access with no payment.'
+              : skill.pricing_type === 'membership'
+                ? 'Members are billed monthly until they cancel.'
+                : 'A single one-time payment for lifetime access.'}
+          </p>
+          <p className="sb-hint sb-hint-muted">Promo codes are managed per-creator on your dashboard, not here.</p>
+        </div>
+      )}
+
+      {/* ── 3 · Checkout & Options (post-purchase / marketing) ── */}
+      {step === 3 && (
+        <div className="sb-panel">
+          {/* Promo video */}
+          <div className="sb-typefield">
+            <span className="sb-fieldlabel">Promo video</span>
+            <input className="sb-field" value={skill.promo_video_url ?? ''}
+              onChange={e => patchSkill({ promo_video_url: e.target.value })}
+              placeholder="https://youtube.com/watch?v=… or vimeo.com/…" />
+            <p className="sb-hint sb-hint-muted">Shown at the top of your sales page to warm buyers up.</p>
+          </div>
+
+          {/* Confirmation message */}
+          <div className="sb-typefield">
+            <span className="sb-fieldlabel">Confirmation email message</span>
+            <textarea className="sb-field sb-textarea" rows={4} value={skill.confirmation_message ?? ''}
+              onChange={e => patchSkill({ confirmation_message: e.target.value })}
+              placeholder="Add a personal note buyers see in their receipt — e.g. “Thanks! Reply here if you get stuck.”" />
+            <p className="sb-hint sb-hint-muted">Buyers always get a receipt with a link to their Locker; this adds your message to it.</p>
+          </div>
+
+          {/* Reviews toggle */}
+          <div className="sb-optrow">
+            <div>
+              <span className="sb-fieldlabel">Customer reviews</span>
+              <p className="sb-opthint">Let buyers rate this product; show the average on your sales page.</p>
+            </div>
+            <button type="button" role="switch" aria-checked={skill.reviews_enabled !== false}
+              className={`sb-toggle${skill.reviews_enabled !== false ? ' on' : ''}`}
+              onClick={() => patchSkill({ reviews_enabled: !(skill.reviews_enabled !== false) })}>
+              <span className="sb-toggle-knob" />
+            </button>
+          </div>
+
+          {/* Coming soon */}
+          <div>
+            <span className="sb-fieldlabel">More, soon</span>
+            <div className="sb-typegrid" style={{ marginTop: 10 }}>
+              {SOON_OPTIONS.map(([icon, label, blurb]) => (
+                <div key={label} className="sb-addtile sb-soontile">
+                  <span className="sb-addtile-icon">{icon}</span>
+                  <span className="sb-addtile-label">{label}<span className="sb-soonchip">Soon</span></span>
+                  <span className="sb-addtile-hint">{blurb}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 4 · Publish ── */}
+      {step === 4 && (
+        <div className="sb-panel">
+          <h2 className="sb-h2">Publish</h2>
+          <ul className="sb-checklist sb-publishlist">
+            <li className={skill.title?.trim() ? 'ok' : ''}>{skill.title?.trim() ? '✓' : '○'} Product has a title</li>
+            {kind === 'course' ? (
+              <li className={courseHasLesson ? 'ok' : ''}>{courseHasLesson ? '✓' : '○'} A section with at least one lesson</li>
+            ) : (
+              <li className={blocks.length > 0 ? 'ok' : ''}>{blocks.length > 0 ? '✓' : '○'} At least one content block</li>
+            )}
+            {kind === 'digital' && (
+              <li className={hasDelivery(blocks) ? 'ok' : ''}>{hasDelivery(blocks) ? '✓' : '○'} A download to deliver (file or link)</li>
+            )}
+            <li className="ok">✓ {skill.price_cents ? `$${(skill.price_cents / 100).toFixed(2)} ${skill.pricing_type === 'membership' ? '/mo' : 'one-time'}` : 'Free'}</li>
+          </ul>
+          <p className="sb-hint">
+            {skill.status === 'published'
+              ? `This product is live (v${skill.version}). Use “Push update” below to send changes to existing buyers, or “Unpublish” up top to take it down.`
+              : ready
+                ? 'You’re ready — hit Publish below to make this product live on your storefront.'
+                : 'Finish the checklist above, then Publish becomes meaningful.'}
+          </p>
+        </div>
+      )}
+
+      {/* Step footer */}
+      <div className="sb-stepnav">
+        {step > 0
+          ? <button className="btn btn-ghost" onClick={() => setStep(s => Math.max(0, s - 1))}>← Back</button>
+          : <span />}
+        {step < last
+          ? <button className="btn btn-primary" onClick={() => setStep(s => Math.min(last, s + 1))}>Next →</button>
+          : skill.status === 'published'
+            ? <button className="btn btn-primary" onClick={pushUpdate} disabled={busy}>Push update</button>
+            : <button className="btn btn-primary" onClick={togglePublish} disabled={busy}>Publish</button>}
       </div>
 
       <BuilderStyles />
@@ -313,7 +639,7 @@ function SkillEditor({ skillId, userId }) {
 // ── Shared styles ─────────────────────────────────────────────────────────────
 function BuilderStyles() {
   return <style>{`
-    .sb-wrap { max-width:680px; margin:0 auto; padding:24px 16px 80px; }
+    .sb-wrap { max-width:680px; margin:0 auto; padding:28px 20px 96px; }
     .sb-h1 { font-size:26px; font-weight:700; color:var(--text); }
     .sb-h2 { font-size:18px; font-weight:700; color:var(--text); }
     .sb-sub { color:var(--text-secondary); font-size:14px; margin-top:4px; max-width:42ch; }
@@ -336,11 +662,21 @@ function BuilderStyles() {
     .sb-card-title { font-weight:700; color:var(--text); }
     .sb-card-outcome { font-size:13px; color:var(--text-secondary); margin-top:2px; }
 
-    .sb-editbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:16px; }
-    .sb-editbar-actions { display:flex; gap:8px; }
-    .sb-saved { font-size:13px; color:var(--green); font-weight:600; flex:1; text-align:center; display:flex; gap:8px; justify-content:center; align-items:center; }
+    .sb-editbar { display:flex; align-items:center; justify-content:space-between; gap:12px; row-gap:12px; margin-bottom:24px; padding-bottom:18px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+    .sb-editbar-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .sb-saved { font-size:13px; color:var(--green); font-weight:600; flex:1; min-width:80px; text-align:center; display:flex; gap:8px; justify-content:center; align-items:center; }
     .sb-ver { font-size:11px; font-weight:700; color:var(--text-muted); background:var(--surface-alt); padding:2px 8px; border-radius:var(--r-full); }
-    .sb-danger { color:var(--accent); }
+
+
+    /* Bigger, distinct action buttons (override the global button reset). */
+    .sb-actbtn { display:inline-flex; align-items:center; gap:7px; padding:11px 20px; font-size:14.5px; font-weight:700; border-radius:var(--r-full); border:1.5px solid transparent; cursor:pointer; white-space:nowrap; transition:transform .1s ease, background .12s ease, border-color .12s ease, color .12s ease; }
+    .sb-actbtn:disabled { opacity:.55; cursor:default; }
+    .sb-act-publish { background:var(--accent); color:var(--accent-foreground); }
+    .sb-act-publish:hover:not(:disabled) { background:var(--accent-hover); transform:translateY(-1px); box-shadow:var(--shadow-accent); }
+    .sb-act-update { background:var(--surface); color:var(--text); border-color:var(--border-strong); }
+    .sb-act-update:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+    .sb-act-delete { background:none; color:var(--text-muted); padding-left:14px; padding-right:14px; }
+    .sb-act-delete:hover:not(:disabled) { background:#FBE4E0; color:#CE4A3E; }
 
     .sb-coveredit { display:flex; align-items:center; justify-content:center; aspect-ratio:16/7; border:1.5px dashed var(--border-strong); border-radius:var(--r-lg); background:var(--surface-alt) center/cover no-repeat; cursor:pointer; margin-bottom:16px; }
     .sb-cover-cta { background:rgba(0,0,0,.55); color:#fff; padding:8px 16px; border-radius:var(--r-full); font-size:14px; font-weight:600; }
@@ -359,20 +695,86 @@ function BuilderStyles() {
     .sb-segmented button { border:none; background:var(--surface); padding:8px 18px; font-size:13px; font-weight:600; color:var(--text-muted); cursor:pointer; }
     .sb-segmented button.on { background:var(--accent); color:#fff; }
 
-    .sb-kindrow { display:flex; gap:12px; align-items:center; padding:8px 0 4px; }
-    .sb-kindlabel { font-size:13px; font-weight:600; color:var(--text-muted); }
-    .sb-kind-select { border:1.5px solid var(--border-strong); border-radius:var(--r); padding:8px 12px; font-size:14px; font-weight:600; color:var(--text); background:var(--surface); cursor:pointer; font-family:inherit; }
-    .sb-kind-select:focus { outline:none; border-color:var(--accent); }
+    /* Type selector — tile grid (same language as the block picker + /build/new). */
+    .sb-typefield { display:flex; flex-direction:column; gap:10px; }
+    .sb-fieldlabel { font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); }
+    .sb-typegrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+    .sb-typetile { display:flex; align-items:center; gap:9px; text-align:left; white-space:normal; padding:10px 12px; border:1.5px solid var(--border); border-radius:var(--r); background:var(--surface); color:var(--text-secondary); font-size:13px; font-weight:600; cursor:pointer; transition:border-color .1s ease, background .1s ease, color .1s ease; }
+    .sb-typetile:hover { border-color:var(--accent-mid); }
+    .sb-typetile.on { border-color:var(--accent); background:var(--accent-light); color:var(--accent-hover); }
+    .sb-typetile-icon { display:flex; flex-shrink:0; }
+    .sb-typetile-label { min-width:0; }
+    .sb-typedisplay { display:inline-flex; align-items:center; gap:9px; width:fit-content; padding:9px 15px; border:1.5px solid var(--border); border-radius:var(--r); background:var(--surface-alt); font-size:14px; font-weight:700; color:var(--text); }
+    .sb-typedisplay-icon { display:flex; color:var(--accent-hover); }
+
+    /* ── Options tab ── */
+    .sb-field { width:100%; }
+    .sb-textarea { resize:vertical; font-family:inherit; line-height:1.5; }
+    .sb-optrow { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px; border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); }
+    .sb-opthint { font-size:13px; color:var(--text-secondary); margin-top:4px; max-width:42ch; line-height:1.45; }
+    .sb-toggle { flex-shrink:0; width:46px; height:27px; border-radius:var(--r-full); border:none; background:var(--border-strong); padding:0; cursor:pointer; position:relative; transition:background .15s ease; }
+    .sb-toggle.on { background:var(--accent); }
+    .sb-toggle-knob { position:absolute; top:3px; left:3px; width:21px; height:21px; border-radius:var(--r-full); background:#fff; box-shadow:var(--shadow-sm); transition:transform .15s ease; }
+    .sb-toggle.on .sb-toggle-knob { transform:translateX(19px); }
+    .sb-soontile { cursor:default; opacity:.72; background:var(--surface-alt); box-shadow:none; }
+    .sb-soontile:hover { transform:none; box-shadow:none; border-color:var(--border); }
+    .sb-soonchip { margin-left:7px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); background:var(--border); padding:2px 7px; border-radius:var(--r-full); vertical-align:middle; }
 
     .sb-blockshead { display:flex; justify-content:space-between; align-items:baseline; margin:24px 0 12px; }
 
-    .sb-add { position:relative; margin-top:8px; }
-    .sb-addbtn { width:100%; }
-    .sb-addmenu { position:absolute; left:0; right:0; bottom:calc(100% + 6px); background:var(--surface); border:1px solid var(--border-strong); border-radius:var(--r); box-shadow:var(--shadow-lg); padding:6px; z-index:20; }
-    .sb-addmenu-item { display:flex; gap:12px; align-items:center; width:100%; text-align:left; border:none; background:transparent; padding:10px 12px; border-radius:var(--r-sm); cursor:pointer; }
-    .sb-addmenu-item:hover { background:var(--surface-alt); }
-    .sb-addmenu-icon { font-size:20px; }
-    .sb-addmenu-hint { display:block; font-size:12px; color:var(--text-muted); font-weight:400; }
+    .sb-add { margin-top:4px; }
+
+    /* Trigger — a slim dashed "add" bar (overrides the global button reset). */
+    .sb-addtrigger { width:100%; border:1.5px dashed var(--border-strong); border-radius:var(--r); background:var(--surface); padding:11px 16px; font-size:14px; font-weight:700; color:var(--text-secondary); cursor:pointer; white-space:normal; transition:border-color .12s ease, color .12s ease; }
+    .sb-addtrigger:hover { border-color:var(--accent); color:var(--accent); }
+
+    /* Picker — inline card with a grid of block-type tiles. */
+    .sb-addpicker { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface-alt); padding:14px; }
+    .sb-addpicker-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .sb-addpicker-title { font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); }
+    .sb-addpicker-cancel { border:none; background:none; border-radius:var(--r-sm); padding:2px 6px; font-size:13px; font-weight:600; color:var(--text-muted); cursor:pointer; }
+    .sb-addpicker-cancel:hover { color:var(--accent); }
+
+    .sb-addgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); gap:10px; }
+    /* Tile — full override of the global button styles (radius/center/nowrap). */
+    .sb-addtile { display:flex; flex-direction:column; align-items:flex-start; gap:5px; text-align:left; white-space:normal; padding:14px 14px 15px; border:1.5px solid var(--border); border-radius:var(--r); background:var(--surface); cursor:pointer; box-shadow:var(--shadow-sm); transition:transform .1s ease, box-shadow .1s ease, border-color .1s ease; }
+    .sb-addtile:hover { transform:translateY(-2px); box-shadow:var(--shadow); border-color:var(--accent-mid); }
+    .sb-addtile-icon { font-size:22px; line-height:1; }
+    .sb-addtile-label { width:100%; font-size:14px; font-weight:700; color:var(--text); }
+    .sb-addtile-hint { width:100%; font-size:12px; color:var(--text-muted); line-height:1.4; }
+
+    /* ── Stepper + panels ── */
+    .sb-steps { display:flex; gap:4px; margin-bottom:28px; overflow-x:auto; padding-bottom:4px; }
+    .sb-step { display:inline-flex; align-items:center; gap:8px; border:none; background:none; padding:8px 10px; cursor:pointer; white-space:nowrap; color:var(--text-muted); border-radius:var(--r-full); }
+    .sb-step-num { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:var(--r-full); background:var(--surface-alt); color:var(--text-muted); font-size:12px; font-weight:800; flex-shrink:0; }
+    .sb-step-label { font-size:14px; font-weight:700; }
+    .sb-step:hover { color:var(--text-secondary); }
+    .sb-step.done { color:var(--text-secondary); }
+    .sb-step.done .sb-step-num { background:var(--accent-light); color:var(--accent-hover); }
+    .sb-step.on { color:var(--text); }
+    .sb-step.on .sb-step-num { background:var(--accent); color:var(--accent-foreground); }
+
+    .sb-stepnav { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:28px; padding-top:20px; border-top:1px solid var(--border); }
+
+    /* Panel = vertical stack with consistent rhythm so nothing crowds. */
+    .sb-panel { display:flex; flex-direction:column; gap:20px; animation:sb-fade .16s ease; }
+    @keyframes sb-fade { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:none; } }
+
+    .sb-panel > .sb-coveredit { margin-bottom:0; }
+    .sb-panel .sb-pricerow { border-top:none; padding:0; }
+    .sb-panel .sb-blockshead { margin:0; }
+    .sb-panel .sb-h2 { margin:0; }
+    .sb-panel .sb-add { margin-top:0; }
+    /* Title/tagline sit tighter together as one unit. */
+    .sb-panel .sb-titleinput { padding:0; }
+    .sb-panel .sb-outcomeinput { padding:6px 0 0; }
+
+    .sb-hint { font-size:13px; color:var(--text-secondary); line-height:1.6; margin:0; padding:14px 16px; background:var(--surface-alt); border-radius:var(--r); }
+    .sb-hint-muted { background:none; padding:0 2px; color:var(--text-muted); font-size:12px; }
+
+    .sb-checklist { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:12px; }
+    .sb-checklist li { font-size:14px; font-weight:600; color:var(--text-muted); display:flex; gap:10px; align-items:center; }
+    .sb-checklist li.ok { color:var(--text); }
 
     @media (max-width:600px) {
       .sb-listhead { flex-direction:column; }

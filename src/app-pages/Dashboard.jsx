@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useUser } from '@/lib/stores';
+import { useDialog } from '@/components/Dialog';
 import { listCreatorSales, refundPurchase } from '@/lib/purchases';
 import { listCreatorBookings } from '@/lib/booking';
 import PayoutStatus from '@/components/PayoutStatus';
@@ -11,11 +12,22 @@ import DiscountsPanel from '@/components/DiscountsPanel';
 
 // Phase 5 — creator dashboard: revenue, transparent payouts, analytics funnel,
 // and an exportable buyer list. See docs/v3-skill-platform/06.
+// Phase B — the seven stacked panels were folded into tabbed sections so the
+// page breathes; the KPI stat row stays pinned above the tabs.
+const TABS = [
+  ['overview', 'Overview'],
+  ['sales', 'Sales'],
+  ['bookings', 'Bookings'],
+  ['audience', 'Audience'],
+];
+
 export default function Dashboard() {
   const user = useUser();
+  const { confirm, alert } = useDialog();
   const [sales, setSales] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [refunding, setRefunding] = useState(null);
+  const [tab, setTab] = useState('overview');
 
   useEffect(() => {
     if (user) {
@@ -30,10 +42,16 @@ export default function Dashboard() {
   const buyerCount = new Set((sales ?? []).map(p => p.buyer?.id)).size;
 
   async function refund(p) {
-    if (!confirm(`Refund $${(p.amount_cents / 100).toFixed(2)} to ${p.buyer?.full_name || 'this buyer'}? They'll lose access.`)) return;
+    const ok = await confirm({
+      title: 'Issue a refund?',
+      message: `Refund $${(p.amount_cents / 100).toFixed(2)} to ${p.buyer?.full_name || 'this buyer'}? They'll lose access to the product.`,
+      confirmLabel: 'Refund',
+      danger: true,
+    });
+    if (!ok) return;
     setRefunding(p.id);
     try { await refundPurchase(p.id); setSales(s => s.filter(x => x.id !== p.id)); }
-    catch (e) { alert(e.message); }
+    catch (e) { alert({ title: 'Refund failed', message: e.message, tone: 'danger' }); }
     finally { setRefunding(null); }
   }
 
@@ -61,7 +79,7 @@ export default function Dashboard() {
         <h1 className="db-h1">Dashboard</h1>
         <div className="db-headrow-actions">
           <Link to="/storefront/edit" className="btn btn-secondary btn-sm">Customize storefront</Link>
-          <Link to="/build" className="btn btn-primary btn-sm">+ New Skill</Link>
+          <Link to="/build/new" className="btn btn-primary btn-sm">+ New product</Link>
         </div>
       </div>
 
@@ -81,76 +99,92 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="db-grid">
-        <section className="db-col">
-          <h2 className="db-h2">Analytics</h2>
-          <AnalyticsCards creatorId={user.id} />
-        </section>
-        <section className="db-col">
-          <PayoutStatus />
-        </section>
-      </div>
+      {/* Tabs */}
+      <nav className="db-tabs">
+        {TABS.map(([id, label]) => (
+          <button key={id} type="button" className={`db-tab${tab === id ? ' on' : ''}`} onClick={() => setTab(id)}>{label}</button>
+        ))}
+      </nav>
 
-      {/* Bookings + Availability */}
-      <section className="db-grid">
-        <div className="db-col">
-          <h2 className="db-h2">Upcoming sessions</h2>
-          {bookings.length === 0 ? (
-            <p className="db-muted">No booked sessions yet.</p>
-          ) : (
+      {/* ── Overview ── */}
+      {tab === 'overview' && (
+        <div className="db-panel db-grid">
+          <section className="db-col">
+            <h2 className="db-h2">Analytics</h2>
+            <AnalyticsCards creatorId={user.id} />
+          </section>
+          <section className="db-col">
+            <PayoutStatus />
+          </section>
+        </div>
+      )}
+
+      {/* ── Sales ── */}
+      {tab === 'sales' && (
+        <div className="db-panel">
+          <div className="db-buyers-head">
+            <h2 className="db-h2">Buyers</h2>
+            {sales?.length > 0 && <button className="btn btn-secondary btn-sm" onClick={exportCsv}>Export CSV</button>}
+          </div>
+
+          {sales === null && <p className="db-muted">Loading…</p>}
+          {sales?.length === 0 && (
+            <p className="db-muted">No sales yet. Share your storefront to get your first buyer — <Link to="/build/new">add a product →</Link></p>
+          )}
+
+          {sales?.length > 0 && (
             <div className="db-table">
-              {bookings.map(b => (
-                <div key={b.id} className="db-row" style={{ gridTemplateColumns: '1.2fr 1.4fr 1fr' }}>
-                  <span>{new Date(b.start_time).toLocaleDateString([], { month: 'short', day: 'numeric' })} {new Date(b.start_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
-                  <span className="db-trunc">{b.skill?.title}</span>
-                  <span className="db-trunc">{b.buyer?.full_name || 'Buyer'}</span>
+              <div className="db-row db-row-head">
+                <span>Date</span><span>Skill</span><span>Buyer</span><span className="db-amt">Amount</span><span />
+              </div>
+              {sales.map(p => (
+                <div key={p.id} className="db-row">
+                  <span>{new Date(p.created_at).toLocaleDateString()}</span>
+                  <span className="db-trunc">{p.skill?.title}</span>
+                  <span className="db-trunc">{p.buyer?.full_name || p.buyer?.email || 'Buyer'}</span>
+                  <span className="db-amt">${(p.amount_cents / 100).toFixed(2)}</span>
+                  <button className="db-refund" onClick={() => refund(p)} disabled={refunding === p.id}>
+                    {refunding === p.id ? '…' : 'Refund'}
+                  </button>
                 </div>
               ))}
             </div>
           )}
         </div>
-        <div className="db-col">
-          <AvailabilityEditor />
-        </div>
-      </section>
+      )}
 
-      {/* Audience + Promo codes */}
-      <section className="db-grid">
-        <div className="db-col"><AudiencePanel /></div>
-        <div className="db-col"><DiscountsPanel /></div>
-      </section>
-
-      {/* Buyers */}
-      <section className="db-buyers">
-        <div className="db-buyers-head">
-          <h2 className="db-h2">Buyers</h2>
-          {sales?.length > 0 && <button className="btn btn-secondary btn-sm" onClick={exportCsv}>Export CSV</button>}
-        </div>
-
-        {sales === null && <p className="db-muted">Loading…</p>}
-        {sales?.length === 0 && (
-          <p className="db-muted">No sales yet. Share your storefront to get your first buyer — <Link to="/build">build a Skill →</Link></p>
-        )}
-
-        {sales?.length > 0 && (
-          <div className="db-table">
-            <div className="db-row db-row-head">
-              <span>Date</span><span>Skill</span><span>Buyer</span><span className="db-amt">Amount</span><span />
-            </div>
-            {sales.map(p => (
-              <div key={p.id} className="db-row">
-                <span>{new Date(p.created_at).toLocaleDateString()}</span>
-                <span className="db-trunc">{p.skill?.title}</span>
-                <span className="db-trunc">{p.buyer?.full_name || p.buyer?.email || 'Buyer'}</span>
-                <span className="db-amt">${(p.amount_cents / 100).toFixed(2)}</span>
-                <button className="db-refund" onClick={() => refund(p)} disabled={refunding === p.id}>
-                  {refunding === p.id ? '…' : 'Refund'}
-                </button>
+      {/* ── Bookings ── */}
+      {tab === 'bookings' && (
+        <div className="db-panel db-grid">
+          <div className="db-col">
+            <h2 className="db-h2">Upcoming sessions</h2>
+            {bookings.length === 0 ? (
+              <p className="db-muted">No booked sessions yet.</p>
+            ) : (
+              <div className="db-table">
+                {bookings.map(b => (
+                  <div key={b.id} className="db-row" style={{ gridTemplateColumns: '1.2fr 1.4fr 1fr' }}>
+                    <span>{new Date(b.start_time).toLocaleDateString([], { month: 'short', day: 'numeric' })} {new Date(b.start_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                    <span className="db-trunc">{b.skill?.title}</span>
+                    <span className="db-trunc">{b.buyer?.full_name || 'Buyer'}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
-      </section>
+          <div className="db-col">
+            <AvailabilityEditor />
+          </div>
+        </div>
+      )}
+
+      {/* ── Audience ── */}
+      {tab === 'audience' && (
+        <div className="db-panel db-grid">
+          <div className="db-col"><AudiencePanel /></div>
+          <div className="db-col"><DiscountsPanel /></div>
+        </div>
+      )}
 
       <DashStyles />
     </div>
@@ -185,6 +219,16 @@ function DashStyles() {
     .db-refund { background:none; border:1px solid var(--border-strong); border-radius:var(--r-sm); padding:4px 10px; font-size:12px; font-weight:600; color:var(--text-secondary); cursor:pointer; }
     .db-refund:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
     .db-refund:disabled { opacity:.5; }
+
+    /* ── Tabs (Phase B) — override the global button reset (pill/centered) ── */
+    .db-tabs { display:flex; gap:6px; border-bottom:1px solid var(--border); margin-bottom:28px; overflow-x:auto; }
+    .db-tab { border:none; background:none; border-radius:0; padding:12px 16px; font-size:14px; font-weight:700; color:var(--text-muted); cursor:pointer; white-space:nowrap; border-bottom:2px solid transparent; margin-bottom:-1px; transition:color .12s ease; }
+    .db-tab:hover { color:var(--text-secondary); }
+    .db-tab.on { color:var(--text); border-bottom-color:var(--accent); }
+
+    .db-panel { animation:db-fade .16s ease; }
+    .db-panel.db-grid { margin-bottom:0; }
+    @keyframes db-fade { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:none; } }
 
     @media (max-width:720px) {
       .db-top { grid-template-columns:1fr 1fr; }

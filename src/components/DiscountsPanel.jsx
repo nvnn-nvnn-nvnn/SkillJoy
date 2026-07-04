@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@/lib/stores';
+import { useDialog } from '@/components/Dialog';
 import { listDiscounts, createDiscount, toggleDiscount, deleteDiscount } from '@/lib/discounts';
 
 // ── Promo code management (v3, Phase 10) ────────────────────────────────────
 export default function DiscountsPanel() {
   const user = useUser();
+  const { confirm } = useDialog();
   const [codes, setCodes] = useState(null);
   const [code, setCode] = useState('');
   const [percent, setPercent] = useState(10);
@@ -29,7 +31,7 @@ export default function DiscountsPanel() {
     setCodes(c => c.map(x => x.id === d.id ? { ...x, active: !x.active } : x));
   }
   async function remove(id) {
-    if (!confirm('Delete this code?')) return;
+    if (!(await confirm({ title: 'Delete this code?', message: 'This promo code will stop working immediately.', confirmLabel: 'Delete', danger: true }))) return;
     await deleteDiscount(id).catch(e => setErr(e.message));
     setCodes(c => c.filter(x => x.id !== id));
   }

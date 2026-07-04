@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { listPosts, createPost, deletePost } from '@/lib/community';
 import { initials } from '@/lib/stores';
+import { useDialog } from '@/components/Dialog';
 
 // ── Per-Skill community space (v3) ──────────────────────────────────────────
 // One lightweight thread per Skill: top-level posts + one level of replies.
 // Buyer/creator gated by RLS. NOT a forum. Realtime so new posts appear live.
 
 export default function CommunityThread({ skillId, creatorId, user }) {
+  const { confirm } = useDialog();
   const [posts, setPosts] = useState(null);
   const [body, setBody] = useState('');
   const [replyTo, setReplyTo] = useState(null);
@@ -66,7 +68,7 @@ export default function CommunityThread({ skillId, creatorId, user }) {
   }
 
   async function remove(postId) {
-    if (!confirm('Delete this post?')) return;
+    if (!(await confirm({ title: 'Delete this post?', confirmLabel: 'Delete', danger: true }))) return;
     try { await deletePost(postId); load(); } catch (e) { setErr(e.message); }
   }
 

@@ -53,85 +53,7 @@ BEGIN
     RETURNING id INTO v_notification_id;
     RETURN v_notification_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Message notification trigger
-CREATE OR REPLACE FUNCTION notify_new_message() RETURNS TRIGGER AS $$
-DECLARE v_recipient_id UUID; v_sender_name TEXT; v_related_type TEXT; v_convo_id UUID;
-BEGIN
-    IF NEW.swap_id IS NOT NULL THEN
-        SELECT CASE WHEN requester_id = NEW.sender_id THEN receiver_id ELSE requester_id END
-        INTO v_recipient_id FROM swaps WHERE id = NEW.swap_id;
-        v_related_type := 'swap';
-        v_convo_id := NEW.swap_id;
-    ELSIF NEW.gig_request_id IS NOT NULL THEN
-        SELECT CASE WHEN requester_id = NEW.sender_id THEN provider_id ELSE requester_id END
-        INTO v_recipient_id FROM gig_requests WHERE id = NEW.gig_request_id;
-        v_related_type := 'gig';
-        v_convo_id := NEW.gig_request_id;
-    ELSE RETURN NEW;
-    END IF;
-    -- Only notify if there is no existing unread message notification for this conversation.
-    -- This prevents a flood of notifications for every message in a thread.
-    IF NOT EXISTS (
-        SELECT 1 FROM notifications
-        WHERE user_id = v_recipient_id
-          AND type = 'message'
-          AND related_id = v_convo_id
-          AND read = false
-    ) THEN
-        SELECT full_name INTO v_sender_name FROM profiles WHERE id = NEW.sender_id;
-        PERFORM create_notification(v_recipient_id, 'message',
-            'New message from ' || COALESCE(v_sender_name, 'Someone'),
-            LEFT(NEW.content, 100), v_convo_id, v_related_type);
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE OR REPLACE FUNCTION notify_new_swap_request() RETURNS TRIGGER AS $$
-DECLARE v_name TEXT;
-BEGIN
-    IF NEW.status = 'pending' AND (OLD IS NULL OR OLD.status != 'pending') THEN
-        SELECT full_name INTO v_name FROM profiles WHERE id = NEW.requester_id;
-        PERFORM create_notification(NEW.receiver_id, 'swap_request', 'New swap request',
-            COALESCE(v_name, 'Someone') || ' wants to swap ' || NEW.teach_skill || ' for ' || NEW.learn_skill,
-            NEW.id, 'swap');
-    ELSIF NEW.status = 'accepted' AND OLD.status = 'pending' THEN
-        SELECT full_name INTO v_name FROM profiles WHERE id = NEW.receiver_id;
-        PERFORM create_notification(NEW.requester_id, 'swap_accepted', 'Swap request accepted!',
-            COALESCE(v_name, 'Someone') || ' accepted your swap request', NEW.id, 'swap');
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE OR REPLACE FUNCTION notify_new_gig_request() RETURNS TRIGGER AS $$
-DECLARE v_name TEXT; v_title TEXT;
-BEGIN
-    IF NEW.status = 'pending' AND (OLD IS NULL OR OLD.status != 'pending') THEN
-        SELECT full_name INTO v_name FROM profiles WHERE id = NEW.requester_id;
-        SELECT title INTO v_title FROM gigs WHERE id = NEW.gig_id;
-        PERFORM create_notification(NEW.provider_id, 'gig_request', 'New gig request',
-            COALESCE(v_name, 'Someone') || ' requested: ' || COALESCE(v_title, 'your gig'), NEW.id, 'gig');
-    ELSIF NEW.status = 'accepted' AND OLD.status = 'pending' THEN
-        SELECT full_name INTO v_name FROM profiles WHERE id = NEW.provider_id;
-        SELECT title INTO v_title FROM gigs WHERE id = NEW.gig_id;
-        PERFORM create_notification(NEW.requester_id, 'gig_accepted', 'Gig request accepted!',
-            COALESCE(v_name, 'Someone') || ' accepted your request for: ' || COALESCE(v_title, 'the gig'), NEW.id, 'gig');
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP TRIGGER IF EXISTS trigger_notify_new_message ON messages;
-CREATE TRIGGER trigger_notify_new_message
-    AFTER INSERT ON messages FOR EACH ROW EXECUTE FUNCTION notify_new_message();
-
-DROP TRIGGER IF EXISTS trigger_notify_swap_request ON swaps;
-CREATE TRIGGER trigger_notify_swap_request
-    AFTER INSERT OR UPDATE ON swaps FOR EACH ROW EXECUTE FUNCTION notify_new_swap_request();
-
+http://localhost:5173/profile
 DROP TRIGGER IF EXISTS trigger_notify_gig_request ON gig_requests;
 CREATE TRIGGER trigger_notify_gig_request
     AFTER INSERT OR UPDATE ON gig_requests FOR EACH ROW EXECUTE FUNCTION notify_new_gig_request();
@@ -286,6 +208,10 @@ CREATE TABLE IF NOT EXISTS content_blocks (
     created_at   TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS content_blocks_skill_idx ON content_blocks(skill_id, position);
+-- Coaching per-block scheduling (booking_minutes from an earlier migration; buffer + notice from 015).
+ALTER TABLE content_blocks ADD COLUMN IF NOT EXISTS booking_minutes    INTEGER;
+ALTER TABLE content_blocks ADD COLUMN IF NOT EXISTS buffer_minutes     INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE content_blocks ADD COLUMN IF NOT EXISTS min_notice_minutes INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS purchases (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -324,3 +250,59 @@ CREATE INDEX IF NOT EXISTS analytics_skill_type_idx ON analytics_events(skill_id
 CREATE INDEX IF NOT EXISTS analytics_creator_idx    ON analytics_events(creator_id, type, created_at);
 
 -- RLS policies for the above: see migrations/001_skill_platform.sql.
+
+-- ── Long-form description (migration 014) ───────────────────────────────────
+ALTER TABLE skills ADD COLUMN IF NOT EXISTS description TEXT;
+
+-- ── Post-purchase Options + reviews (migration 012) ─────────────────────────
+ALTER TABLE skills ADD COLUMN IF NOT EXISTS promo_video_url     TEXT;
+ALTER TABLE skills ADD COLUMN IF NOT EXISTS confirmation_message TEXT;
+ALTER TABLE skills ADD COLUMN IF NOT EXISTS reviews_enabled      BOOLEAN NOT NULL DEFAULT true;
+
+CREATE TABLE IF NOT EXISTS reviews (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    skill_id   UUID NOT NULL REFERENCES skills(id)   ON DELETE CASCADE,
+    buyer_id   UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    rating     SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    body       TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (skill_id, buyer_id)
+);
+CREATE INDEX IF NOT EXISTS reviews_skill_idx ON reviews(skill_id, created_at DESC);
+-- RLS: public read; buyer may write/update/delete own review only if paid.
+-- Full policies in migrations/012_options_and_reviews.sql.
+
+-- ── Google Calendar tokens (migration 013) ──────────────────────────────────
+-- Secret refresh tokens. RLS enabled with NO policies → clients get zero
+-- access; only the backend service key reads/writes this. NEVER move these
+-- columns onto profiles (profiles is publicly readable).
+CREATE TABLE IF NOT EXISTS google_tokens (
+    user_id       UUID PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+    refresh_token TEXT,
+    connected     BOOLEAN NOT NULL DEFAULT false,
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE google_tokens ENABLE ROW LEVEL SECURITY;
+
+-- ── Courses: sections + lesson progress (migration 017) ─────────────────────
+CREATE TABLE IF NOT EXISTS course_sections (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    skill_id   UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    title      TEXT,
+    position   INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS course_sections_skill_idx ON course_sections(skill_id, position);
+ALTER TABLE course_sections ENABLE ROW LEVEL SECURITY;
+-- A lesson is a content_block with a section_id.
+ALTER TABLE content_blocks ADD COLUMN IF NOT EXISTS section_id UUID REFERENCES course_sections(id) ON DELETE CASCADE;
+
+CREATE TABLE IF NOT EXISTS lesson_progress (
+    user_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    block_id   UUID NOT NULL REFERENCES content_blocks(id) ON DELETE CASCADE,
+    skill_id   UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, block_id)
+);
+ALTER TABLE lesson_progress ENABLE ROW LEVEL SECURITY;
+-- Full RLS policies for both in migrations/017_courses.sql.

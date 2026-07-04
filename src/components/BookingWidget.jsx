@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { generateSlots, createBooking, cancelBooking, listBlockBookings, localTimezone } from '@/lib/booking';
+import { getCreatorFreebusy } from '@/lib/google';
+import { useDialog } from '@/components/Dialog';
 
 // ── Buyer-side slot picker for a native coaching block (v3, Phase 8) ────────
 export default function BookingWidget({ block, skillId, creatorId, buyerId }) {
+  const { confirm } = useDialog();
   const [avail, setAvail] = useState(null);   // {availability, tz}
   const [slots, setSlots] = useState([]);
   const [mine, setMine] = useState(null);     // existing future booking for this block
@@ -24,10 +27,33 @@ export default function BookingWidget({ block, skillId, creatorId, buyerId }) {
       ]);
       setMine(existing?.[0] || null);
       setAvail({ availability: creator?.booking_availability, tz });
-      const bookedSet = new Set((booked || []).map(b => new Date(b.start_time).toISOString()));
-      setSlots(generateSlots(creator?.booking_availability, tz, 14, bookedSet, block.booking_minutes));
+      const bookedIntervals = (booked || []).map(b => ({ start: b.start_time, end: b.end_time }));
+      let gen = generateSlots(creator?.booking_availability, tz, {
+        daysAhead: 14,
+        minutes: block.booking_minutes,
+        bufferMinutes: block.buffer_minutes || 0,
+        minNoticeMinutes: block.min_notice_minutes || 0,
+        booked: bookedIntervals,
+      });
+
+      // Subtract the creator's real Google Calendar busy times (fail-open — a
+      // Google/network hiccup just falls back to native availability).
+      try {
+        const startISO = new Date().toISOString();
+        const endISO = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
+        const { busy } = await getCreatorFreebusy(creatorId, startISO, endISO);
+        if (busy?.length) {
+          const intervals = busy.map(b => [new Date(b.start).getTime(), new Date(b.end).getTime()]);
+          gen = gen.filter(s => {
+            const ss = s.start.getTime(), se = s.end.getTime();
+            return !intervals.some(([bs, be]) => ss < be && se > bs); // drop overlaps
+          });
+        }
+      } catch { /* ignore — keep native slots */ }
+
+      setSlots(gen);
     } catch (e) { setErr(e.message); }
-  }, [block.id, block.booking_minutes, skillId, creatorId, buyerId]);
+  }, [block.id, block.booking_minutes, block.buffer_minutes, block.min_notice_minutes, skillId, creatorId, buyerId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -41,7 +67,8 @@ export default function BookingWidget({ block, skillId, creatorId, buyerId }) {
   }
 
   async function cancel() {
-    if (!mine || !confirm('Cancel this booking?')) return;
+    if (!mine) return;
+    if (!(await confirm({ title: 'Cancel this booking?', confirmLabel: 'Cancel booking', danger: true }))) return;
     setBusy(true);
     try { await cancelBooking(mine.id, creatorId, mine.start_time); await load(); }
     catch (e) { setErr(e.message); }

@@ -5,8 +5,8 @@ Two accounts: **Seller** (main) + **Buyer** (incognito, different email).
 Companion to note 60 (payments reliability audit).
 
 ## 0. Pre-flight (config)
-- [ ] Backend on **test** keys (`sk_test_…`, test `STRIPE_WEBHOOK_SECRET`)
-- [ ] Frontend on `pk_test_…`; `VITE_API_URL` → **local** backend
+- [X] Backend on **test** keys (`sk_test_…`, test `STRIPE_WEBHOOK_SECRET`)
+- [X] Frontend on `pk_test_…`; `VITE_API_URL` → **local** backend
 - [ ] `stripe listen --forward-to localhost:<port>/webhooks/stripe` running (use the
       signing secret it prints for `STRIPE_WEBHOOK_SECRET`)
 - [ ] `ADMIN_EMAIL` matches a real profile row

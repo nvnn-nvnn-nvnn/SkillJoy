@@ -3,8 +3,11 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useUser } from '@/lib/stores';
 import { listMyPurchases, hasPurchased } from '@/lib/purchases';
 import { getSkillWithBlocks } from '@/lib/skills';
+import { getMyReview, upsertReview, deleteReview } from '@/lib/reviews';
 import BlockRenderer from '@/components/BlockRenderer';
+import CoursePlayer from '@/components/CoursePlayer';
 import CommunityThread from '@/components/CommunityThread';
+import BackLink from '@/components/BackLink';
 
 // Phase 3 — buyer's permanent locker (/locker) + consumption view (/locker/:id).
 export default function Locker() {
@@ -95,7 +98,7 @@ function SkillConsume({ skillId, user }) {
     <div className="lk-wrap lk-center">
       <p style={{ fontSize: 40 }}>🔒</p>
       <p className="lk-muted">You don’t have access to this Skill.</p>
-      <Link to="/locker" className="btn btn-secondary">← Back to Locker</Link>
+      <BackLink to="/locker">Back to Locker</BackLink>
       <LockerStyles />
     </div>
   );
@@ -106,7 +109,7 @@ function SkillConsume({ skillId, user }) {
   return (
     <div className="lk-wrap">
       <title>{`${skill.title} — SkillJoy`}</title>
-      <Link to="/locker" className="lk-back">← Locker</Link>
+      <BackLink to="/locker">Locker</BackLink>
 
       {isCreatorPreview && <div className="lk-banner">👀 Creator preview — this is how buyers see your Skill.</div>}
       {updated && <div className="lk-banner lk-update">✨ Updated to v{skill.version} since you bought it.</div>}
@@ -118,17 +121,84 @@ function SkillConsume({ skillId, user }) {
       {skill.outcome && <p className="lk-sub">{skill.outcome}</p>}
 
       <div className="lk-blocks">
-        {skill.blocks?.length === 0 && <p className="lk-muted">No content yet.</p>}
-        {skill.blocks?.map(b => (
-          <BlockRenderer key={b.id} block={b} skillId={skill.id} creatorId={skill.creator_id} buyerId={user.id} />
-        ))}
+        {skill.kind === 'course' ? (
+          <CoursePlayer skill={skill} user={user} />
+        ) : (
+          <>
+            {skill.blocks?.length === 0 && <p className="lk-muted">No content yet.</p>}
+            {skill.blocks?.map(b => (
+              <BlockRenderer key={b.id} block={b} skillId={skill.id} creatorId={skill.creator_id} buyerId={user.id} />
+            ))}
+          </>
+        )}
       </div>
+
+      {purchase && skill.reviews_enabled !== false && (
+        <ReviewBox skillId={skill.id} userId={user.id} />
+      )}
 
       <div className="lk-community">
         <CommunityThread skillId={skill.id} creatorId={skill.creator_id} user={user} />
       </div>
 
       <LockerStyles />
+    </div>
+  );
+}
+
+// ── Post-purchase review box ──────────────────────────────────────────────────
+function ReviewBox({ skillId, userId }) {
+  const [rating, setRating] = useState(0);
+  const [hover, setHover] = useState(0);
+  const [body, setBody] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [existing, setExisting] = useState(null); // null = loading, false = none
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getMyReview(skillId, userId)
+      .then(r => { setExisting(r || false); if (r) { setRating(r.rating); setBody(r.body || ''); } })
+      .catch(() => setExisting(false));
+  }, [skillId, userId]);
+
+  async function save() {
+    if (!rating) return;
+    setBusy(true);
+    try {
+      const r = await upsertReview(skillId, userId, { rating, body });
+      setExisting(r); setSaved(true);
+      setTimeout(() => setSaved(false), 1800);
+    } catch { /* RLS or network — silently ignore for v1 */ }
+    finally { setBusy(false); }
+  }
+
+  async function remove() {
+    if (!existing?.id) return;
+    setBusy(true);
+    try { await deleteReview(existing.id); setExisting(false); setRating(0); setBody(''); }
+    catch { /* ignore */ }
+    finally { setBusy(false); }
+  }
+
+  if (existing === null) return null; // still loading
+
+  return (
+    <div className="lk-review">
+      <p className="lk-review-h">{existing ? 'Your review' : 'Leave a review'}</p>
+      <div className="lk-stars" onMouseLeave={() => setHover(0)}>
+        {[1, 2, 3, 4, 5].map(n => (
+          <button key={n} type="button" className={`lk-star${(hover || rating) >= n ? ' on' : ''}`}
+            onMouseEnter={() => setHover(n)} onClick={() => setRating(n)} aria-label={`${n} star${n === 1 ? '' : 's'}`}>★</button>
+        ))}
+      </div>
+      <textarea className="lk-review-body" rows={3} value={body} onChange={e => setBody(e.target.value)}
+        placeholder="Share what you thought (optional)…" />
+      <div className="lk-review-actions">
+        <button className="btn btn-primary btn-sm" onClick={save} disabled={!rating || busy}>
+          {saved ? 'Saved ✓' : existing ? 'Update review' : 'Post review'}
+        </button>
+        {existing && <button className="btn btn-ghost btn-sm" onClick={remove} disabled={busy}>Delete</button>}
+      </div>
     </div>
   );
 }
@@ -140,8 +210,6 @@ function LockerStyles() {
     .lk-h1 { font-size:26px; font-weight:700; font-family:var(--font-display); }
     .lk-sub { color:var(--text-secondary); margin-top:4px; }
     .lk-muted { color:var(--text-muted); }
-    .lk-back { display:inline-block; color:var(--text-secondary); text-decoration:none; font-weight:600; font-size:14px; margin-bottom:14px; }
-    .lk-back:hover { color:var(--accent); }
 
     .lk-empty { text-align:center; padding:48px 0; }
     .lk-empty-t { font-weight:700; font-size:18px; margin-top:8px; }
@@ -160,6 +228,15 @@ function LockerStyles() {
     .lk-update { background:var(--accent-light); border-color:var(--accent-mid); color:var(--accent); font-weight:600; }
 
     .lk-blocks { margin-top:22px; }
+
+    .lk-review { margin-top:28px; padding-top:24px; border-top:1px solid var(--border); }
+    .lk-review-h { font-weight:700; font-size:15px; margin-bottom:10px; }
+    .lk-stars { display:flex; gap:2px; margin-bottom:10px; }
+    .lk-star { border:none; background:none; padding:0 2px; font-size:26px; line-height:1; cursor:pointer; color:var(--border-strong); transition:color .1s ease; }
+    .lk-star.on { color:var(--accent); }
+    .lk-review-body { width:100%; resize:vertical; font-family:inherit; }
+    .lk-review-actions { display:flex; gap:8px; margin-top:10px; }
+
     .lk-community { margin-top:28px; padding-top:24px; border-top:1px solid var(--border); }
   `}</style>;
 }

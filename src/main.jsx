@@ -17,6 +17,7 @@ class ErrorBoundary extends Component {
 }
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './lib/stores'
+import { DialogProvider } from './components/Dialog'
 import { LEGACY_MODE } from './lib/config'
 import './index.css'
 import './App.css'
@@ -37,7 +38,7 @@ import Privacy from './introduction-pages/Privacy'
 import RefundPolicy from './introduction-pages/RefundPolicy'
 import ChatPage from './app-pages/Chat'
 import MatchesPage from './app-pages/Matches'
-import DiscoverPage from './app-pages/MainSearch'
+import Discover from './app-pages/Discover'
 import Swaps from './app-pages/Swaps'
 import MySwaps from './app-pages/MySwaps'
 // import Rewards from './app-pages/Rewards'
@@ -54,6 +55,7 @@ import VerifyCollege from './app-pages/VerifyCollege'
 import NotFound from './app-pages/NotFound'
 // v3 Skill-platform pages
 import SkillBuilder from './app-pages/SkillBuilder'
+import AddProduct from './app-pages/AddProduct'
 import Locker from './app-pages/Locker'
 import Dashboard from './app-pages/Dashboard'
 import ServicesDashboard from './app-pages/ServicesDashboard'
@@ -76,11 +78,13 @@ function AppRoutes() {
 
           {/* ── v3 Skill-platform routes ── */}
           <Route path="/build" element={<SkillBuilder />} />
+          <Route path="/build/new" element={<AddProduct />} />
           <Route path="/build/:skillId" element={<SkillBuilder />} />
           <Route path="/locker" element={<Locker />} />
           <Route path="/locker/:skillId" element={<Locker />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/services" element={<ServicesDashboard />} />
+          <Route path="/discover" element={<Discover />} />
           <Route path="/storefront/edit" element={<StorefrontEditor />} />
           <Route path="/checkout/:skillId" element={<Checkout />} />
 
@@ -129,9 +133,11 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <DialogProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </DialogProvider>
     </AuthProvider>
   );
 }

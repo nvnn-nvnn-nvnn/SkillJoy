@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth } from '@/lib/stores';
+import { useDialog } from '@/components/Dialog';
 
 const REWARDS = [
   { id: 1, title: "Free Coffee at Student Union", cost: 100, icon: "☕", color: "orange", description: "Redeem for a free coffee or tea at the campus student union cafe." },
@@ -16,6 +17,7 @@ export default function Rewards() {
   const user = useUser();
   const profile = useProfile();
   const { setProfile } = useAuth();
+  const { confirm, alert } = useDialog();
   const navigate = useNavigate();
 
   const [userPoints, setUserPoints] = useState(0);
@@ -33,11 +35,11 @@ export default function Rewards() {
 
   async function handleRedeemReward(reward) {
     if (userPoints < reward.cost) {
-      alert(`You need ${reward.cost - userPoints} more points for this reward.`);
+      await alert({ title: 'Not enough points', message: `You need ${reward.cost - userPoints} more points for this reward.`, tone: 'warning' });
       return;
     }
 
-    const confirmed = confirm(`Redeem ${reward.cost} points for: ${reward.title}?`);
+    const confirmed = await confirm({ title: 'Redeem reward?', message: `Redeem ${reward.cost} points for: ${reward.title}?`, confirmLabel: 'Redeem' });
     if (!confirmed) return;
 
     const newPoints = userPoints - reward.cost;
@@ -47,13 +49,13 @@ export default function Rewards() {
       .eq('id', user.id);
 
     if (error) {
-      alert('Error redeeming reward. Please try again.');
+      await alert({ title: 'Redeem failed', message: 'Error redeeming reward. Please try again.', tone: 'danger' });
       return;
     }
 
     setUserPoints(newPoints);
     setProfile(prev => ({ ...prev, points: newPoints }));
-    alert(`Success! You redeemed: ${reward.title}. Pick it up at the student center!`);
+    await alert({ title: 'Redeemed!', message: `You redeemed: ${reward.title}. Pick it up at the student center!` });
   }
 
   return (

@@ -6,6 +6,7 @@ import { useUser } from '@/lib/stores';
 import { getPublicSkill } from '@/lib/skills';
 import { startCheckout, confirmCheckout, validateCode } from '@/lib/purchases';
 import { recordEvent } from '@/lib/analytics';
+import BackLink from '@/components/BackLink';
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
@@ -77,7 +78,7 @@ export default function Checkout() {
   if (status === 'loading') return <Shell><p className="ck-muted">Preparing checkout…</p></Shell>;
   if (status === 'notfound') return <Shell><p className="ck-muted">This Skill isn’t available.</p></Shell>;
   if (status === 'error') return (
-    <Shell><p className="ck-err">{err}</p><button className="btn btn-secondary" onClick={() => navigate(-1)}>← Go back</button></Shell>
+    <Shell><p className="ck-err">{err}</p><BackLink onClick={() => navigate(-1)}>Go back</BackLink></Shell>
   );
 
   return (

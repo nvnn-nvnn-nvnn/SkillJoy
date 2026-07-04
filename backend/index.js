@@ -15,6 +15,7 @@ const verifyCollegeRoutes = require('./routes/verify-college.js');
 const reportRoutes = require('./routes/reports.js');
 const blockRoutes = require('./routes/blocks.js');
 const checkoutRoutes = require('./routes/checkout.js');
+const googleRoutes = require('./routes/google.js');
 const lockerRoutes = require('./routes/locker.js');
 const skillRoutes = require('./routes/skills.js');
 const marketingRoutes = require('./routes/marketing.js');
@@ -69,6 +70,8 @@ app.use('/api/blocks', authMiddleware, blockRoutes);
 
 // v3 Skill platform
 app.use('/api/checkout', strictLimiter, authMiddleware, checkoutRoutes);
+// Google Calendar — auth applied per-route inside (the OAuth callback is open).
+app.use('/api/google', googleRoutes);
 app.use('/api/locker', authMiddleware, lockerRoutes);
 app.use('/api/skills', authMiddleware, skillRoutes);
 app.use('/api/marketing', strictLimiter, authMiddleware, marketingRoutes);

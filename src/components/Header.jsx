@@ -40,6 +40,7 @@ export default function Header() {
       {/* Desktop nav */}
       <div className="nav-links">
         {/* ── v3 Skill-platform nav ── */}
+        <Link to="/discover" className={`nav-link${currentPath.startsWith('/discover') ? ' active' : ''}`}>Discover</Link>
         <Link to="/build" className={`nav-link${currentPath.startsWith('/build') ? ' active' : ''}`}>Build</Link>
         <Link to="/locker" className={`nav-link${currentPath.startsWith('/locker') ? ' active' : ''}`}>Locker</Link>
         <Link to="/dashboard" className={`nav-link${currentPath.startsWith('/dashboard') ? ' active' : ''}`}>Dashboard</Link>
@@ -83,6 +84,7 @@ export default function Header() {
             <span className="nav-drawer-title">Menu</span>
           </div>
           {/* ── v3 Skill-platform nav ── */}
+          <Link to="/discover" className={`nav-link${currentPath.startsWith('/discover') ? ' active' : ''}`} onClick={closeMenu}>Discover</Link>
           <Link to="/build" className={`nav-link${currentPath.startsWith('/build') ? ' active' : ''}`} onClick={closeMenu}>Build</Link>
           <Link to="/locker" className={`nav-link${currentPath.startsWith('/locker') ? ' active' : ''}`} onClick={closeMenu}>Locker</Link>
           <Link to="/dashboard" className={`nav-link${currentPath.startsWith('/dashboard') ? ' active' : ''}`} onClick={closeMenu}>Dashboard</Link>
