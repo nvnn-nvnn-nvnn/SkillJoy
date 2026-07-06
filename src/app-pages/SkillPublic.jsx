@@ -137,7 +137,7 @@ export default function SkillPublic() {
           ) : owned ? (
             <Link to={`/locker/${skill.id}`} className="btn btn-primary">Open in Locker</Link>
           ) : (
-            <button className="btn btn-primary" onClick={onBuy}>{skill.price_cents ? 'Get access' : 'Get it free'}</button>
+            <button className="btn btn-primary" onClick={onBuy}>{skill.price_cents ? 'Get access' : 'Get Free Access'}</button>
           )}
         </div>
       </div>

@@ -13,7 +13,7 @@ export const PRODUCT_TYPES = [
   { id: 'digital',    label: 'Digital product', icon: FileText,      blurb: 'Sell a downloadable file, PDF, template, or preset.',   built: true  },
   { id: 'course',     label: 'Online course',   icon: GraduationCap, blurb: 'Sections & lessons with progress tracking.',            built: true  },
   { id: 'coaching',   label: '1:1 coaching',    icon: CalendarClock, blurb: 'Bookable call slots synced to your availability.',     built: true  },
-  { id: 'membership', label: 'Membership',      icon: Repeat,        blurb: 'Recurring subscription for ongoing access.',           built: false },
+  { id: 'membership', label: 'Membership',      icon: Repeat,        blurb: 'Recurring subscription for ongoing access.',           built: true },
   { id: 'webinar',    label: 'Webinar',         icon: Video,         blurb: 'Live or evergreen ticketed online event.',             built: false },
   { id: 'lead',       label: 'Lead magnet',     icon: Magnet,        blurb: 'Free freebie that captures emails to your list.',       built: true },
   { id: 'bundle',     label: 'Bundle',          icon: Boxes,         blurb: 'Package several products together at one price.',       built: false },
