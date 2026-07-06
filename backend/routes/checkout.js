@@ -34,7 +34,7 @@ router.post('/:skillId/intent', async (req, res) => {
 
         const { data: skill, error: skillErr } = await supabase
             .from('skills')
-            .select('id, title, price_cents, pricing_type, status, version, creator_id, stripe_price_id')
+            .select('id, title, price_cents, kind, pricing_type, status, version, creator_id, stripe_price_id')
             .eq('id', skillId)
             .single();
         if (skillErr || !skill) return res.status(404).json({ error: 'Skill not found' });
@@ -55,6 +55,18 @@ router.post('/:skillId/intent', async (req, res) => {
                 buyer_id: buyerId, skill_id: skillId, version_at_purchase: skill.version,
                 amount_cents: 0, status: 'paid',
             }, { onConflict: 'buyer_id,skill_id' });
+
+            if (skill.kind === "lead") {
+                try {
+                    await supabase.from('subscribers').upsert({
+                    creator_id: skill.creator_id, email: req.user.email, source: 'lead_magnet'
+                }, {onConflict: 'creator_id, email', ignoreDuplicates: true})
+
+                } catch (e) {
+                    console.warn('lead subscribe failed:', e.message);
+                }
+       
+            }
             return res.json({ free: true });
         }
 

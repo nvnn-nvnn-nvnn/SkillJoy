@@ -56,6 +56,7 @@ import NotFound from './app-pages/NotFound'
 // v3 Skill-platform pages
 import SkillBuilder from './app-pages/SkillBuilder'
 import AddProduct from './app-pages/AddProduct'
+import LessonEditor from './app-pages/LessonEditor'
 import Locker from './app-pages/Locker'
 import Dashboard from './app-pages/Dashboard'
 import ServicesDashboard from './app-pages/ServicesDashboard'
@@ -79,6 +80,7 @@ function AppRoutes() {
           {/* ── v3 Skill-platform routes ── */}
           <Route path="/build" element={<SkillBuilder />} />
           <Route path="/build/new" element={<AddProduct />} />
+          <Route path="/build/:skillId/lesson/:lessonId" element={<LessonEditor />} />
           <Route path="/build/:skillId" element={<SkillBuilder />} />
           <Route path="/locker" element={<Locker />} />
           <Route path="/locker/:skillId" element={<Locker />} />

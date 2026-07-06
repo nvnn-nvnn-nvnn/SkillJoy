@@ -15,7 +15,7 @@ export const PRODUCT_TYPES = [
   { id: 'coaching',   label: '1:1 coaching',    icon: CalendarClock, blurb: 'Bookable call slots synced to your availability.',     built: true  },
   { id: 'membership', label: 'Membership',      icon: Repeat,        blurb: 'Recurring subscription for ongoing access.',           built: false },
   { id: 'webinar',    label: 'Webinar',         icon: Video,         blurb: 'Live or evergreen ticketed online event.',             built: false },
-  { id: 'lead',       label: 'Lead magnet',     icon: Magnet,        blurb: 'Free freebie that captures emails to your list.',       built: false },
+  { id: 'lead',       label: 'Lead magnet',     icon: Magnet,        blurb: 'Free freebie that captures emails to your list.',       built: true },
   { id: 'bundle',     label: 'Bundle',          icon: Boxes,         blurb: 'Package several products together at one price.',       built: false },
 ];
 

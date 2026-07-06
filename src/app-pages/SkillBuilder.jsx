@@ -5,9 +5,6 @@ import {
   listMySkills, getSkillWithBlocks, updateSkill, deleteSkill,
   addBlock, updateBlock, deleteBlock, reorderBlocks, publishSkill, publishUpdate,
 } from '@/lib/skills';
-import {
-  listSections, createSection, updateSection, deleteSection, reorderSections,
-} from '@/lib/course';
 import { Trash2, Send, EyeOff } from 'lucide-react';
 import { uploadCover } from '@/lib/storage';
 import { BLOCK_TYPES } from '@/lib/blockTypes';
@@ -37,7 +34,7 @@ const KIND_HINTS = {
 // The 5 builder steps. The middle step (index 1) is type-aware: its label +
 // heading swap by product kind, so a digital product walks through "Delivery"
 // while coaching walks through "Scheduling" — same shell, different body.
-const MIDDLE_LABEL = { digital: 'Delivery', coaching: 'Scheduling', course: 'Curriculum' };
+const MIDDLE_LABEL = { digital: 'Delivery', coaching: 'Scheduling', course: 'Curriculum', lead: "Freebie"  };
 const stepsFor = (kind) => ['Basics', MIDDLE_LABEL[kind] || 'Content', 'Pricing', 'Options', 'Publish'];
 
 // Post-purchase / marketing features that need dedicated backend passes
@@ -101,9 +98,15 @@ function SkillList({ userId }) {
               <div className="sb-card-top">
                 <span className={`sb-pill ${s.status}`}>{s.status === 'published' ? 'Published' : 'Draft'}</span>
                 <span className="sb-price">{s.price_cents ? `$${(s.price_cents / 100).toFixed(2)}` : 'Free'}</span>
+
               </div>
               <p className="sb-card-title">{s.title || 'Untitled Skill'}</p>
               {s.outcome && <p className="sb-card-outcome">{s.outcome}</p>}
+              <div className="div-sb-card-bottom">
+                <span className='sb-card-bottom'>
+                  {s.kind}
+                </span>
+              </div>
             </div>
           </Link>
         ))}
@@ -130,8 +133,7 @@ function SkillEditor({ skillId, userId }) {
   const addMenu = useRef(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [step, setStep] = useState(0);
-  const [sections, setSections] = useState([]);   // course sections (course kind)
-  const sectionTimers = useRef({});                // debounced section-title saves
+  const [courseHasLesson, setCourseHasLesson] = useState(false); // reported by CourseStructure
 
   useEffect(() => {
     let alive = true;
@@ -146,11 +148,6 @@ function SkillEditor({ skillId, userId }) {
           const created = await addBlock(skillId, { type: 'coaching', position: loaded.length, title: '', booking_minutes: 30 });
           if (!alive) return;
           loaded = [...loaded, created];
-        }
-        if (s.kind === 'course') {
-          const secs = await listSections(skillId);
-          if (!alive) return;
-          setSections(secs);
         }
         setSkill(s);
         setBlocks(loaded);
@@ -236,60 +233,6 @@ function SkillEditor({ skillId, userId }) {
     try { await reorderBlocks(next.map(b => b.id)); } catch (e) { console.warn(e.message); }
   }
 
-  // ── Course: section + lesson handlers ──────────────────────────────────────
-  async function addSection() {
-    try {
-      const created = await createSection(skillId, sections.length);
-      setSections(prev => [...prev, created]);
-    } catch (e) { alert({ title: 'Couldn’t add section', message: e.message, tone: 'danger' }); }
-  }
-
-  function patchSection(id, patch) {
-    setSections(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
-    clearTimeout(sectionTimers.current[id]);
-    sectionTimers.current[id] = setTimeout(() => {
-      updateSection(id, patch).catch(e => console.warn('save section', e.message));
-    }, 500);
-  }
-
-  async function removeSection(id) {
-    const ok = await confirm({ title: 'Delete this section?', message: 'This removes the section and every lesson inside it. This cannot be undone.', confirmLabel: 'Delete', danger: true });
-    if (!ok) return;
-    setSections(prev => prev.filter(s => s.id !== id));
-    setBlocks(prev => prev.filter(b => b.section_id !== id)); // DB cascades; mirror in state
-    try { await deleteSection(id); } catch (e) { console.warn(e.message); }
-  }
-
-  async function moveSection(id, dir) {
-    const idx = sections.findIndex(s => s.id === id);
-    const j = idx + dir;
-    if (j < 0 || j >= sections.length) return;
-    const next = [...sections];
-    [next[idx], next[j]] = [next[j], next[idx]];
-    setSections(next);
-    try { await reorderSections(next.map(s => s.id)); } catch (e) { console.warn(e.message); }
-  }
-
-  async function addLesson(sectionId, type) {
-    try {
-      const pos = blocks.filter(b => b.section_id === sectionId).length;
-      const created = await addBlock(skillId, { type, section_id: sectionId, position: pos, title: '' });
-      setBlocks(prev => [...prev, created]);
-    } catch (e) { alert({ title: 'Couldn’t add lesson', message: e.message, tone: 'danger' }); }
-  }
-
-  async function moveLesson(blockId, dir) {
-    const b = blocks.find(x => x.id === blockId);
-    if (!b) return;
-    const sibs = blocks.filter(x => x.section_id === b.section_id).sort((a, c) => a.position - c.position);
-    const idx = sibs.findIndex(x => x.id === blockId);
-    const j = idx + dir;
-    if (j < 0 || j >= sibs.length) return;
-    [sibs[idx], sibs[j]] = [sibs[j], sibs[idx]];
-    const posById = new Map(sibs.map((x, i) => [x.id, i]));
-    setBlocks(prev => prev.map(x => posById.has(x.id) ? { ...x, position: posById.get(x.id) } : x));
-    try { await reorderBlocks(sibs.map(x => x.id)); } catch (e) { console.warn(e.message); }
-  }
 
   async function togglePublish() {
     const publishing = skill.status !== 'published';
@@ -297,8 +240,8 @@ function SkillEditor({ skillId, userId }) {
       const k = skill.kind ?? 'digital';
       if (!skill.title?.trim()) { await alert({ title: 'Add a title first', message: 'Give your product a title before publishing.', tone: 'warning' }); return; }
       if (k === 'course') {
-        if (!sections.some(sec => blocks.some(b => b.section_id === sec.id))) {
-          await alert({ title: 'Add a lesson', message: 'A course needs at least one section with a lesson inside it before publishing.', tone: 'warning' });
+        if (!courseHasLesson) {
+          await alert({ title: 'Add a lesson', message: 'A course needs at least one module with a lesson inside it before publishing.', tone: 'warning' });
           return;
         }
       } else if (blocks.length === 0) {
@@ -308,6 +251,12 @@ function SkillEditor({ skillId, userId }) {
         await alert({ title: 'Add your download', message: 'A digital product needs a File block with an uploaded file or a link, so buyers actually get something after paying.', tone: 'warning' });
         return;
       }
+
+      if (k === 'lead' && !hasDelivery(blocks)) {
+        await alert({ title: 'Add your freebie', message: 'A lead magnet needs a File block with an uploaded file or a link, so people get something after signing up.', tone: 'warning' });
+        return;
+      }
+
     }
 
     // Confirm the state change (reflects what will happen).
@@ -362,7 +311,6 @@ function SkillEditor({ skillId, userId }) {
   if (!skill) return <div className="sb-wrap"><p className="sb-muted">Loading…</p></div>;
 
   const kind = skill.kind ?? 'digital';
-  const courseHasLesson = sections.some(sec => blocks.some(b => b.section_id === sec.id));
   const contentOk = kind === 'course' ? courseHasLesson : blocks.length > 0;
   const ready = !!skill.title?.trim() && contentOk && (kind !== 'digital' || hasDelivery(blocks));
   const steps = stepsFor(kind);
@@ -464,21 +412,14 @@ function SkillEditor({ skillId, userId }) {
         <div className="sb-panel">
           <div className="sb-blockshead">
             <h2 className="sb-h2">{midHeading}</h2>
-            <span className="sb-muted">
-              {kind === 'course'
-                ? `${sections.length} section${sections.length === 1 ? '' : 's'}`
-                : `${blocks.length} block${blocks.length === 1 ? '' : 's'}`}
-            </span>
+            {kind !== 'course' && (
+              <span className="sb-muted">{blocks.length} block{blocks.length === 1 ? '' : 's'}</span>
+            )}
           </div>
           <p className="sb-hint">{KIND_HINTS[kind]?.content ?? KIND_HINTS.digital.content}</p>
 
           {kind === 'course' ? (
-            <CourseStructure
-              skillId={skillId} creatorId={userId} sections={sections} blocks={blocks}
-              onAddSection={addSection} onPatchSection={patchSection}
-              onRemoveSection={removeSection} onMoveSection={moveSection}
-              onAddLesson={addLesson} patchBlock={patchBlock}
-              onRemoveLesson={removeBlock} onMoveLesson={moveLesson} />
+            <CourseStructure skillId={skillId} onReadyChange={setCourseHasLesson} />
           ) : (
             <>
               {blocks.map((b, i) => (
@@ -519,28 +460,40 @@ function SkillEditor({ skillId, userId }) {
       {step === 2 && (
         <div className="sb-panel">
           <h2 className="sb-h2">Pricing</h2>
-          <div className="sb-pricerow">
-            <div className="sb-pricefield">
-              <span className="sb-dollar">$</span>
-              <input type="number" min="0" step="1" className="sb-price-in"
-                value={skill.price_cents ? skill.price_cents / 100 : ''}
-                onChange={e => patchSkill({ price_cents: Math.max(0, Math.round((parseFloat(e.target.value) || 0) * 100)) })}
-                placeholder="0" />
+            { kind === "lead" ? (
+              <div className="sb-hint">
+                 <p className="sb-hint sb-hint-muted">Leads are automatically free</p>
+              </div>
+            ) : (
+            <div className="sb-pricerow">
+              <div className="sb-pricefield">
+                <span className="sb-dollar">$</span>
+                <input type="number" min="0" step="1" className="sb-price-in"
+                  value={skill.price_cents ? skill.price_cents / 100 : ''}
+                  onChange={e => patchSkill({ price_cents: Math.max(0, Math.round((parseFloat(e.target.value) || 0) * 100)) })}
+                  placeholder="0" />
+              </div>
+              <div className="sb-segmented">
+                <button className={skill.pricing_type === 'onetime' ? 'on' : ''} onClick={() => patchSkill({ pricing_type: 'onetime' })}>One-time</button>
+                <button className={skill.pricing_type === 'membership' ? 'on' : ''} onClick={() => patchSkill({ pricing_type: 'membership' })}>Membership</button>
+
+
+              </div>
             </div>
-            <div className="sb-segmented">
-              <button className={skill.pricing_type === 'onetime' ? 'on' : ''} onClick={() => patchSkill({ pricing_type: 'onetime' })}>One-time</button>
-              <button className={skill.pricing_type === 'membership' ? 'on' : ''} onClick={() => patchSkill({ pricing_type: 'membership' })}>Membership</button>
-            </div>
+            ) } 
+            { kind !== 'lead' && (
+              <p className="sb-hint">
+                {!skill.price_cents
+                  ? 'Free — buyers get instant access with no payment.'
+                  : skill.pricing_type === 'membership'
+                    ? 'Members are billed monthly until they cancel.'
+                    : 'A single one-time payment for lifetime access.'}
+                  
+              
+              </p>
+            )}
+            <p className="sb-hint sb-hint-muted">Promo codes are managed per-creator on your dashboard, not here.</p>
           </div>
-          <p className="sb-hint">
-            {!skill.price_cents
-              ? 'Free — buyers get instant access with no payment.'
-              : skill.pricing_type === 'membership'
-                ? 'Members are billed monthly until they cancel.'
-                : 'A single one-time payment for lifetime access.'}
-          </p>
-          <p className="sb-hint sb-hint-muted">Promo codes are managed per-creator on your dashboard, not here.</p>
-        </div>
       )}
 
       {/* ── 3 · Checkout & Options (post-purchase / marketing) ── */}
@@ -600,7 +553,7 @@ function SkillEditor({ skillId, userId }) {
           <ul className="sb-checklist sb-publishlist">
             <li className={skill.title?.trim() ? 'ok' : ''}>{skill.title?.trim() ? '✓' : '○'} Product has a title</li>
             {kind === 'course' ? (
-              <li className={courseHasLesson ? 'ok' : ''}>{courseHasLesson ? '✓' : '○'} A section with at least one lesson</li>
+              <li className={courseHasLesson ? 'ok' : ''}>{courseHasLesson ? '✓' : '○'} A module with at least one lesson</li>
             ) : (
               <li className={blocks.length > 0 ? 'ok' : ''}>{blocks.length > 0 ? '✓' : '○'} At least one content block</li>
             )}
@@ -653,8 +606,10 @@ function BuilderStyles() {
     .sb-card { display:flex; flex-direction:column; border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden; background:var(--surface); text-decoration:none; box-shadow:var(--shadow-sm); transition:transform .12s ease, box-shadow .12s ease; }
     .sb-card:hover { transform:translateY(-2px); box-shadow:var(--shadow); }
     .sb-cover { aspect-ratio:16/9; background:var(--surface-alt) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-size:32px; }
-    .sb-card-body { padding:12px 14px 14px; }
+    .sb-card-body { padding:12px 14px 14px; min-height:200px; display:flex; flex-direction:column; }
     .sb-card-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+    .div-sb-card-bottom { margin-top:auto; }
+    .sb-card-bottom { display:flex; justify-content:space-between; align-items:center; font-weight:800;}
     .sb-pill { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:3px 8px; border-radius:var(--r-full); }
     .sb-pill.published { background:var(--green-light); color:var(--green); }
     .sb-pill.draft { background:var(--surface-alt); color:var(--text-muted); }
@@ -696,7 +651,7 @@ function BuilderStyles() {
     .sb-segmented button.on { background:var(--accent); color:#fff; }
 
     /* Type selector — tile grid (same language as the block picker + /build/new). */
-    .sb-typefield { display:flex; flex-direction:column; gap:10px; }
+    .sb-typefield { display:flex; flex-direction:column; gap:10px; min-height:100px }
     .sb-fieldlabel { font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); }
     .sb-typegrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
     .sb-typetile { display:flex; align-items:center; gap:9px; text-align:left; white-space:normal; padding:10px 12px; border:1.5px solid var(--border); border-radius:var(--r); background:var(--surface); color:var(--text-secondary); font-size:13px; font-weight:600; cursor:pointer; transition:border-color .1s ease, background .1s ease, color .1s ease; }

@@ -297,12 +297,28 @@ ALTER TABLE course_sections ENABLE ROW LEVEL SECURITY;
 -- A lesson is a content_block with a section_id.
 ALTER TABLE content_blocks ADD COLUMN IF NOT EXISTS section_id UUID REFERENCES course_sections(id) ON DELETE CASCADE;
 
+-- migration 018 restructures courses to Modules → Lessons → content:
+--   course_sections = MODULE (UI label). course_lessons = LESSON (title/desc).
+--   content_blocks.lesson_id = a lesson's content. lesson_progress is per-lesson.
+CREATE TABLE IF NOT EXISTS course_lessons (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    skill_id    UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    section_id  UUID NOT NULL REFERENCES course_sections(id) ON DELETE CASCADE, -- module
+    title       TEXT,
+    description TEXT,
+    position    INTEGER NOT NULL DEFAULT 0,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS course_lessons_section_idx ON course_lessons(section_id, position);
+ALTER TABLE course_lessons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE content_blocks ADD COLUMN IF NOT EXISTS lesson_id UUID REFERENCES course_lessons(id) ON DELETE CASCADE;
+
 CREATE TABLE IF NOT EXISTS lesson_progress (
     user_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    block_id   UUID NOT NULL REFERENCES content_blocks(id) ON DELETE CASCADE,
+    lesson_id  UUID NOT NULL REFERENCES course_lessons(id) ON DELETE CASCADE,
     skill_id   UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (user_id, block_id)
+    PRIMARY KEY (user_id, lesson_id)
 );
 ALTER TABLE lesson_progress ENABLE ROW LEVEL SECURITY;
--- Full RLS policies for both in migrations/017_courses.sql.
+-- Full RLS policies in migrations/018_course_lessons.sql.
