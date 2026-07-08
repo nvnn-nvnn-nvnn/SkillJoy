@@ -5,6 +5,11 @@ import { LEGACY_MODE } from '@/lib/config';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import SkillJoyLogo3 from '../../assets/SkillJoy-Logo2.svg'
 
+// Base site URL with any trailing slash(es) stripped. Without this, a
+// VITE_SITE_URL like "https://skilljoy.me/" + "/login" becomes
+// "https://skilljoy.me//login" — a malformed redirect that Supabase rejects.
+const SITE_URL = (import.meta.env.VITE_SITE_URL || window.location.origin).replace(/\/+$/, '');
+
 export default function LoginPage() {
     const isRecovery = useRef(window.location.hash.includes('type=recovery'));
     const [mode, setMode] = useState(() =>
@@ -62,7 +67,7 @@ export default function LoginPage() {
                 setSuccess('Check your email to confirm your account, then sign in.');
             } else if (mode === 'reset') {
                 const { error: e } = await supabase.auth.resetPasswordForEmail(email, {
-                    redirectTo: (import.meta.env.VITE_SITE_URL ?? window.location.origin) + '/login',
+                    redirectTo: `${SITE_URL}/login`,
                 });
                 if (e) throw e;
                 setSuccess('Check your email for a password reset link.');
@@ -94,8 +99,7 @@ export default function LoginPage() {
         setError('');
         // Preserve any ?redirect= so the user still lands where they were headed.
         const back = searchParams.get('redirect');
-        const redirectUrl = (import.meta.env.VITE_SITE_URL ?? window.location.origin)
-            + '/login' + (back ? `?redirect=${encodeURIComponent(back)}` : '');
+        const redirectUrl = `${SITE_URL}/login` + (back ? `?redirect=${encodeURIComponent(back)}` : '');
         const { error: e } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: { redirectTo: redirectUrl },

@@ -47,6 +47,22 @@ router.post('/:skillId/intent', async (req, res) => {
             return res.status(400).json({ error: 'Guest checkout is only available for one-time products.' });
         }
 
+        // Don't let a guest pay again for something this email already owns.
+        // The logged-in checkout has this guard via buyer_id; guests have no
+        // account at intent time, so we resolve it by email — a READ only
+        // (email → profile → paid purchase), no account is created here.
+        const cleanEmail = email.trim().toLowerCase();
+        const { data: existingProfile } = await supabase
+            .from('profiles').select('id').eq('email', cleanEmail).maybeSingle();
+        const existingBuyerId = existingProfile?.id || null;
+        if (existingBuyerId) {
+            const { data: owned } = await supabase.from('purchases')
+                .select('status').eq('buyer_id', existingBuyerId).eq('skill_id', skillId).maybeSingle();
+            if (owned?.status === 'paid') {
+                return res.status(409).json({ error: 'You already own this — check your email for the access link, or log in to open it in your Locker.' });
+            }
+        }
+
         // Seller must have payouts set up.
         const { data: creator } = await supabase.from('profiles')
             .select('stripe_account_id, stripe_onboarded').eq('id', skill.creator_id).single();
@@ -65,8 +81,17 @@ router.post('/:skillId/intent', async (req, res) => {
                 .select('id, price_cents, pricing_type, status, creator_id, version')
                 .eq('id', skill.order_bump_skill_id).single();
             if (b && b.status === 'published' && b.pricing_type === 'onetime' && b.creator_id === skill.creator_id) {
-                bumpSkill = b;
-                bumpCents = skill.order_bump_price_cents ?? b.price_cents ?? 0;
+                // Skip the bump (don't charge) if this email already owns it.
+                let ownsBump = false;
+                if (existingBuyerId) {
+                    const { data: bo } = await supabase.from('purchases')
+                        .select('status').eq('buyer_id', existingBuyerId).eq('skill_id', b.id).maybeSingle();
+                    ownsBump = bo?.status === 'paid';
+                }
+                if (!ownsBump) {
+                    bumpSkill = b;
+                    bumpCents = skill.order_bump_price_cents ?? b.price_cents ?? 0;
+                }
             }
         }
 
