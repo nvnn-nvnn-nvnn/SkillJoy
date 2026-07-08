@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { serverError } = require('../lib/http');
 const supabase = require('../config/supabase');
 
 // Placeholder user routes - add as needed
@@ -38,7 +39,7 @@ router.get('/profile/:userId', async (req, res) => {
         res.json(profile);
     } catch (err) {
         console.error('Get profile error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -70,7 +71,7 @@ router.delete('/account', async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Delete account error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { serverError } = require('../lib/http');
 const supabase = require('../config/supabase');
 const { sendEmail } = require('../lib/email');
 const { unsubToken } = require('../lib/unsub');
@@ -19,7 +20,7 @@ router.post('/broadcast', async (req, res) => {
 
         const { data: subs, error } = await supabase
             .from('subscribers').select('email').eq('creator_id', creatorId);
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
         if (!subs?.length) return res.status(400).json({ error: 'You have no subscribers yet.' });
 
         // Creator display name for the footer.
@@ -59,7 +60,7 @@ router.post('/broadcast', async (req, res) => {
         res.json({ sent, failed });
     } catch (err) {
         console.error('Broadcast error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 

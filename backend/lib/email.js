@@ -1,7 +1,9 @@
 const { Resend } = require('resend');
 const supabase = require('../config/supabase');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Only construct Resend if a key is set — a missing key must NOT crash the
+// server at import. When absent, sendEmail() no-ops with a warning.
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 // Switch to 'SkillJoy <noreply@skilljoy.app>' once skilljoy.app is verified in Resend dashboard
 // Set RESEND_FROM in Railway env vars once skilljoy.app is verified in Resend dashboard.
 // Until then, leave it unset and it falls back to onboarding@resend.dev (Resend's shared domain).
@@ -18,6 +20,10 @@ async function getUserEmail(userId) {
 }
 
 async function sendEmail({ to, subject, html }) {
+    if (!resend) {
+        console.warn('Email skipped — RESEND_API_KEY not set. Would have sent:', subject, '→', to);
+        return null;
+    }
     const { data, error } = await resend.emails.send({ from: FROM, to, subject, html });
     if (error) {
         console.error('Resend error:', error);

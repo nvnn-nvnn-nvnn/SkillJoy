@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 
 const express = require('express');
 const cors = require('cors');
@@ -64,7 +64,7 @@ app.use('/api/users', authMiddleware, userRoutes);
 
 app.use('/api/stripe-connect', authMiddleware, stripeConnectRoutes);
 app.use('/api/contact', contactRoutes);
-app.use('/api/public', publicRoutes);
+app.use('/api/public', strictLimiter, publicRoutes);
 app.use('/api/verify-college', verifyCollegeRoutes);
 app.use('/api/reports', authMiddleware, reportRoutes);
 app.use('/api/blocks', authMiddleware, blockRoutes);

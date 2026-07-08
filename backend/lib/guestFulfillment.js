@@ -54,22 +54,31 @@ async function fulfillGuestPurchase(pi) {
 
     const buyerId = await findOrCreateBuyer(email, name);
 
-    // Idempotency guard — the webhook and /confirm both call this.
-    const { data: already } = await supabase.from('purchases')
-        .select('status').eq('buyer_id', buyerId).eq('skill_id', skillId).maybeSingle();
-    if (already?.status === 'paid') { console.log(`guest fulfil: already paid (${email})`); return; }
-
     const { data: skill } = await supabase.from('skills')
         .select('title, creator_id, version, confirmation_message').eq('id', skillId).single();
 
     const bumpAmount = parseInt(m.bump_amount || '0', 10) || 0;
     const mainAmount = Math.max(0, pi.amount - bumpAmount);
 
-    // Grant the main product.
-    await supabase.from('purchases').upsert({
+    // Grant the main product — atomic once-only so side-effects (receipt,
+    // notifications, redemption) fire exactly once even when the webhook and
+    // /confirm race, or Stripe redelivers. First flip any non-paid row to paid;
+    // if none, insert. A duplicate insert means another call won → skip.
+    const paidRow = {
         buyer_id: buyerId, skill_id: skillId, version_at_purchase: skill?.version ?? 1,
         amount_cents: mainAmount, stripe_payment_id: pi.id, status: 'paid',
-    }, { onConflict: 'buyer_id,skill_id' });
+    };
+    const { data: flipped } = await supabase.from('purchases')
+        .update({ status: 'paid', stripe_payment_id: pi.id, amount_cents: mainAmount, version_at_purchase: paidRow.version_at_purchase })
+        .eq('buyer_id', buyerId).eq('skill_id', skillId).neq('status', 'paid')
+        .select('id');
+    if (!flipped || flipped.length === 0) {
+        const { error: insErr } = await supabase.from('purchases').insert(paidRow);
+        if (insErr) {
+            if (/duplicate|unique|23505/i.test(insErr.message)) { console.log(`guest fulfil: already fulfilled (${email})`); return; }
+            throw insErr;
+        }
+    }
 
     // Grant the order bump, if one rode this payment.
     if (m.bump_skill_id) {

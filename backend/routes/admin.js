@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { serverError } = require('../lib/http');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
 
@@ -40,7 +41,7 @@ router.post('/resolve-dispute', async (req, res) => {
                 await stripe.refunds.create({ payment_intent: order.payment_intent_id });
             } catch (stripeErr) {
                 console.error('Stripe refund failed during resolve:', stripeErr.message);
-                return res.status(500).json({ error: 'Stripe refund failed: ' + stripeErr.message });
+                return res.status(500).json({ error: 'Refund failed. Please try again.' });
             }
         }
 
@@ -58,7 +59,7 @@ router.post('/resolve-dispute', async (req, res) => {
             })
             .eq('id', orderId);
 
-        if (updateError) return res.status(500).json({ error: updateError.message });
+        if (updateError) return serverError(res, updateError);
 
         // ── Notify both parties ───────────────────────────────────────────
         const gigTitle = order.gig?.title ?? 'your order';
@@ -93,7 +94,7 @@ router.post('/resolve-dispute', async (req, res) => {
         res.json({ success: true, message: resolutionText });
     } catch (err) {
         console.error('Resolve dispute error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -130,7 +131,7 @@ router.post('/run-clearance', async (req, res) => {
 
         const { data: readyOrders, error } = await query;
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
         if (!readyOrders?.length) return res.json({ message: 'No orders ready for clearance.', processed: 0 });
 
         const results = [];
@@ -167,7 +168,7 @@ router.post('/run-clearance', async (req, res) => {
 
         res.json({ processed: readyOrders.length, results });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -198,7 +199,7 @@ router.post('/remove-gig', async (req, res) => {
             .delete()
             .eq('id', gigId);
 
-        if (deleteErr) return res.status(500).json({ error: deleteErr.message });
+        if (deleteErr) return serverError(res, deleteErr);
 
         // Notify the owner
         await supabase.from('notifications').insert({
@@ -214,7 +215,7 @@ router.post('/remove-gig', async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Remove gig error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -242,7 +243,7 @@ router.get('/finances', async (req, res) => {
             .eq('payment_status', 'released')
             .order('clearance_date', { ascending: true });
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
 
         const owedToSellers = (releasedOrders ?? []).reduce((sum, o) => {
             return sum + Math.max(0, (o.payment_amount ?? 0) - feeDollarsFromTotal(o.payment_amount ?? 0));
@@ -273,7 +274,7 @@ router.get('/finances', async (req, res) => {
         });
     } catch (err) {
         console.error('Finances error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -291,7 +292,7 @@ router.get('/reports', async (req, res) => {
             .select('*, reporter:profiles!reporter_id(id, full_name)')
             .order('created_at', { ascending: false });
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
 
         // For each report, fetch the reported entity name
         const enriched = await Promise.all((data ?? []).map(async (r) => {
@@ -320,7 +321,7 @@ router.get('/reports', async (req, res) => {
         res.json(enriched);
     } catch (err) {
         console.error('Fetch reports error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -334,7 +335,7 @@ router.post('/remove-comment', async (req, res) => {
         if (!commentId) return res.status(400).json({ error: 'Missing commentId' });
 
         const { error } = await supabase.from('comments').delete().eq('id', commentId);
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
 
         await supabase.from('reports')
             .update({ status: 'resolved' })
@@ -345,7 +346,7 @@ router.post('/remove-comment', async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Remove comment error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -363,12 +364,12 @@ router.post('/dismiss-report', async (req, res) => {
             .update({ status: 'dismissed' })
             .eq('id', reportId);
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
 
         res.json({ success: true });
     } catch (err) {
         console.error('Dismiss report error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -384,7 +385,7 @@ router.post('/payout-hold', async (req, res) => {
             .from('profiles')
             .update({ payout_held: !!held, payout_hold_reason: held ? (reason || null) : null })
             .eq('id', userId);
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
 
         // Surface the decision to the creator (the trust promise: no silent freeze).
         await supabase.from('notifications').insert({
@@ -400,7 +401,7 @@ router.post('/payout-hold', async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Payout hold error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 

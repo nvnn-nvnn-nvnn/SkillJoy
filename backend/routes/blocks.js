@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { serverError } = require('../lib/http');
 const supabase = require('../config/supabase');
 
 // GET /api/blocks — list of user IDs blocked by the current user
@@ -11,10 +12,10 @@ router.get('/', async (req, res) => {
             .eq('blocker_id', req.user.id)
             .order('created_at', { ascending: false });
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
         res.json(data ?? []);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -34,10 +35,10 @@ router.post('/block', async (req, res) => {
             { onConflict: 'blocker_id,blocked_id', ignoreDuplicates: true }
         );
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -53,10 +54,10 @@ router.post('/unblock', async (req, res) => {
             .eq('blocker_id', req.user.id)
             .eq('blocked_id', blockedId);
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 

@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
+const { serverError } = require('../lib/http');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
 const { skillFeeCents } = require('../config/fees');
 const { fulfillGuestPurchase } = require('../lib/guestFulfillment');
+const { isStaleDestinationError, clearStaleAccount } = require('../lib/connectGuard');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GUEST CHECKOUT — buy without an account (one-time PAID products only).
@@ -70,25 +72,34 @@ router.post('/:skillId/intent', async (req, res) => {
 
         const totalCents = charge.cents + bumpCents;
 
-        const paymentIntent = await stripe.paymentIntents.create({
-            amount: totalCents,
-            currency: 'usd',
-            application_fee_amount: skillFeeCents(totalCents),
-            transfer_data: { destination: creator.stripe_account_id },
-            automatic_payment_methods: { enabled: true },
-            metadata: {
-                kind: 'skill_guest', skill_id: skillId,
-                guest_email: email.trim().toLowerCase(), guest_name: name.trim(),
-                code: charge.code || '',
-                bump_skill_id: bumpSkill ? bumpSkill.id : '',
-                bump_amount: String(bumpCents),
-            },
-        });
+        let paymentIntent;
+        try {
+            paymentIntent = await stripe.paymentIntents.create({
+                amount: totalCents,
+                currency: 'usd',
+                application_fee_amount: skillFeeCents(totalCents),
+                transfer_data: { destination: creator.stripe_account_id },
+                automatic_payment_methods: { enabled: true },
+                metadata: {
+                    kind: 'skill_guest', skill_id: skillId,
+                    guest_email: email.trim().toLowerCase(), guest_name: name.trim(),
+                    code: charge.code || '',
+                    bump_skill_id: bumpSkill ? bumpSkill.id : '',
+                    bump_amount: String(bumpCents),
+                },
+            });
+        } catch (e) {
+            if (isStaleDestinationError(e)) {
+                await clearStaleAccount(skill.creator_id);
+                return res.status(402).json({ error: 'This creator’s payouts need to be reconnected before you can buy. Please try again later.' });
+            }
+            throw e;
+        }
 
         res.json({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id, amountCents: totalCents });
     } catch (err) {
         console.error('Guest intent error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -109,7 +120,7 @@ router.post('/:skillId/confirm', async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Guest confirm error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 

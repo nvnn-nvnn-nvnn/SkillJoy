@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { serverError } = require('../lib/http');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
 const { feeCentsFromTotal, feeDollarsFromTotal } = require('../config/fees');
@@ -91,7 +92,7 @@ router.post("/onboard", async (req, res) => {
     catch(err){
 
         console.error('Stripe onboard error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
 
     };
 
@@ -150,7 +151,7 @@ router.get('/status', async (req, res)=>{
 
 
     } catch (err) {
-                res.status(500).json({ error: err.message });
+                serverError(res, err);
     };
 
 });
@@ -175,7 +176,7 @@ router.get('/balance', async (req, res) => {
 
         res.json({ available, pending });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -196,7 +197,7 @@ router.post('/dashboard-link', async (req, res) => {
         const loginLink = await stripe.accounts.createLoginLink(profile.stripe_account_id);
         res.json({ url: loginLink.url });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -242,7 +243,7 @@ router.get('/earnings', async (req, res) => {
             stripePending,     // transferred but still clearing on Stripe's side
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 

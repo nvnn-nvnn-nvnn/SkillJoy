@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { serverError } = require('../lib/http');
 const supabase = require('../config/supabase');
 
 const GIG_REASONS     = ['Spam or misleading', 'Inappropriate content', 'Scam or fraud', 'Copyright violation', 'Other'];
@@ -68,12 +69,12 @@ router.post('/', async (req, res) => {
             description: description?.trim() || null,
         });
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
 
         res.json({ success: true });
     } catch (err) {
         console.error('Report submit error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 

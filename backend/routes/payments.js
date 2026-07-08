@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { serverError } = require('../lib/http');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
 const { sendEmail, getUserEmail, templates } = require('../lib/email');
@@ -60,7 +61,7 @@ router.post('/create-intent', async (req, res) => {
         });
     } catch (err) {
         console.error('Create intent error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -100,7 +101,7 @@ router.post('/confirm', async (req, res) => {
             .eq('id', orderId)
             .select();
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
         if (!updateData || updateData.length === 0) return res.status(404).json({ error: 'Order not found or not updated' });
 
         // Notify both parties
@@ -145,7 +146,7 @@ router.post('/confirm', async (req, res) => {
         res.json({ success: true, message: 'Payment escrowed successfully', order: updateData[0] });
     } catch (err) {
         console.error('Confirm payment error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -201,7 +202,7 @@ router.post('/release', async (req, res) => {
             .single();
 
         if (error) {
-            return res.status(500).json({ error: error.message });
+            return serverError(res, error);
         }
 
         if (!released) {
@@ -251,7 +252,7 @@ router.post('/release', async (req, res) => {
         res.json({ success: true, message: 'Payment released to provider' });
     } catch (err) {
         console.error('Release payment error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -282,7 +283,7 @@ router.post('/buyer-cancel', async (req, res) => {
             .update({ status: 'cancelled', dispute_resolution: 'Cancelled by buyer', dispute_resolved_date: new Date().toISOString() })
             .eq('id', orderId);
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
 
         // Notify seller
         const gigTitle = order.gig?.title ?? 'an order';
@@ -299,7 +300,7 @@ router.post('/buyer-cancel', async (req, res) => {
         res.json({ success: true, message: 'Order cancelled' });
     } catch (err) {
         console.error('Buyer cancel error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -354,7 +355,7 @@ router.post('/cancel', async (req, res) => {
             .eq('id', orderId);
 
         if (error) {
-            return res.status(500).json({ error: error.message });
+            return serverError(res, error);
         }
 
         // Notify buyer
@@ -375,7 +376,7 @@ router.post('/cancel', async (req, res) => {
         res.json({ success: true, message: 'Order cancelled' });
     } catch (err) {
         console.error('Cancel error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 })
 
@@ -405,7 +406,7 @@ router.post('/respond', async (req, res) => {
             .update({ status })
             .eq('id', orderId);
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
 
         // Notify buyer
         const gigTitle = order.gig?.title ?? 'your request';
@@ -438,7 +439,7 @@ router.post('/respond', async (req, res) => {
         res.json({ success: true, status });
     } catch (err) {
         console.error('Respond error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -473,7 +474,7 @@ router.post('/cancel-dispute', async (req, res) => {
             })
             .eq('id', orderId);
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
 
         // Notify seller
         const gigTitle = order.gig?.title ?? 'an order';
@@ -490,7 +491,7 @@ router.post('/cancel-dispute', async (req, res) => {
         res.json({ success: true, message: 'Dispute cancelled' });
     } catch (err) {
         console.error('Cancel dispute error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -527,7 +528,7 @@ router.post('/dispute', async (req, res) => {
             })
             .eq('id', orderId);
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
 
         // ── Send notifications ────────────────────────────────────────────────
         const gigTitle = order.gig?.title ?? 'an order';
@@ -575,7 +576,7 @@ router.post('/dispute', async (req, res) => {
         res.json({ success: true, message: 'Dispute filed successfully' });
     } catch (err) {
         console.error('Create dispute error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -624,13 +625,13 @@ router.post('/refund', async (req, res) => {
             .eq('id', orderId);
 
         if (error) {
-            return res.status(500).json({ error: error.message });
+            return serverError(res, error);
         }
 
         res.json({ success: true, message: 'Payment withdrawn' });
     } catch (err) {
         console.error('Refund error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -676,7 +677,7 @@ router.post('/deliver', async (req, res) => {
             .eq('id', orderId);
 
         if (error) {
-            return res.status(500).json({ error: error.message });
+            return serverError(res, error);
         }
 
         // Notify buyer
@@ -712,7 +713,7 @@ router.post('/deliver', async (req, res) => {
         res.json({ success: true, message: 'Order marked as delivered' });
     } catch (err) {
         console.error('Deliver error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -768,7 +769,7 @@ router.post('/submit-evidence', async (req, res) => {
             ...(imageUrl ? { image_url: imageUrl } : {}),
         });
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
 
         // Notify the other party
         const otherPartyId = order.requester_id === req.user.id ? order.provider_id : order.requester_id;
@@ -784,7 +785,7 @@ router.post('/submit-evidence', async (req, res) => {
         res.json({ success: true, message: 'Evidence submitted' });
     } catch (err) {
         console.error('Submit evidence error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -812,7 +813,7 @@ router.get('/status/:orderId', async (req, res) => {
         res.json(safeOrder);
     } catch (err) {
         console.error('Get status error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 

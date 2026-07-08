@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { serverError } = require('../lib/http');
 const supabase = require('../config/supabase');
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -35,12 +36,12 @@ router.get('/block/:blockId/download', async (req, res) => {
         const { data, error } = await supabase.storage
             .from('skill-files')
             .createSignedUrl(block.file_key, 60); // 60s, minted fresh per request
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
 
         res.json({ url: data.signedUrl });
     } catch (err) {
         console.error('Locker download error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { serverError } = require('../lib/http');
 const supabase = require('../config/supabase');
 const { unsubToken } = require('../lib/unsub');
 
@@ -16,12 +17,12 @@ router.post('/unsubscribe', async (req, res) => {
 
         const { error } = await supabase
             .from('subscribers').delete().eq('creator_id', creatorId).ilike('email', email);
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
 
         res.json({ success: true });
     } catch (err) {
         console.error('Unsubscribe error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 

@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
+const { serverError } = require('../lib/http');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
 const { skillFeeCents, SKILL_PLATFORM_FEE_BPS } = require('../config/fees');
 const { sendEmail, getUserEmail } = require('../lib/email');
+const { isStaleDestinationError, clearStaleAccount } = require('../lib/connectGuard');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // v3 SKILL CHECKOUT — instant digital-goods purchase via a destination charge.
@@ -60,7 +62,7 @@ router.post('/:skillId/intent', async (req, res) => {
                 try {
                     await supabase.from('subscribers').upsert({
                     creator_id: skill.creator_id, email: req.user.email, source: 'lead_magnet'
-                }, {onConflict: 'creator_id, email', ignoreDuplicates: true})
+                }, {onConflict: 'creator_id,email', ignoreDuplicates: true})
 
                 } catch (e) {
                     console.warn('lead subscribe failed:', e.message);
@@ -96,20 +98,29 @@ router.post('/:skillId/intent', async (req, res) => {
                 await supabase.from('skills').update({ stripe_price_id: priceId }).eq('id', skillId);
             }
 
-            const session = await stripe.checkout.sessions.create({
-                mode: 'subscription',
-                line_items: [{ price: priceId, quantity: 1 }],
-                customer_email: req.user.email,
-                client_reference_id: buyerId,
-                subscription_data: {
-                    application_fee_percent: SKILL_PLATFORM_FEE_BPS / 100,
-                    transfer_data: { destination: creator.stripe_account_id },
+            let session;
+            try {
+                session = await stripe.checkout.sessions.create({
+                    mode: 'subscription',
+                    line_items: [{ price: priceId, quantity: 1 }],
+                    customer_email: req.user.email,
+                    client_reference_id: buyerId,
+                    subscription_data: {
+                        application_fee_percent: SKILL_PLATFORM_FEE_BPS / 100,
+                        transfer_data: { destination: creator.stripe_account_id },
+                        metadata: { kind: 'skill_sub', skill_id: skillId, buyer_id: buyerId },
+                    },
                     metadata: { kind: 'skill_sub', skill_id: skillId, buyer_id: buyerId },
-                },
-                metadata: { kind: 'skill_sub', skill_id: skillId, buyer_id: buyerId },
-                success_url: `${process.env.FRONTEND_URL}/locker/${skillId}?sub=success`,
-                cancel_url: `${process.env.FRONTEND_URL}/locker`,
-            });
+                    success_url: `${process.env.FRONTEND_URL}/locker/${skillId}?sub=success`,
+                    cancel_url: `${process.env.FRONTEND_URL}/locker`,
+                });
+            } catch (e) {
+                if (isStaleDestinationError(e)) {
+                    await clearStaleAccount(skill.creator_id);
+                    return res.status(402).json({ error: 'This creator’s payouts need to be reconnected before you can subscribe. Please try again later.' });
+                }
+                throw e;
+            }
 
             await supabase.from('purchases').upsert({
                 buyer_id: buyerId, skill_id: skillId, version_at_purchase: skill.version,
@@ -147,19 +158,28 @@ router.post('/:skillId/intent', async (req, res) => {
 
         const totalCents = charge.cents + bumpCents;
 
-        const paymentIntent = await stripe.paymentIntents.create({
-            amount: totalCents,
-            currency: 'usd',
-            application_fee_amount: skillFeeCents(totalCents),
-            transfer_data: { destination: creator.stripe_account_id },
-            automatic_payment_methods: { enabled: true }, // card + Apple/Google Pay
-            metadata: {
-                kind: 'skill', skill_id: skillId, buyer_id: buyerId, version: String(skill.version), code: charge.code || '',
-                bump_skill_id: bumpSkill ? bumpSkill.id : '',
-                bump_amount: String(bumpCents),
-                bump_version: bumpSkill ? String(bumpSkill.version) : '',
-            },
-        });
+        let paymentIntent;
+        try {
+            paymentIntent = await stripe.paymentIntents.create({
+                amount: totalCents,
+                currency: 'usd',
+                application_fee_amount: skillFeeCents(totalCents),
+                transfer_data: { destination: creator.stripe_account_id },
+                automatic_payment_methods: { enabled: true }, // card + Apple/Google Pay
+                metadata: {
+                    kind: 'skill', skill_id: skillId, buyer_id: buyerId, version: String(skill.version), code: charge.code || '',
+                    bump_skill_id: bumpSkill ? bumpSkill.id : '',
+                    bump_amount: String(bumpCents),
+                    bump_version: bumpSkill ? String(bumpSkill.version) : '',
+                },
+            });
+        } catch (e) {
+            if (isStaleDestinationError(e)) {
+                await clearStaleAccount(skill.creator_id);
+                return res.status(402).json({ error: 'This creator’s payouts need to be reconnected before you can buy. Please try again later.' });
+            }
+            throw e;
+        }
 
         // Upsert a pending purchase (one row per buyer+skill) for the main product.
         const { error: upErr } = await supabase.from('purchases').upsert({
@@ -167,7 +187,7 @@ router.post('/:skillId/intent', async (req, res) => {
             amount_cents: charge.cents, stripe_payment_id: paymentIntent.id, status: 'pending',
             discount_code: charge.code,
         }, { onConflict: 'buyer_id,skill_id' });
-        if (upErr) return res.status(500).json({ error: upErr.message });
+        if (upErr) return serverError(res, upErr);
 
         // And a pending row for the bump product — fulfilment flips both to paid.
         if (bumpSkill) {
@@ -175,13 +195,13 @@ router.post('/:skillId/intent', async (req, res) => {
                 buyer_id: buyerId, skill_id: bumpSkill.id, version_at_purchase: bumpSkill.version,
                 amount_cents: bumpCents, stripe_payment_id: paymentIntent.id, status: 'pending',
             }, { onConflict: 'buyer_id,skill_id' });
-            if (bumpErr) return res.status(500).json({ error: bumpErr.message });
+            if (bumpErr) return serverError(res, bumpErr);
         }
 
         res.json({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id, amountCents: totalCents });
     } catch (err) {
         console.error('Skill checkout intent error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -204,7 +224,7 @@ router.post('/:skillId/confirm', async (req, res) => {
             .from('purchases')
             .update({ status: 'paid' })
             .eq('buyer_id', buyerId).eq('skill_id', skillId).neq('status', 'paid');
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) return serverError(res, error);
 
         // Grant the order-bump product too, if one rode this payment.
         const bumpSkillId = pi.metadata?.bump_skill_id;
@@ -217,7 +237,7 @@ router.post('/:skillId/confirm', async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Skill checkout confirm error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 
@@ -258,7 +278,7 @@ router.post('/portal', async (req, res) => {
 
 
     } catch (e) {
-        res.status(500).json({error: e.message});
+        serverError(res, e);
     }
 })
 
@@ -293,7 +313,7 @@ router.post('/refund', async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Skill refund error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 

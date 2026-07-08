@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { serverError } = require('../lib/http');
 const supabase = require('../config/supabase');
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -30,7 +31,7 @@ router.post('/:skillId/version', async (req, res) => {
             .from('skills')
             .update({ version: newVersion, updated_at: new Date().toISOString() })
             .eq('id', skillId);
-        if (upErr) return res.status(500).json({ error: upErr.message });
+        if (upErr) return serverError(res, upErr);
 
         // Notify everyone who already bought it.
         const { data: buyers } = await supabase
@@ -53,7 +54,7 @@ router.post('/:skillId/version', async (req, res) => {
         res.json({ version: newVersion, notified: buyers?.length ?? 0 });
     } catch (err) {
         console.error('Skill version bump error:', err);
-        res.status(500).json({ error: err.message });
+        serverError(res, err);
     }
 });
 

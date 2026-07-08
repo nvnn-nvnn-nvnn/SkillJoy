@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { serverError } = require('../lib/http');
 const { randomUUID } = require('crypto');
 const supabase = require('../config/supabase');
 const { sendEmail } = require('../lib/email');
@@ -25,7 +26,7 @@ router.post('/send', authMiddleware, async (req, res) => {
         college_verified: false,
     }).eq('id', req.user.id);
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return serverError(res, error);
 
     const verifyUrl = `${process.env.FRONTEND_URL}/verify-college?token=${token}`;
 
@@ -44,7 +45,8 @@ router.post('/send', authMiddleware, async (req, res) => {
             `,
         });
     } catch (err) {
-        return res.status(500).json({ error: `Email delivery failed: ${err.message}` });
+        console.error('Verify-college email delivery failed:', err.message);
+        return res.status(500).json({ error: 'Email delivery failed. Please try again.' });
     }
 
     res.json({ success: true });
@@ -77,7 +79,7 @@ router.post('/confirm', async (req, res) => {
         college_verify_expires_at: null,
     }).eq('id', profile.id);
 
-    if (updateError) return res.status(500).json({ error: updateError.message });
+    if (updateError) return serverError(res, updateError);
 
     // Backfill university_domain on any existing gigs the user created before verification
     await supabase.from('gigs')

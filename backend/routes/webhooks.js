@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { serverError } = require('../lib/http');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
 const { sendEmail, getUserEmail, purchaseThankYou } = require('./../lib/email');
@@ -362,11 +363,14 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
             const { skill_id, buyer_id } = session.metadata;
             console.log(`🔁 Membership started: skill ${skill_id}, buyer ${buyer_id}`);
 
-            const { error } = await supabase
+            const { data: granted, error } = await supabase
                 .from('purchases')
                 .update({ status: 'paid', stripe_subscription_id: session.subscription })
-                .eq('buyer_id', buyer_id).eq('skill_id', skill_id);
+                .eq('buyer_id', buyer_id).eq('skill_id', skill_id).neq('status', 'paid')
+                .select('id');
             if (error) { console.error('❌ Membership grant failed:', error.message); break; }
+            // Idempotency: only run side-effects on the first grant (Stripe may redeliver).
+            if (!granted || granted.length === 0) { console.log('membership already granted — skipping side-effects'); break; }
 
             const { data: skill } = await supabase
                 .from('skills').select('title, creator_id').eq('id', skill_id).single();
