@@ -1,9 +1,14 @@
 import { supabase } from './supabase';
 
-// ── Analytics data layer (v3) ───────────────────────────────────────────────
+// ── Metrics / analytics data layer (v3) ─────────────────────────────────────
 // Fire-and-forget event recording + creator-facing aggregates. Events are
 // insert-only for everyone (incl. anon storefront views); reads are creator-only
 // via RLS. Funnel: storefront_view → skill_view → checkout_start → purchase.
+//
+// NOTE: this file is intentionally named `metrics.js`, not `analytics.js` —
+// ad blockers block any script literally named analytics.js by filename, which
+// (in dev, where Vite serves unbundled modules) breaks the import and white-
+// screens the whole app. Keep the neutral name.
 
 /**
  * Record an analytics event. Fire-and-forget — never throws into the UI.
@@ -20,7 +25,7 @@ export function recordEvent(type, ctx = {}) {
   };
   // Don't await — analytics must never block or break a user action.
   supabase.from('analytics_events').insert(row).then(({ error }) => {
-    if (error) console.warn('analytics: failed to record', type, error.message);
+    if (error) console.warn('metrics: failed to record', type, error.message);
   });
 }
 

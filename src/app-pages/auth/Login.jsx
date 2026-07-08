@@ -35,8 +35,21 @@ export default function LoginPage() {
         return () => subscription.unsubscribe();
     }, []);
 
+    // Central post-auth routing for EVERY sign-in path (password + Google OAuth).
+    // OAuth logins land here via the session, not through submit(), so the
+    // onboarding gate must live here — otherwise a new Google user (who has no
+    // profile row yet) would skip onboarding and land profile-less on /build.
     useEffect(() => {
-        if (user && !isRecovery.current) navigate(redirectTo);
+        if (!user || isRecovery.current) return;
+        let alive = true;
+        (async () => {
+            const { data: profile } = await supabase
+                .from('profiles').select('full_name, username').eq('id', user.id).maybeSingle();
+            if (!alive) return;
+            if (!profile?.full_name || (!LEGACY_MODE && !profile?.username)) navigate('/onboarding');
+            else navigate(redirectTo);
+        })();
+        return () => { alive = false; };
     }, [user, navigate, redirectTo]);
 
     async function submit(e) {
@@ -67,20 +80,27 @@ export default function LoginPage() {
             } else {
                 const { error: e } = await supabase.auth.signInWithPassword({ email, password });
                 if (e) throw e;
-                const { data: { user: signedInUser } } = await supabase.auth.getUser();
-                const { data: userProfile } = await supabase.from('profiles').select('full_name, username').eq('id', signedInUser.id).single();
-                // v3 needs a name + a storefront @username; otherwise finish onboarding.
-                if (!userProfile?.full_name || (!LEGACY_MODE && !userProfile?.username)) {
-                    navigate('/onboarding');
-                } else {
-                    navigate(redirectTo);
-                }
+                // Routing (incl. the onboarding gate) is handled by the user effect
+                // above, so password and Google logins share one code path.
             }
         } catch (e) {
             setError(e.message ?? 'Something went wrong.');
         } finally {
             setBusy(false);
         }
+    }
+
+    async function signInWithGoogle() {
+        setError('');
+        // Preserve any ?redirect= so the user still lands where they were headed.
+        const back = searchParams.get('redirect');
+        const redirectUrl = (import.meta.env.VITE_SITE_URL ?? window.location.origin)
+            + '/login' + (back ? `?redirect=${encodeURIComponent(back)}` : '');
+        const { error: e } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: { redirectTo: redirectUrl },
+        });
+        if (e) setError(e.message);
     }
 
     function switchMode(next) {
@@ -204,6 +224,21 @@ export default function LoginPage() {
                         </button>
                     </form>
 
+                    {(mode === 'signin' || mode === 'signup') && (
+                        <>
+                            <div className="login-or"><span>or</span></div>
+                            <button type="button" className="btn-google" onClick={signInWithGoogle} disabled={busy}>
+                                <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                                    <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" />
+                                    <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.02-3.7H.96v2.34A9 9 0 0 0 9 18z" />
+                                    <path fill="#FBBC05" d="M3.98 10.72a5.4 5.4 0 0 1 0-3.44V4.94H.96a9 9 0 0 0 0 8.12l3.02-2.34z" />
+                                    <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.9 11.43 0 9 0A9 9 0 0 0 .96 4.94l3.02 2.34C4.68 5.16 6.66 3.58 9 3.58z" />
+                                </svg>
+                                Continue with Google
+                            </button>
+                        </>
+                    )}
+
                     <div className="login-toggle">
                         {mode === 'reset' ? (
                             <>
@@ -298,6 +333,42 @@ export default function LoginPage() {
           border-radius: var(--r-sm);
           padding: 10px 14px;
         }
+
+        .login-or {
+          display: flex;
+          align-items: center;
+          text-align: center;
+          margin: 20px 0;
+          color: var(--text-muted);
+          font-size: 13px;
+        }
+        .login-or::before, .login-or::after {
+          content: '';
+          flex: 1;
+          height: 1px;
+          background: var(--border);
+        }
+        .login-or span { padding: 0 12px; }
+        .btn-google {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          padding: 11px;
+          border: 1px solid var(--border-strong);
+          border-radius: var(--r);
+          background: var(--surface);
+          color: var(--text);
+          font-family: var(--font-body);
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: background .12s ease, border-color .12s ease;
+        }
+        .btn-google:hover:not(:disabled) { background: var(--surface-alt); border-color: var(--text-muted); }
+        .btn-google:disabled { opacity: .6; cursor: default; }
 
         .login-toggle {
           margin-top: 24px;

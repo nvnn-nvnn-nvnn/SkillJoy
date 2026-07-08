@@ -2,8 +2,9 @@ const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
-const { sendEmail, getUserEmail } = require('./../lib/email');
+const { sendEmail, getUserEmail, purchaseThankYou } = require('./../lib/email');
 const { fireAutomation } = require('./../lib/webhookout');
+const { fulfillGuestPurchase } = require('./../lib/guestFulfillment');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STRIPE WEBHOOK ENDPOINT
@@ -30,6 +31,13 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
             const paymentIntent = event.data.object;
             console.log(`\n✅ STRIPE WEBHOOK: PaymentIntent succeeded: ${paymentIntent.id}`);
             console.log(`💰 Amount: $${paymentIntent.amount / 100}`);
+
+            // ── Guest purchase (no account at pay time — created at fulfilment) ──
+            if (paymentIntent.metadata?.kind === 'skill_guest') {
+                try { await fulfillGuestPurchase(paymentIntent); }
+                catch (e) { console.error('❌ Guest fulfilment failed:', e.message); }
+                break;
+            }
 
             // ── v3 Skill purchase (instant digital goods, no escrow) ──
             if (paymentIntent.metadata?.kind === 'skill') {
@@ -67,30 +75,50 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
                             .select('id, times_redeemed').eq('creator_id', skill.creator_id).ilike('code', code).maybeSingle();
                         if (d) await supabase.from('discounts').update({ times_redeemed: d.times_redeemed + 1 }).eq('id', d.id);
                     }
-                    // Best-effort receipt to the buyer. Includes the creator's
-                    // custom confirmation message (escaped) if they set one.
+                    // Best-effort thank-you / receipt to the buyer.
                     try {
                         const email = await getUserEmail(buyer_id);
-                        const note = skill?.confirmation_message
-                            ? `<p style="background:#f4f1ea;border-radius:8px;padding:12px 14px;white-space:pre-wrap;">${String(skill.confirmation_message).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`
-                            : '';
-                        if (email) await sendEmail({
-                            to: email,
-                            subject: `Your receipt — ${skill?.title ?? 'SkillJoy purchase'}`,
-                            html: `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;">
-                                <p>Thanks for your purchase!</p>
-                                <p><strong>${skill?.title ?? 'Skill'}</strong> — $${(paymentIntent.amount / 100).toFixed(2)}</p>
-                                ${note}
-                                <p>Access it anytime in your locker:</p>
-                                <a href="${process.env.FRONTEND_URL}/locker/${skill_id}" style="display:inline-block;padding:10px 20px;background:#D4522A;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Open in Locker</a>
-                                <p style="color:#9ca3af;font-size:12px;margin-top:24px;">SkillJoy</p></div>`,
-                        });
+                        if (email) {
+                            const { subject, html } = purchaseThankYou({
+                                title: skill?.title ?? 'your purchase',
+                                amountCents: paymentIntent.amount,
+                                note: skill?.confirmation_message || '',
+                                accessUrl: `${process.env.FRONTEND_URL}/locker/${skill_id}`,
+                                accessLabel: 'Open in Locker',
+                            });
+                            await sendEmail({ to: email, subject, html });
+                        }
                     } catch (e) { console.warn('receipt email failed:', e.message); }
                     // Outbound automation webhook (Zapier/Make/AutoDM).
                     if (skill?.creator_id) fireAutomation(skill.creator_id, 'sale', {
                         skill_id, title: skill.title, amount: paymentIntent.amount / 100, kind: 'onetime',
                     });
                     console.log(`✅ Skill purchase fulfilled (skill ${skill_id}, buyer ${buyer_id})`);
+                }
+
+                // ── Order bump: grant the add-on product that rode this payment ──
+                const bumpSkillId = paymentIntent.metadata?.bump_skill_id;
+                if (bumpSkillId) {
+                    const { data: bumpPaid } = await supabase
+                        .from('purchases')
+                        .update({ status: 'paid', stripe_payment_id: paymentIntent.id })
+                        .eq('buyer_id', buyer_id).eq('skill_id', bumpSkillId)
+                        .neq('status', 'paid') // idempotency guard
+                        .select('id');
+                    if (bumpPaid?.length) {
+                        const { data: bumpSkill } = await supabase
+                            .from('skills').select('title, creator_id').eq('id', bumpSkillId).single();
+                        if (bumpSkill?.creator_id) {
+                            await supabase.from('notifications').insert({
+                                user_id: bumpSkill.creator_id,
+                                type: 'skill_purchase',
+                                title: 'Order bump sold! 🎉',
+                                message: `Your add-on "${bumpSkill.title ?? 'product'}" sold alongside another purchase.`,
+                                related_id: bumpSkillId, related_type: null,
+                            });
+                        }
+                        console.log(`✅ Order bump fulfilled (skill ${bumpSkillId}, buyer ${buyer_id})`);
+                    }
                 }
                 break;
             }
@@ -351,6 +379,34 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
                     related_id: skill_id, related_type: null,
                 });
                 fireAutomation(skill.creator_id, 'sale', { skill_id, title: skill.title, kind: 'membership' });
+
+                // Patreon-style: fold the new member's (already-verified) account
+                // email into the creator's subscriber list — same capture as the
+                // lead-magnet flow. No opt-in email; the login email is trusted.
+                try {
+                    const memberEmail = session.customer_details?.email || await getUserEmail(buyer_id);
+                    if (memberEmail) {
+                        await supabase.from('subscribers').upsert(
+                            { creator_id: skill.creator_id, email: memberEmail, source: 'membership' },
+                            { onConflict: 'creator_id,email', ignoreDuplicates: true }
+                        );
+                    }
+                } catch (e) { console.warn('membership subscribe failed:', e.message); }
+
+                // Thank-you / confirmation email to the new member (was missing).
+                try {
+                    const memberEmail = session.customer_details?.email || session.customer_email || await getUserEmail(buyer_id);
+                    if (memberEmail) {
+                        const { subject, html } = purchaseThankYou({
+                            title: skill.title ?? 'your membership',
+                            amountCents: session.amount_total ?? null,
+                            recurring: true,
+                            accessUrl: `${process.env.FRONTEND_URL}/locker/${skill_id}`,
+                            accessLabel: 'Open your membership',
+                        });
+                        await sendEmail({ to: memberEmail, subject, html });
+                    }
+                } catch (e) { console.warn('membership receipt failed:', e.message); }
             }
             break;
         }

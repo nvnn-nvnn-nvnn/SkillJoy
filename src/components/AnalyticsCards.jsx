@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getCreatorEvents } from '@/lib/analytics';
+import { getCreatorEvents } from '@/lib/metrics';
 
 // ── Creator analytics (v3, doc 06) ──────────────────────────────────────────
 // Visual funnel + engagement off analytics_events. Kept simple and legible —

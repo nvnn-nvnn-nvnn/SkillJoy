@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useUser } from '@/lib/stores';
-import { listMyPurchases, hasPurchased } from '@/lib/purchases';
+import { listMyPurchases, hasPurchased, openMembershipPortal } from '@/lib/purchases';
 import { getSkillWithBlocks } from '@/lib/skills';
 import { getMyReview, upsertReview, deleteReview } from '@/lib/reviews';
 import BlockRenderer from '@/components/BlockRenderer';
@@ -22,7 +22,30 @@ export default function Locker() {
 // ── Locker list ───────────────────────────────────────────────────────────────
 function LockerList({ userId }) {
   const [items, setItems] = useState(null);
+  const [tab, setTab] = useState('digital')   // 'digital' | 'membership'
+  const [busyId, setBusyId] = useState(null); // purchase id whose portal is opening
   useEffect(() => { listMyPurchases(userId).then(setItems).catch(() => setItems([])); }, [userId]);
+
+  // Send the buyer to Stripe's billing portal to manage/cancel a membership.
+  // The webhook flips status → 'expired' on cancel; we just open the door.
+  async function manageMembership(purchaseId) {
+    setBusyId(purchaseId);
+    try {
+      const url = await openMembershipPortal(purchaseId);
+      window.location.assign(url);
+    } catch (e) {
+      setBusyId(null);
+      window.alert(e.message || 'Could not open the billing portal.');
+    }
+  }
+
+  // Derive the active view from the loaded purchases — memberships in one tab,
+  // everything else in the other. (`?? []` so it's safe before items load.)
+  const visible = (items ?? []).filter(p =>
+    tab === 'membership'
+      ? p.skill?.pricing_type === 'membership'
+      : p.skill?.pricing_type !== 'membership'
+  );
 
   return (
     <div className="lk-wrap">
@@ -30,30 +53,58 @@ function LockerList({ userId }) {
       <p className="lk-sub">Everything you’ve bought — yours forever, always the latest version.</p>
 
       {items === null && <p className="lk-muted">Loading…</p>}
-      {items?.length === 0 && (
-        <div className="lk-empty">
-          <p style={{ fontSize: 40 }}>📦</p>
-          <p className="lk-empty-t">Nothing here yet</p>
-          <p className="lk-muted">Skills you purchase will appear here.</p>
-        </div>
+
+      {items !== null && (
+        <>
+          {/* Split the same purchase list into two views by pricing_type — no re-fetch. */}
+          <div className="lk-tabs">
+            <button className={tab === 'digital' ? 'on' : ''} onClick={() => setTab('digital')}>Products</button>
+            <button className={tab === 'membership' ? 'on' : ''} onClick={() => setTab('membership')}>Subscriptions</button>
+          </div>
+
+          {visible.length === 0 ? (
+            <div className="lk-empty">
+              <p style={{ fontSize: 40 }}>{tab === 'membership' ? '🔁' : '📦'}</p>
+              <p className="lk-empty-t">
+                {tab === 'membership' ? 'No subscriptions yet' : 'Nothing here yet'}
+              </p>
+              <p className="lk-muted">
+                {tab === 'membership'
+                  ? 'Memberships you join will appear here.'
+                  : 'Skills you purchase will appear here.'}
+              </p>
+            </div>
+          ) : (
+            <div className="lk-list">
+              {visible.map(p => (
+                <Link key={p.id} to={`/locker/${p.skill_id}`} className="lk-card">
+                  <div className="lk-cover" style={p.skill?.cover_url ? { backgroundImage: `url(${p.skill.cover_url})` } : {}}>
+                    {!p.skill?.cover_url && <span>🧩</span>}
+                  </div>
+                  <div className="lk-card-body">
+                    <p className="lk-card-title">{p.skill?.title || 'Skill'}</p>
+                    {p.skill?.outcome && <p className="lk-card-outcome">{p.skill.outcome}</p>}
+                    {p.skill && p.skill.version > p.version_at_purchase && (
+                      <span className="lk-updated">Updated to v{p.skill.version}</span>
+                    )}
+                    {p.skill?.pricing_type === 'membership' && (
+                      <button
+                        className="lk-manage"
+                        disabled={busyId === p.id}
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); manageMembership(p.id); }}
+                      >
+                        {busyId === p.id ? 'Opening…' : 'Manage membership'}
+                      </button>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
-      <div className="lk-list">
-        {items?.map(p => (
-          <Link key={p.id} to={`/locker/${p.skill_id}`} className="lk-card">
-            <div className="lk-cover" style={p.skill?.cover_url ? { backgroundImage: `url(${p.skill.cover_url})` } : {}}>
-              {!p.skill?.cover_url && <span>🧩</span>}
-            </div>
-            <div className="lk-card-body">
-              <p className="lk-card-title">{p.skill?.title || 'Skill'}</p>
-              {p.skill?.outcome && <p className="lk-card-outcome">{p.skill.outcome}</p>}
-              {p.skill && p.skill.version > p.version_at_purchase && (
-                <span className="lk-updated">Updated to v{p.skill.version}</span>
-              )}
-            </div>
-          </Link>
-        ))}
-      </div>
+
       <LockerStyles />
     </div>
   );
@@ -138,7 +189,8 @@ function SkillConsume({ skillId, user }) {
       )}
 
       <div className="lk-community">
-        <CommunityThread skillId={skill.id} creatorId={skill.creator_id} user={user} />
+        <CommunityThread skillId={skill.id} creatorId={skill.creator_id} user={user}
+          feed={skill.kind === 'membership'} />
       </div>
 
       <LockerStyles />
@@ -210,6 +262,14 @@ function LockerStyles() {
     .lk-h1 { font-size:26px; font-weight:700; font-family:var(--font-display); }
     .lk-sub { color:var(--text-secondary); margin-top:4px; }
     .lk-muted { color:var(--text-muted); }
+
+    .lk-tabs { display:inline-flex; gap:4px; margin-top:18px; padding:4px; background:var(--surface-alt); border:1px solid var(--border); border-radius:var(--r-full); }
+    .lk-tabs button { width:auto; min-width:0; border:none; background:none; color:var(--text-secondary); font-weight:600; font-size:14px; padding:7px 18px; border-radius:var(--r-full); cursor:pointer; white-space:nowrap; }
+    .lk-tabs button.on { background:var(--surface); color:var(--text); box-shadow:var(--shadow-sm); }
+
+    .lk-manage { width:auto; min-width:0; margin-top:10px; border:1px solid var(--border-strong); background:var(--surface); color:var(--text); font-weight:600; font-size:13px; padding:6px 14px; border-radius:var(--r-full); cursor:pointer; white-space:nowrap; }
+    .lk-manage:hover { background:var(--surface-alt); }
+    .lk-manage:disabled { opacity:.6; cursor:default; }
 
     .lk-empty { text-align:center; padding:48px 0; }
     .lk-empty-t { font-weight:700; font-size:18px; margin-top:8px; }

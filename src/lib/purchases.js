@@ -10,7 +10,7 @@ import { apiFetch } from './api';
 export async function listMyPurchases(buyerId) {
   const { data, error } = await supabase
     .from('purchases')
-    .select('id, skill_id, version_at_purchase, amount_cents, status, created_at, skill:skills(id, title, outcome, cover_url, version, creator_id)')
+    .select('id, skill_id, version_at_purchase, amount_cents, status, created_at, skill:skills(id, title, outcome, cover_url, version, creator_id, pricing_type)')
     .eq('buyer_id', buyerId)
     .eq('status', 'paid')
     .order('created_at', { ascending: false });
@@ -60,14 +60,53 @@ export async function listSkillBuyers(skillId) {
  * Returns { clientSecret, paymentIntentId } for paid Skills, or { free: true }
  * if the Skill is free (already granted server-side).
  */
-export async function startCheckout(skillId, code = null) {
+export async function startCheckout(skillId, code = null, bump = false) {
   const res = await apiFetch(`/api/checkout/${skillId}/intent`, {
     method: 'POST',
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code, bump }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Could not start checkout.');
   return data;
+}
+
+/** Guest (no account) checkout for a one-time product. apiFetch just sends no
+ *  auth token when there's no session — the /api/guest routes don't require one.
+ *  Returns { clientSecret, paymentIntentId, amountCents }. */
+export async function startGuestCheckout(skillId, { name, email, code = null, bump = false }) {
+  const res = await apiFetch(`/api/guest/${skillId}/intent`, {
+    method: 'POST',
+    body: JSON.stringify({ name, email, code, bump }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not start checkout.');
+  return data;
+}
+
+/** Fast fulfilment fallback for a guest purchase (webhook is source of truth). */
+export async function confirmGuestCheckout(skillId, paymentIntentId) {
+  const res = await apiFetch(`/api/guest/${skillId}/confirm`, {
+    method: 'POST',
+    body: JSON.stringify({ paymentIntentId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not confirm purchase.');
+  return data;
+}
+
+
+
+// Portal subscription cancellation
+
+export async function openMembershipPortal(purchaseId){
+  const res = await apiFetch(`/api/checkout/portal`, {
+    method: 'POST',
+    body: JSON.stringify({purchaseId}),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not access Stripe Portal.');
+  return data.url
+
 }
 
 /** Preview a promo code (one-time Skills). Returns {valid, percentOff, amountCents}. */

@@ -15,6 +15,7 @@ const verifyCollegeRoutes = require('./routes/verify-college.js');
 const reportRoutes = require('./routes/reports.js');
 const blockRoutes = require('./routes/blocks.js');
 const checkoutRoutes = require('./routes/checkout.js');
+const guestRoutes = require('./routes/guest.js');
 const googleRoutes = require('./routes/google.js');
 const lockerRoutes = require('./routes/locker.js');
 const skillRoutes = require('./routes/skills.js');
@@ -70,6 +71,9 @@ app.use('/api/blocks', authMiddleware, blockRoutes);
 
 // v3 Skill platform
 app.use('/api/checkout', strictLimiter, authMiddleware, checkoutRoutes);
+// Guest checkout — no authMiddleware (buyer has no account yet). Account is
+// created at fulfilment, after payment, so this can't be used to spam accounts.
+app.use('/api/guest', strictLimiter, guestRoutes);
 // Google Calendar — auth applied per-route inside (the OAuth callback is open).
 app.use('/api/google', googleRoutes);
 app.use('/api/locker', authMiddleware, lockerRoutes);

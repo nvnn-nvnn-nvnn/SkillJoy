@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { getBlockDownloadUrl } from '@/lib/purchases';
-import { recordEvent } from '@/lib/analytics';
+import { recordEvent } from '@/lib/metrics';
 import { BLOCK_META } from '@/lib/blockTypes';
 import BookingWidget from '@/components/BookingWidget';
 

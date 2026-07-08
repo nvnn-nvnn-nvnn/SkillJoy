@@ -112,7 +112,19 @@ router.get('/status', async (req, res)=>{
         };
 
 
-        const account = await stripe.accounts.retrieve(profile.stripe_account_id);
+        let account;
+        try {
+            account = await stripe.accounts.retrieve(profile.stripe_account_id);
+        } catch (err) {
+            // Stale connected account — created under a different platform key, or
+            // access revoked. Clear it so the UI degrades to "set up payouts"
+            // instead of throwing; the create-link route mints a fresh one next time.
+            console.warn(`Stale Stripe account ${profile.stripe_account_id} on status check — clearing:`, err.message);
+            await supabase.from('profiles')
+                .update({ stripe_account_id: null, stripe_onboarded: false })
+                .eq('id', req.user.id);
+            return res.json({ onboarded: false });
+        }
 
         const onboarded = account.details_submitted && account.charges_enabled;
 

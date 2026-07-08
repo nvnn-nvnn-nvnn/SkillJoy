@@ -7,8 +7,14 @@ import { useDialog } from '@/components/Dialog';
 // ── Per-Skill community space (v3) ──────────────────────────────────────────
 // One lightweight thread per Skill: top-level posts + one level of replies.
 // Buyer/creator gated by RLS. NOT a forum. Realtime so new posts appear live.
+//
+// `feed` mode (memberships): asymmetric, Patreon-style. Only the creator can
+// start top-level posts (the "member updates" feed); members read them and can
+// reply. Without `feed` it's a symmetric thread — anyone can post top-level.
 
-export default function CommunityThread({ skillId, creatorId, user }) {
+export default function CommunityThread({ skillId, creatorId, user, feed = false }) {
+  const isCreator = creatorId === user.id;
+  const canCompose = !feed || isCreator; // in feed mode, only the creator broadcasts
   const { confirm } = useDialog();
   const [posts, setPosts] = useState(null);
   const [body, setBody] = useState('');
@@ -82,20 +88,32 @@ export default function CommunityThread({ skillId, creatorId, user }) {
 
   return (
     <div className="ct">
-      <h2 className="ct-h">💬 Community</h2>
-      <p className="ct-sub">A private space for buyers and the creator of this Skill.</p>
+      <h2 className="ct-h">{feed ? '📣 Member updates' : '💬 Community'}</h2>
+      <p className="ct-sub">
+        {feed
+          ? 'Updates from the creator — members can join the conversation in the replies.'
+          : 'A private space for buyers and the creator of this Skill.'}
+      </p>
 
-      {/* New post */}
-      <div className="ct-compose">
-        <textarea value={body} onChange={e => setBody(e.target.value)} rows={2}
-          placeholder="Share a win, ask a question…" />
-        <button className="btn btn-primary btn-sm" disabled={busy || !body.trim()}
-          onClick={() => post(null, body, () => setBody(''))}>Post</button>
-      </div>
+      {/* New post — in feed mode only the creator can broadcast a top-level post */}
+      {canCompose && (
+        <div className="ct-compose">
+          <textarea value={body} onChange={e => setBody(e.target.value)} rows={2}
+            placeholder={feed ? 'Post an update for your members…' : 'Share a win, ask a question…'} />
+          <button className="btn btn-primary btn-sm" disabled={busy || !body.trim()}
+            onClick={() => post(null, body, () => setBody(''))}>Post</button>
+        </div>
+      )}
       {err && <p className="ct-err">{err}</p>}
 
       {posts === null && <p className="ct-muted">Loading…</p>}
-      {posts && tops.length === 0 && <p className="ct-muted">No posts yet — start the conversation.</p>}
+      {posts && tops.length === 0 && (
+        <p className="ct-muted">
+          {feed
+            ? (isCreator ? 'No updates yet — post your first one above.' : 'No updates yet — check back soon.')
+            : 'No posts yet — start the conversation.'}
+        </p>
+      )}
 
       <div className="ct-list">
         {tops.map(p => (

@@ -34,13 +34,12 @@ const KIND_HINTS = {
 // The 5 builder steps. The middle step (index 1) is type-aware: its label +
 // heading swap by product kind, so a digital product walks through "Delivery"
 // while coaching walks through "Scheduling" — same shell, different body.
-const MIDDLE_LABEL = { digital: 'Delivery', coaching: 'Scheduling', course: 'Curriculum', lead: "Freebie"  };
+const MIDDLE_LABEL = { digital: 'Delivery', coaching: 'Scheduling', course: 'Curriculum', lead: "Freebie", webinar: 'Access'  };
 const stepsFor = (kind) => ['Basics', MIDDLE_LABEL[kind] || 'Content', 'Pricing', 'Options', 'Publish'];
 
 // Post-purchase / marketing features that need dedicated backend passes
 // (money + 3rd-party). Shown as "Soon" cards in the Options tab for now.
 const SOON_OPTIONS = [
-  ['🛒', 'Order bump', 'Offer an add-on at checkout to lift order value.'],
   ['🤝', 'Affiliate share', 'Let others promote this for a commission.'],
   ['📧', 'Email integration', 'Sync buyers to Mailchimp, ConvertKit & more.'],
 ];
@@ -134,6 +133,16 @@ function SkillEditor({ skillId, userId }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [courseHasLesson, setCourseHasLesson] = useState(false); // reported by CourseStructure
+  const [bumpOptions, setBumpOptions] = useState([]); // creator's other published one-time products, for order bumps
+
+  // Load the products this one could offer as an order bump: the creator's other
+  // published, one-time skills (a membership/lead can't be a bump; neither can self).
+  useEffect(() => {
+    listMySkills(userId)
+      .then(list => setBumpOptions((list || []).filter(s =>
+        s.id !== skillId && s.status === 'published' && s.pricing_type === 'onetime')))
+      .catch(() => setBumpOptions([]));
+  }, [userId, skillId]);
 
   useEffect(() => {
     let alive = true;
@@ -256,6 +265,12 @@ function SkillEditor({ skillId, userId }) {
         await alert({ title: 'Add your freebie', message: 'A lead magnet needs a File block with an uploaded file or a link, so people get something after signing up.', tone: 'warning' });
         return;
       }
+
+
+      // if (k === 'membership' )
+
+
+
 
     }
 
@@ -464,7 +479,25 @@ function SkillEditor({ skillId, userId }) {
               <div className="sb-hint">
                  <p className="sb-hint sb-hint-muted">Leads are automatically free</p>
               </div>
-            ) : (
+            ) : 
+            
+            kind === "membership" ? (
+              // Membership is locked to recurring — pricing_type is forced to
+              // 'membership' at creation, so there's no toggle to get wrong.
+              <div className="sb-pricerow">
+                <div className="sb-pricefield">
+                  <span className="sb-dollar">$</span>
+                  <input type="number" min="0" step="1" className="sb-price-in"
+                    value={skill.price_cents ? skill.price_cents / 100 : ""}
+                    onChange={e => patchSkill({ price_cents: Math.max(0, Math.round((parseFloat(e.target.value) || 0) * 100)) })}
+                    placeholder="0"
+                  />
+                </div>
+                <span className="sb-permonth">/ month</span>
+              </div>
+            ):
+            
+            (
             <div className="sb-pricerow">
               <div className="sb-pricefield">
                 <span className="sb-dollar">$</span>
@@ -473,12 +506,9 @@ function SkillEditor({ skillId, userId }) {
                   onChange={e => patchSkill({ price_cents: Math.max(0, Math.round((parseFloat(e.target.value) || 0) * 100)) })}
                   placeholder="0" />
               </div>
-              <div className="sb-segmented">
-                <button className={skill.pricing_type === 'onetime' ? 'on' : ''} onClick={() => patchSkill({ pricing_type: 'onetime' })}>One-time</button>
-                <button className={skill.pricing_type === 'membership' ? 'on' : ''} onClick={() => patchSkill({ pricing_type: 'membership' })}>Membership</button>
-
-
-              </div>
+              {/* Only membership *kinds* bill recurring — a one-time product
+                  can't be toggled into a subscription, so no segmented control. */}
+              <span className="sb-permonth">one-time</span>
             </div>
             ) } 
             { kind !== 'lead' && (
@@ -529,6 +559,43 @@ function SkillEditor({ skillId, userId }) {
               <span className="sb-toggle-knob" />
             </button>
           </div>
+
+          {/* Order bump — offer another product as an add-on at checkout.
+              Only meaningful for products with a one-time checkout. */}
+          {kind !== 'lead' && skill.pricing_type !== 'membership' && (
+            <div className="sb-typefield">
+              <span className="sb-fieldlabel">Order bump</span>
+              <p className="sb-opthint">Offer one of your other one-time products as an add-on at this product’s checkout — a one-click upsell.</p>
+              {bumpOptions.length === 0 ? (
+                <p className="sb-hint sb-hint-muted">Publish another one-time product first to offer it as a bump.</p>
+              ) : (
+                <>
+                  <select className="sb-field" value={skill.order_bump_skill_id || ''}
+                    onChange={e => patchSkill({ order_bump_skill_id: e.target.value || null })}>
+                    <option value="">No order bump</option>
+                    {bumpOptions.map(o => (
+                      <option key={o.id} value={o.id}>{o.title || 'Untitled'} — ${((o.price_cents || 0) / 100).toFixed(2)}</option>
+                    ))}
+                  </select>
+                  {skill.order_bump_skill_id && (
+                    <>
+                      <div className="sb-pricefield" style={{ marginTop: 10 }}>
+                        <span className="sb-dollar">$</span>
+                        <input type="number" min="0" step="1" className="sb-price-in"
+                          value={skill.order_bump_price_cents != null ? skill.order_bump_price_cents / 100 : ''}
+                          onChange={e => patchSkill({ order_bump_price_cents: e.target.value === '' ? null : Math.max(0, Math.round((parseFloat(e.target.value) || 0) * 100)) })}
+                          placeholder="Discounted bump price" />
+                      </div>
+                      <p className="sb-hint sb-hint-muted">Leave blank to charge the product’s normal price.</p>
+                      <input className="sb-field" style={{ marginTop: 10 }} value={skill.order_bump_blurb || ''}
+                        onChange={e => patchSkill({ order_bump_blurb: e.target.value })}
+                        placeholder="Offer headline — e.g. “Add the templates pack and save”" />
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {/* Coming soon */}
           <div>
@@ -649,6 +716,7 @@ function BuilderStyles() {
     .sb-segmented { display:flex; border:1px solid var(--border-strong); border-radius:var(--r-full); overflow:hidden; }
     .sb-segmented button { border:none; background:var(--surface); padding:8px 18px; font-size:13px; font-weight:600; color:var(--text-muted); cursor:pointer; }
     .sb-segmented button.on { background:var(--accent); color:#fff; }
+    .sb-permonth { font-size:13px; font-weight:600; color:var(--text-secondary); }
 
     /* Type selector — tile grid (same language as the block picker + /build/new). */
     .sb-typefield { display:flex; flex-direction:column; gap:10px; min-height:100px }

@@ -7,7 +7,7 @@ import { apiFetch } from './api';
 // be brokered server-side (publish-side effects, version bump + buyer notify)
 // calls the backend, which lands in Phase 2/3.
 
-const SKILL_COLS = 'id, creator_id, title, outcome, description, cover_url, price_cents, pricing_type, kind, version, status, sort_order, promo_video_url, confirmation_message, reviews_enabled, created_at, updated_at';
+const SKILL_COLS = 'id, creator_id, title, outcome, description, cover_url, price_cents, pricing_type, kind, version, status, sort_order, promo_video_url, confirmation_message, reviews_enabled, order_bump_skill_id, order_bump_price_cents, order_bump_blurb, created_at, updated_at';
 
 /** All skills owned by the current creator (any status). */
 export async function listMySkills(creatorId) {
@@ -77,9 +77,18 @@ export async function getSkillWithBlocks(skillId) {
 /** Create a draft skill, returns the new row. `kind` defaults to 'digital'
  *  (DB also defaults it) — pass fields.kind to create a course/coaching/etc. */
 export async function createSkill(creatorId, fields = {}) {
+  const kind = fields.kind ?? 'digital';
   const { data, error } = await supabase
     .from('skills')
-    .insert({ creator_id: creatorId, status: 'draft', kind: 'digital', ...fields })
+    // a membership kind is born with pricing_type locked to 'membership' so the
+    // bad state (membership kind billed one-time) is never representable.
+    .insert({
+      creator_id: creatorId,
+      status: 'draft',
+      kind,
+      ...(kind === 'membership' && { pricing_type: 'membership' }),
+      ...fields,
+    })
     .select(SKILL_COLS).single();
   if (error) throw error;
   return data;

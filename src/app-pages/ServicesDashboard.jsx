@@ -4,7 +4,7 @@ import { useUser, useProfile } from '@/lib/stores';
 import { useDialog } from '@/components/Dialog';
 import { listMySkills, updateSkill, deleteSkill, publishSkill } from '@/lib/skills';
 import { listCreatorSales } from '@/lib/purchases';
-import { getCreatorEvents } from '@/lib/analytics';
+import { getCreatorEvents } from '@/lib/metrics';
 import {
   Plus, Search, Eye, Pencil, Share2, MoreHorizontal, Trash2,
   Repeat, DollarSign, TrendingUp, Users, Boxes,

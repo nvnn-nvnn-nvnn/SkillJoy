@@ -26,7 +26,39 @@ async function sendEmail({ to, subject, html }) {
     return data;
 }
 
+// Escape user-supplied text before dropping it into email HTML.
+function esc(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 // ── Templates ─────────────────────────────────────────────────────────────────
+
+// Branded purchase confirmation / thank-you email. One template for every v3
+// purchase path — one-time, guest, and membership (recurring=true tweaks copy).
+// `note` is the creator's custom confirmation message; `footerNote` is extra
+// fine print (e.g. the guest "no password needed" line).
+function purchaseThankYou({ title, amountCents = null, recurring = false, note = '', accessUrl, accessLabel = 'Access your purchase', footerNote = '' }) {
+    const price = amountCents != null
+        ? `$${(amountCents / 100).toFixed(2)}${recurring ? ' / month' : ''}`
+        : '';
+    const noteHtml = note
+        ? `<p style="background:#f4f1ea;border-radius:8px;padding:12px 14px;white-space:pre-wrap;margin:16px 0;">${esc(note)}</p>`
+        : '';
+    return {
+        subject: recurring ? `You’re in — ${title}` : `Thanks for your purchase — ${title}`,
+        html: `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#1f2937;line-height:1.5;">
+            <h1 style="font-size:22px;margin:0 0 10px;">Thank you! 🎉</h1>
+            <p style="margin:0;">Your ${recurring ? 'membership to' : 'purchase of'} <strong>${esc(title)}</strong>${price ? ` — <strong>${price}</strong>` : ''} is confirmed.</p>
+            ${noteHtml}
+            <p style="margin:18px 0 10px;">${recurring ? 'Access your member content anytime:' : 'Access it anytime:'}</p>
+            <a href="${accessUrl}" style="display:inline-block;padding:12px 22px;background:#D4522A;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">${accessLabel}</a>
+            ${recurring ? '<p style="color:#6b7280;font-size:13px;margin-top:18px;">You can manage or cancel your membership anytime from your Locker.</p>' : ''}
+            ${footerNote ? `<p style="color:#6b7280;font-size:13px;margin-top:18px;">${esc(footerNote)}</p>` : ''}
+            <p style="color:#9ca3af;font-size:12px;margin-top:24px;">SkillJoy</p>
+        </div>`,
+    };
+}
+
 
 function orderRequestedSeller({ sellerName, buyerName, gigTitle, amount, orderId }) {
     return {
@@ -116,6 +148,7 @@ function disputeFiled({ recipientName, gigTitle, role }) {
 module.exports = {
     sendEmail,
     getUserEmail,
+    purchaseThankYou,
     templates: {
         orderRequestedSeller,
         orderAcceptedBuyer,

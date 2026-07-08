@@ -5,7 +5,7 @@ import { getPublicSkill } from '@/lib/skills';
 import { getProfileByUsername } from '@/lib/profiles';
 import { hasPurchased } from '@/lib/purchases';
 import { listReviews, summarize } from '@/lib/reviews';
-import { recordEvent } from '@/lib/analytics';
+import { recordEvent } from '@/lib/metrics';
 import { BLOCK_META } from '@/lib/blockTypes';
 import { toEmbed } from '@/lib/embed';
 import Seo from '@/components/Seo';
@@ -50,7 +50,8 @@ export default function SkillPublic() {
   }, [skillId, username, user]);
 
   function onBuy() {
-    if (!user) { navigate(`/login?redirect=${encodeURIComponent(`/checkout/${skillId}`)}`); return; }
+    // Delegate the auth decision to Checkout: guests can buy one-time paid products
+    // (guest checkout); Checkout redirects to login only for free/membership.
     navigate(`/checkout/${skillId}`);
   }
 

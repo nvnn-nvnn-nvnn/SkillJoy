@@ -4,7 +4,7 @@ import { useUser } from '@/lib/stores';
 import { getProfileByUsername } from '@/lib/profiles';
 import { listPublishedSkills } from '@/lib/skills';
 import { resolveTheme, listLinks, SOCIAL_TYPES } from '@/lib/storefront';
-import { recordEvent } from '@/lib/analytics';
+import { recordEvent } from '@/lib/metrics';
 import { initials } from '@/lib/stores';
 import SubscribeForm from '@/components/SubscribeForm';
 import Seo from '@/components/Seo';

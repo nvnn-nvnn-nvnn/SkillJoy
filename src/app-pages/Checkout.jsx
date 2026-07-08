@@ -4,8 +4,8 @@ import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { useUser } from '@/lib/stores';
 import { getPublicSkill } from '@/lib/skills';
-import { startCheckout, confirmCheckout, validateCode } from '@/lib/purchases';
-import { recordEvent } from '@/lib/analytics';
+import { startCheckout, confirmCheckout, validateCode, startGuestCheckout, confirmGuestCheckout } from '@/lib/purchases';
+import { recordEvent } from '@/lib/metrics';
 import BackLink from '@/components/BackLink';
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
@@ -20,7 +20,12 @@ export default function Checkout() {
   const [clientSecret, setClientSecret] = useState(null);
   const [amountCents, setAmountCents] = useState(0);
   const [err, setErr] = useState('');
-  const [status, setStatus] = useState('loading'); // loading|notfound|error|promo|pay
+  const [status, setStatus] = useState('loading'); // loading|notfound|error|promo|pay|guest-success
+
+  // guest checkout (no account) — collected on the promo step when !user
+  const [guestName, setGuestName] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
+  const isGuest = !user;
 
   // promo state
   const [code, setCode] = useState('');
@@ -28,8 +33,11 @@ export default function Checkout() {
   const [promoMsg, setPromoMsg] = useState('');
   const [continuing, setContinuing] = useState(false);
 
+  // order bump state
+  const [bumpSkill, setBumpSkill] = useState(null); // the add-on product being offered
+  const [bumpOn, setBumpOn] = useState(false);
+
   useEffect(() => {
-    if (!user) { navigate(`/login?redirect=${encodeURIComponent(`/checkout/${skillId}`)}`); return; }
     let alive = true;
     (async () => {
       try {
@@ -38,7 +46,23 @@ export default function Checkout() {
         if (!s) { setStatus('notfound'); return; }
         setSkill(s);
         setAmountCents(s.price_cents);
-        recordEvent('checkout_start', { skillId: s.id, creatorId: s.creator_id, buyerId: user.id });
+        recordEvent('checkout_start', { skillId: s.id, creatorId: s.creator_id, buyerId: user?.id ?? null });
+
+        // Load the order-bump product (one-time checkouts only). Best-effort.
+        if (s.order_bump_skill_id && s.price_cents && s.pricing_type === 'onetime') {
+          try {
+            const b = await getPublicSkill(s.order_bump_skill_id);
+            if (alive && b && b.status === 'published') setBumpSkill(b);
+          } catch { /* bump is optional — ignore */ }
+        }
+
+        // Guests can only check out one-time PAID products. Free (lead) and
+        // membership need an account → send them to log in first.
+        if (!user) {
+          if (s.price_cents && s.pricing_type === 'onetime') { setStatus('promo'); return; }
+          navigate(`/login?redirect=${encodeURIComponent(`/checkout/${skillId}`)}`);
+          return;
+        }
 
         // Free → grant now. Membership → hosted subscription. Both skip the promo step.
         if (!s.price_cents || s.pricing_type === 'membership') {
@@ -64,9 +88,15 @@ export default function Checkout() {
   }
 
   async function toPayment() {
+    if (isGuest) {
+      if (!guestName.trim()) { setErr('Please enter your name.'); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim())) { setErr('Please enter a valid email.'); return; }
+    }
     setContinuing(true); setErr('');
     try {
-      const out = await startCheckout(skillId, applied?.code || null);
+      const out = isGuest
+        ? await startGuestCheckout(skillId, { name: guestName.trim(), email: guestEmail.trim(), code: applied?.code || null, bump: bumpOn })
+        : await startCheckout(skillId, applied?.code || null, bumpOn);
       if (out.free) { navigate(`/locker/${skillId}`); return; }
       setClientSecret(out.clientSecret);
       setAmountCents(out.amountCents ?? amountCents);
@@ -74,6 +104,10 @@ export default function Checkout() {
     } catch (e) { setErr(e.message); }
     finally { setContinuing(false); }
   }
+
+  // Bump price (creator's override, else the add-on's own price) + running total.
+  const bumpCents = bumpSkill ? (skill?.order_bump_price_cents ?? bumpSkill.price_cents ?? 0) : 0;
+  const displayTotal = amountCents + (bumpOn ? bumpCents : 0);
 
   if (status === 'loading') return <Shell><p className="ck-muted">Preparing checkout…</p></Shell>;
   if (status === 'notfound') return <Shell><p className="ck-muted">This Skill isn’t available.</p></Shell>;
@@ -87,14 +121,43 @@ export default function Checkout() {
 
       {status === 'promo' && (
         <div className="ck-promo">
-          <label className="ck-plabel">Have a promo code?</label>
-          <div className="ck-prow">
-            <input value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="CODE" />
-            <button className="btn btn-secondary btn-sm" onClick={applyCode} type="button">Apply</button>
-          </div>
-          {promoMsg && <p className={`ck-pmsg${applied ? ' ok' : ' bad'}`}>{promoMsg}</p>}
+          {isGuest && (
+            <div className="ck-guest">
+              <label className="ck-plabel">Your details</label>
+              <input className="ck-in" value={guestName} onChange={e => setGuestName(e.target.value)}
+                placeholder="Full name" autoComplete="name" />
+              <input className="ck-in" type="email" value={guestEmail} onChange={e => setGuestEmail(e.target.value)}
+                placeholder="you@email.com" autoComplete="email" />
+              <p className="ck-fine ck-guest-note">We’ll email your purchase here with a link to access it — no account needed.</p>
+            </div>
+          )}
+
+          {!isGuest && (
+            <>
+              <label className="ck-plabel">Have a promo code?</label>
+              <div className="ck-prow">
+                <input value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="CODE" />
+                <button className="btn btn-secondary btn-sm" onClick={applyCode} type="button">Apply</button>
+              </div>
+              {promoMsg && <p className={`ck-pmsg${applied ? ' ok' : ' bad'}`}>{promoMsg}</p>}
+            </>
+          )}
+
+          {bumpSkill && (
+            <label className="ck-bump">
+              <input type="checkbox" checked={bumpOn} onChange={e => setBumpOn(e.target.checked)} />
+              <span className="ck-bump-body">
+                <span className="ck-bump-title">
+                  {skill.order_bump_blurb || `Add “${bumpSkill.title}”`}
+                  <span className="ck-bump-price">+${(bumpCents / 100).toFixed(2)}</span>
+                </span>
+                {bumpSkill.outcome && <span className="ck-bump-sub">{bumpSkill.outcome}</span>}
+              </span>
+            </label>
+          )}
+
           <button className="btn btn-primary ck-pay" onClick={toPayment} disabled={continuing}>
-            {continuing ? '…' : 'Continue to payment'}
+            {continuing ? '…' : `Continue to payment · $${(displayTotal / 100).toFixed(2)}`}
           </button>
           {err && <p className="ck-err">{err}</p>}
         </div>
@@ -102,11 +165,21 @@ export default function Checkout() {
 
       {status === 'pay' && clientSecret && (
         <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'flat', variables: { colorPrimary: '#D4522A' } } }}>
-          <CheckoutForm skill={skill} amountCents={amountCents} onPaid={() => {
-            recordEvent('purchase', { skillId: skill.id, creatorId: skill.creator_id, buyerId: user.id });
-            navigate(`/locker/${skillId}`);
+          <CheckoutForm skill={skill} amountCents={amountCents} guest={isGuest} onPaid={() => {
+            recordEvent('purchase', { skillId: skill.id, creatorId: skill.creator_id, buyerId: user?.id ?? null });
+            if (isGuest) setStatus('guest-success');
+            else navigate(`/locker/${skillId}`);
           }} />
         </Elements>
+      )}
+
+      {status === 'guest-success' && (
+        <div className="ck-done">
+          <p style={{ fontSize: 44 }}>✅</p>
+          <p className="ck-done-t">You’re all set!</p>
+          <p className="ck-muted">We’ve emailed <strong>{guestEmail}</strong> a receipt and a link to access <strong>{skill.title}</strong> — no password needed. Check your inbox (and spam, just in case).</p>
+          <button className="btn btn-primary ck-pay" style={{ marginTop: 20 }} onClick={() => navigate(-1)}>Go back</button>
+        </div>
       )}
     </Shell>
   );
@@ -130,7 +203,7 @@ function Summary({ skill, amountCents, discounted }) {
   );
 }
 
-function CheckoutForm({ skill, amountCents, onPaid }) {
+function CheckoutForm({ skill, amountCents, onPaid, guest = false }) {
   const stripe = useStripe();
   const elements = useElements();
   const [processing, setProcessing] = useState(false);
@@ -144,11 +217,15 @@ function CheckoutForm({ skill, amountCents, onPaid }) {
       const { error, paymentIntent } = await stripe.confirmPayment({
         elements,
         redirect: 'if_required',
-        confirmParams: { return_url: `${window.location.origin}/locker/${skill.id}` },
+        // Guests aren't logged in, so don't bounce them to the (gated) Locker.
+        confirmParams: { return_url: `${window.location.origin}/checkout/${skill.id}` },
       });
       if (error) throw new Error(error.message);
       if (paymentIntent?.status === 'succeeded') {
-        try { await confirmCheckout(skill.id, paymentIntent.id); } catch { /* webhook will catch up */ }
+        try {
+          if (guest) await confirmGuestCheckout(skill.id, paymentIntent.id);
+          else await confirmCheckout(skill.id, paymentIntent.id);
+        } catch { /* webhook will catch up */ }
         onPaid();
       } else {
         throw new Error(`Payment ${paymentIntent?.status ?? 'incomplete'}.`);
@@ -193,9 +270,21 @@ function Shell({ children }) {
         .ck-pmsg { font-size:13px; margin:0; }
         .ck-pmsg.ok { color:var(--green); }
         .ck-pmsg.bad { color:var(--accent); }
+        .ck-bump { display:flex; gap:12px; align-items:flex-start; padding:14px; border:1.5px dashed var(--accent-mid); border-radius:var(--r-lg); background:var(--accent-light); cursor:pointer; }
+        .ck-bump input { margin-top:3px; width:18px; height:18px; flex-shrink:0; accent-color:var(--accent); cursor:pointer; }
+        .ck-bump-body { display:flex; flex-direction:column; gap:3px; }
+        .ck-bump-title { font-weight:700; color:var(--text); display:flex; flex-wrap:wrap; gap:8px; align-items:baseline; }
+        .ck-bump-price { color:var(--accent); font-weight:800; }
+        .ck-bump-sub { font-size:13px; color:var(--text-secondary); }
         .ck-form { display:flex; flex-direction:column; gap:16px; }
         .ck-pay { width:100%; font-size:16px; padding:13px; }
         .ck-fine { text-align:center; font-size:12px; color:var(--text-muted); }
+        .ck-guest { display:flex; flex-direction:column; gap:10px; margin-bottom:6px; }
+        .ck-in { width:100%; padding:11px 12px; border:1px solid var(--border-strong); border-radius:var(--r); font-family:inherit; font-size:15px; }
+        .ck-in:focus { outline:none; border-color:var(--accent); }
+        .ck-guest-note { text-align:left; margin-top:2px; }
+        .ck-done { text-align:center; padding:24px 0; }
+        .ck-done-t { font-weight:800; font-size:20px; margin:6px 0 10px; }
       `}</style>
     </div>
   );

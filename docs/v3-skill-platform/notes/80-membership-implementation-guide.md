@@ -10,7 +10,7 @@ adding one "let them cancel" flow. I'll point at real code and explain the why._
 
 A membership is **recurring access**: the buyer pays monthly, and *while they
 keep paying, they keep access.* Stop paying → access ends. The whole game is:
-"is this person's subscription currently active?" — and keeping your app's idea
+"is this person's subscriptixcv   on currently active?" — and keeping your app's idea
 of "active" in sync with Stripe's.
 
 ## 1. The two axes (this is the crux — internalize it)

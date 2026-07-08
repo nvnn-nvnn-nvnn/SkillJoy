@@ -55,6 +55,11 @@ export default function OnboardingPage() {
             setBio(profile.bio ?? '');
             setAvailability(profile.availability ?? []);
             if (profile.full_name) setViewMode(true);
+        } else {
+            // New Google user has no profile row yet — prefill the name Google gave us.
+            const meta = user.user_metadata || {};
+            const googleName = meta.full_name || meta.name;
+            if (googleName) setFullName(googleName);
         }
     }, [user, profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
