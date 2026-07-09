@@ -1,16 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useUser, useProfile, useAuth, useUnreadCounts } from '@/lib/stores';
 import { LEGACY_MODE } from '@/lib/config';
 import { Link, useLocation } from 'react-router-dom';
+import {
+  Package, Store, BarChart3, Compass, Lock, ExternalLink, User, Settings,
+  Users, Repeat, ShoppingBag, MessageCircle, Scale,
+} from 'lucide-react';
 import Notifications from './Notifications';
-import SkillJoyLogo from '../assets/SkillJoy-Logo.svg'
-import SkillJoyLogo2 from '../assets/SkillJoy-Logo2.svg'
-import SkillJoyLogo3 from '../assets/skilljoy-logo3.svg'
-import SkillJoyPurpleBlack from '../assets/skilljoypurple.svg'
-import SkillJoyGreen from '../assets/skilljoy-green.svg'
+import SkillJoyGreen from '../assets/skilljoy-green.svg';
 
+// One nav row — icon + label, active state, optional unread badge.
+function NavItem({ to, icon: Icon, label, active, badge = 0, onClick }) {
+  return (
+    <Link to={to} className={`sb-link${active ? ' active' : ''}`} onClick={onClick}>
+      <Icon size={18} strokeWidth={2} className="sb-link-icon" />
+      <span className="sb-link-label">{label}</span>
+      {badge > 0 && <span className="nav-badge">{badge}</span>}
+    </Link>
+  );
+}
 
+// v3 app chrome — a left vertical sidebar on desktop; a top bar + slide-in
+// drawer on mobile. The three "Create" items keep products, the storefront
+// editor, and services as distinct destinations.
 export default function Header() {
   const user = useUser();
   const profile = useProfile();
@@ -20,108 +33,78 @@ export default function Header() {
   const currentPath = location.pathname;
   const [menuOpen, setMenuOpen] = useState(false);
 
-  function closeMenu() { setMenuOpen(false); }
+  const showSidebar = !(loading || !user || currentPath === '/login');
 
-  if (loading || !user || currentPath === '/login') return null;
+  // Toggle a body flag so the app shell can offset its content for the fixed rail.
+  useEffect(() => {
+    document.body.classList.toggle('has-sidebar', showSidebar);
+    return () => document.body.classList.remove('has-sidebar');
+  }, [showSidebar]);
+
+  // Close the mobile drawer whenever the route changes.
+  useEffect(() => { setMenuOpen(false); }, [currentPath]);
+
+  if (!showSidebar) return null;
+
+  const close = () => setMenuOpen(false);
+  const isAdmin = user.email === 'techkage@proton.me';
+  const on = (p) => currentPath.startsWith(p);
 
   return (
     <>
-    <nav className="nav">
-      <Link to="/" className="nav-logo" onClick={closeMenu}>
-        <img src={SkillJoyGreen} alt="SkillJoy Logo" style={{ height: 40, width: 'auto' }} />
-      </Link>
-
-      <button className={`nav-hamburger${menuOpen ? ' open' : ''}`} onClick={() => setMenuOpen(o => !o)} aria-label="Toggle menu">
-        <span />
-        <span />
-        <span />
-      </button>
-
-      {/* Desktop nav */}
-      <div className="nav-links">
-        {/* ── v3 Skill-platform nav ── */}
-        <Link to="/discover" className={`nav-link${currentPath.startsWith('/discover') ? ' active' : ''}`}>Discover</Link>
-        <Link to="/build" className={`nav-link${currentPath.startsWith('/build') ? ' active' : ''}`}>Build</Link>
-        <Link to="/locker" className={`nav-link${currentPath.startsWith('/locker') ? ' active' : ''}`}>Locker</Link>
-        <Link to="/dashboard" className={`nav-link${currentPath.startsWith('/dashboard') ? ' active' : ''}`}>Dashboard</Link>
-        <Link to="/services" className={`nav-link${currentPath.startsWith('/services') ? ' active' : ''}`}>Services</Link>
-        {profile?.username && (
-          <Link to={`/@${profile.username}`} className={`nav-link${currentPath === `/@${profile.username}` ? ' active' : ''}`}>Storefront</Link>
-        )}
-
-        {/* ── v1 legacy nav (campus swap/gig/escrow) — parked behind LEGACY_MODE ── */}
-        {LEGACY_MODE && <>
-          <Link to="/matches" className={`nav-link${currentPath === '/matches' ? ' active' : ''}`}>Matches</Link>
-          <Link to="/swaps" className={`nav-link${currentPath === '/swaps' ? ' active' : ''}`}>
-            Swaps{unread.swap > 0 && <span className="nav-badge">{unread.swap}</span>}
-          </Link>
-          <Link to="/gigs" className={`nav-link${currentPath === '/gigs' ? ' active' : ''}`}>
-            Gigs{unread.gig > 0 && <span className="nav-badge">{unread.gig}</span>}
-          </Link>
-          <Link to="/my-orders" className={`nav-link${currentPath === '/my-orders' ? ' active' : ''}`}>
-            Orders{unread.gig > 0 && <span className="nav-badge">{unread.gig}</span>}
-          </Link>
-          <Link to="/disputes" className={`nav-link${currentPath === '/disputes' ? ' active' : ''}`}>Disputes</Link>
-          <Link to="/chat" className={`nav-link${currentPath === '/chat' ? ' active' : ''}`}>
-            Chat{(unread.gig + unread.swap) > 0 && <span className="nav-badge">{unread.gig + unread.swap}</span>}
-          </Link>
-        </>}
-        {user.email === 'techkage@proton.me' && (
-          <Link to="/admin" className={`nav-link${currentPath === '/admin' ? ' active' : ''}`} style={{ color: '#ec9146', fontWeight: 700 }}>Admin</Link>
-        )}
-        <div style={{ flex: 1 }} />
-        <Notifications />
-        <Link to="/profile" className={`nav-link${currentPath === '/profile' ? ' active' : ''}`}>Profile</Link>
+      {/* Mobile top bar */}
+      <div className="sb-topbar">
+        <Link to="/" className="sb-logo" onClick={close}>
+          <img src={SkillJoyGreen} alt="SkillJoy" style={{ height: 30, width: 'auto' }} />
+        </Link>
+        <button className={`sb-burger${menuOpen ? ' open' : ''}`} onClick={() => setMenuOpen(o => !o)} aria-label="Toggle menu">
+          <span /><span /><span />
+        </button>
       </div>
 
-    </nav>
+      {menuOpen && createPortal(<div className="sb-backdrop" onClick={close} />, document.body)}
 
-    {createPortal(
-      <>
-        {menuOpen && <div className="nav-backdrop" onClick={closeMenu} />}
-        <div className={`nav-drawer${menuOpen ? ' open' : ''}`}>
-          <div className="nav-drawer-top">
-            <span className="nav-drawer-title">Menu</span>
-          </div>
-          {/* ── v3 Skill-platform nav ── */}
-          <Link to="/discover" className={`nav-link${currentPath.startsWith('/discover') ? ' active' : ''}`} onClick={closeMenu}>Discover</Link>
-          <Link to="/build" className={`nav-link${currentPath.startsWith('/build') ? ' active' : ''}`} onClick={closeMenu}>Build</Link>
-          <Link to="/locker" className={`nav-link${currentPath.startsWith('/locker') ? ' active' : ''}`} onClick={closeMenu}>Locker</Link>
-          <Link to="/dashboard" className={`nav-link${currentPath.startsWith('/dashboard') ? ' active' : ''}`} onClick={closeMenu}>Dashboard</Link>
-          <Link to="/services" className={`nav-link${currentPath.startsWith('/services') ? ' active' : ''}`} onClick={closeMenu}>Services</Link>
+      {/* Sidebar — fixed rail (desktop) / slide-in drawer (mobile) */}
+      <aside className={`sidebar${menuOpen ? ' open' : ''}`}>
+        <Link to="/" className="sb-logo sb-logo-full" onClick={close}>
+          <img src={SkillJoyGreen} alt="SkillJoy" style={{ height: 38, width: 'auto' }} />
+        </Link>
+
+        <nav className="sb-nav">
+          <span className="sb-group">Create</span>
+          <NavItem to="/build" icon={Package} label="Products" active={on('/build')} onClick={close} />
+          <NavItem to="/storefront/edit" icon={Store} label="Storefront" active={on('/storefront')} onClick={close} />
+
+          <span className="sb-group">Grow</span>
+          <NavItem to="/dashboard" icon={BarChart3} label="Dashboard" active={on('/dashboard')} onClick={close} />
+          <NavItem to="/discover" icon={Compass} label="Discover" active={on('/discover')} onClick={close} />
+          <NavItem to="/locker" icon={Lock} label="Locker" active={on('/locker')} onClick={close} />
+
+          {LEGACY_MODE && (
+            <>
+              <span className="sb-group">Campus</span>
+              <NavItem to="/matches" icon={Users} label="Matches" active={currentPath === '/matches'} onClick={close} />
+              <NavItem to="/swaps" icon={Repeat} label="Swaps" active={currentPath === '/swaps'} badge={unread.swap} onClick={close} />
+              <NavItem to="/gigs" icon={ShoppingBag} label="Gigs" active={currentPath === '/gigs'} badge={unread.gig} onClick={close} />
+              <NavItem to="/my-orders" icon={Package} label="Orders" active={currentPath === '/my-orders'} badge={unread.gig} onClick={close} />
+              <NavItem to="/disputes" icon={Scale} label="Disputes" active={currentPath === '/disputes'} onClick={close} />
+              <NavItem to="/chat" icon={MessageCircle} label="Chat" active={currentPath === '/chat'} badge={unread.gig + unread.swap} onClick={close} />
+            </>
+          )}
+
+          {isAdmin && <NavItem to="/admin" icon={Settings} label="Admin" active={currentPath === '/admin'} onClick={close} />}
+        </nav>
+
+        <div className="sb-foot">
           {profile?.username && (
-            <Link to={`/@${profile.username}`} className={`nav-link${currentPath === `/@${profile.username}` ? ' active' : ''}`} onClick={closeMenu}>Storefront</Link>
+            <NavItem to={`/@${profile.username}`} icon={ExternalLink} label="View my page" active={currentPath === `/@${profile.username}`} onClick={close} />
           )}
-
-          {/* ── v1 legacy nav — parked behind LEGACY_MODE ── */}
-          {LEGACY_MODE && <>
-            <Link to="/matches" className={`nav-link${currentPath === '/matches' ? ' active' : ''}`} onClick={closeMenu}>Matches</Link>
-            <Link to="/swaps" className={`nav-link${currentPath === '/swaps' ? ' active' : ''}`} onClick={closeMenu}>
-              Swaps{unread.swap > 0 && <span className="nav-badge">{unread.swap}</span>}
-            </Link>
-            <Link to="/gigs" className={`nav-link${currentPath === '/gigs' ? ' active' : ''}`} onClick={closeMenu}>
-              Gigs{unread.gig > 0 && <span className="nav-badge">{unread.gig}</span>}
-            </Link>
-            <Link to="/my-orders" className={`nav-link${currentPath === '/my-orders' ? ' active' : ''}`} onClick={closeMenu}>
-              Orders{unread.gig > 0 && <span className="nav-badge">{unread.gig}</span>}
-            </Link>
-            <Link to="/disputes" className={`nav-link${currentPath === '/disputes' ? ' active' : ''}`} onClick={closeMenu}>Disputes</Link>
-            <Link to="/chat" className={`nav-link${currentPath === '/chat' ? ' active' : ''}`} onClick={closeMenu}>
-              Chat{(unread.gig + unread.swap) > 0 && <span className="nav-badge">{unread.gig + unread.swap}</span>}
-            </Link>
-          </>}
-          {user.email === 'techkage@proton.me' && (
-            <Link to="/admin" className={`nav-link${currentPath === '/admin' ? ' active' : ''}`} onClick={closeMenu} style={{ color: '#ec9146', fontWeight: 700 }}>Admin</Link>
-          )}
-          <div style={{ flex: 1 }} />
-          <div className="nav-drawer-bottom">
+          <div className="sb-foot-row">
+            <NavItem to="/profile" icon={User} label="Profile" active={currentPath === '/profile'} onClick={close} />
             <Notifications />
-            <Link to="/profile" className={`nav-link${currentPath === '/profile' ? ' active' : ''}`} onClick={closeMenu} style={{ fontSize: 15 }}>Profile</Link>
           </div>
         </div>
-      </>,
-      document.body
-    )}
+      </aside>
     </>
   );
 }

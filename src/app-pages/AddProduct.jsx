@@ -34,7 +34,7 @@ export default function AddProduct() {
     <div className="ap-wrap">
       <title>Add a product — SkillJoy</title>
 
-      <BackLink to="/services">Back to products</BackLink>
+      <BackLink to="/build">Back to products</BackLink>
 
       <header className="ap-head">
         <h1 className="ap-h1">What do you want to sell?</h1>

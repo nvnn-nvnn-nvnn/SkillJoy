@@ -166,16 +166,16 @@ export default function ServicesDashboard() {
 
   const filterTabs = [{ id: 'all', label: 'All' }, ...PRODUCT_TYPES.map(t => ({ id: t.id, label: t.label }))];
 
-  if (!user) return <div className="sv-wrap"><p className="sv-empty-loading">Please log in to manage your services.</p><Styles /></div>;
+  if (!user) return <div className="sv-wrap"><p className="sv-empty-loading">Please log in to manage your products.</p><Styles /></div>;
 
   return (
     <div className="sv-wrap" onClick={() => setMenuFor(null)}>
-      <title>Services — SkillJoy</title>
+      <title>Products — SkillJoy</title>
 
       {/* ── Header ── */}
       <div className="sv-head">
         <div>
-          <h1 className="sv-h1">Services</h1>
+          <h1 className="sv-h1">Products</h1>
           <p className="sv-sub">Everything you sell, in one place.</p>
         </div>
         <div className="sv-head-actions">
@@ -185,12 +185,12 @@ export default function ServicesDashboard() {
       </div>
 
       {skills === null ? (
-        <p className="sv-empty-loading">Loading your services…</p>
+        <p className="sv-empty-loading">Loading your products…</p>
       ) : (
       <>
       {/* ── Summary stats ── */}
       <div className="sv-stats">
-        <Stat icon={Boxes}      label="Services" value={totals.count} />
+        <Stat icon={Boxes}      label="Products" value={totals.count} />
         <Stat icon={TrendingUp} label="Active"   value={totals.active} />
         <Stat icon={DollarSign} label="Revenue"  value={money(totals.revenue)} accent />
         <Stat icon={Users}      label="Sales"    value={totals.sales.toLocaleString()} />
@@ -209,7 +209,7 @@ export default function ServicesDashboard() {
         </div>
         <div className="sv-search">
           <Search size={15} />
-          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search services…" />
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search products…" />
         </div>
       </div>
 
@@ -217,8 +217,8 @@ export default function ServicesDashboard() {
       {visible.length === 0 ? (
         <div className="sv-empty">
           <div className="sv-empty-icon">🗂️</div>
-          <h3>No services here yet</h3>
-          <p>{query ? 'Nothing matches your search.' : 'Create your first service to start selling.'}</p>
+          <h3>No products here yet</h3>
+          <p>{query ? 'Nothing matches your search.' : 'Create your first product to start selling.'}</p>
           <button className="sv-new" onClick={() => navigate('/build/new')}><Plus size={16} /> New product</button>
         </div>
       ) : (

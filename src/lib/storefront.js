@@ -3,7 +3,27 @@ import { supabase } from './supabase';
 // ── Storefront customization data layer (v3, Phase 7) ───────────────────────
 // Theme lives in profiles.storefront_theme; link buttons in store_links.
 
-export const DEFAULT_THEME = { accent: '#D4522A', layout: 'list', banner_url: '', socials: [] };
+export const DEFAULT_THEME = {
+  accent: '#00CC99',
+  layout: 'list',           // 'list' | 'grid'
+  banner_url: '',
+  socials: [],
+  // ── Deeper theming (guns.lol-style) ──
+  mode: 'light',            // 'light' | 'dark' — drives surface/text palette
+  bg: 'canvas',             // 'canvas' | 'solid' | 'gradient' | 'image'
+  bg_color: '#FBF8F2',      // solid fill / gradient start
+  bg_color2: '#E0F8F1',     // gradient end
+  bg_image: '',             // full-page background image url
+  button_style: 'rounded',  // 'rounded' | 'pill' | 'sharp'
+  // ── Studio: glass + effects ──
+  text_color: '',           // '' = palette default; else overrides body text
+  card_opacity: 100,        // 60–100 — card fill opacity (glassmorphism)
+  card_blur: 0,             // 0–24 px — backdrop blur behind cards
+  cursor_url: '',           // custom cursor image url
+  mono_icons: false,        // grayscale the social icons
+  animated_name: false,     // subtle animated glow on the display name
+  product_glow: 'soft',     // 'none' | 'soft' | 'strong' — accent glow on product cards
+};
 
 export const SOCIAL_TYPES = [
   { type: 'instagram', label: 'Instagram', icon: '📸' },
@@ -19,12 +39,14 @@ export function resolveTheme(theme) {
 }
 
 /** Save bio + theme (+ optional integrations) on the creator's profile. */
-export async function updateStorefront(userId, { bio, storefront_theme, tracking_pixels, automation_webhook_url }) {
+export async function updateStorefront(userId, { bio, storefront_theme, tracking_pixels, automation_webhook_url, full_name, avatar_url }) {
   const patch = {};
   if (bio !== undefined) patch.bio = bio;
   if (storefront_theme !== undefined) patch.storefront_theme = storefront_theme;
   if (tracking_pixels !== undefined) patch.tracking_pixels = tracking_pixels;
   if (automation_webhook_url !== undefined) patch.automation_webhook_url = automation_webhook_url;
+  if (full_name !== undefined) patch.full_name = full_name;
+  if (avatar_url !== undefined) patch.avatar_url = avatar_url;
   const { error } = await supabase.from('profiles').update(patch).eq('id', userId);
   if (error) throw error;
 }

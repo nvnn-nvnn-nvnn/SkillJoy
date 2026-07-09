@@ -5,10 +5,10 @@ import {
   listMySkills, getSkillWithBlocks, updateSkill, deleteSkill,
   addBlock, updateBlock, deleteBlock, reorderBlocks, publishSkill, publishUpdate,
 } from '@/lib/skills';
-import { Trash2, Send, EyeOff } from 'lucide-react';
+import { Trash2, Send, EyeOff, Puzzle } from 'lucide-react';
 import { uploadCover } from '@/lib/storage';
 import { BLOCK_TYPES } from '@/lib/blockTypes';
-import { PRODUCT_TYPES } from '@/lib/productTypes';
+import { PRODUCT_TYPES, TYPE_BY_ID } from '@/lib/productTypes';
 import BlockEditor from '@/components/BlockEditor';
 import CourseStructure from '@/components/CourseStructure';
 import BackLink from '@/components/BackLink';
@@ -64,8 +64,13 @@ export default function SkillBuilder() {
 // ── List view ───────────────────────────────────────────────────────────────
 function SkillList({ userId }) {
   const [skills, setSkills] = useState(null);
+  const [typeFilter, setTypeFilter] = useState('all');
 
   useEffect(() => { listMySkills(userId).then(setSkills).catch(() => setSkills([])); }, [userId]);
+
+  // Types the creator actually has (for the filter bar) + the filtered view.
+  const presentTypes = [...new Set((skills ?? []).map(s => s.kind))];
+  const visible = (skills ?? []).filter(s => typeFilter === 'all' || s.kind === typeFilter);
 
   return (
     <div className="sb-wrap">
@@ -80,18 +85,31 @@ function SkillList({ userId }) {
       {skills === null && <p className="sb-muted">Loading…</p>}
       {skills?.length === 0 && (
         <div className="sb-empty">
-          <p style={{ fontSize: 40 }}>🧩</p>
+          <Puzzle size={40} strokeWidth={1.5} style={{ color: 'var(--text-muted)' }} />
           <p className="sb-empty-t">No Skills yet</p>
           <p className="sb-muted">Create your first Skill and drop in some content blocks.</p>
           <Link to="/build/new" className="btn btn-primary" style={{ marginTop: 16 }}>+ New product</Link>
         </div>
       )}
 
+      {skills && skills.length > 0 && presentTypes.length > 1 && (
+        <div className="sb-filterbar">
+          <button className={`sb-filterchip${typeFilter === 'all' ? ' on' : ''}`} onClick={() => setTypeFilter('all')}>
+            All <span className="sb-filtercount">{skills.length}</span>
+          </button>
+          {presentTypes.map(t => (
+            <button key={t} className={`sb-filterchip${typeFilter === t ? ' on' : ''}`} onClick={() => setTypeFilter(t)}>
+              {TYPE_BY_ID[t]?.label ?? t}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="sb-grid">
-        {skills?.map(s => (
+        {visible.map(s => (
           <Link key={s.id} to={`/build/${s.id}`} className="sb-card">
             <div className="sb-cover" style={s.cover_url ? { backgroundImage: `url(${s.cover_url})` } : {}}>
-              {!s.cover_url && <span>🧩</span>}
+              {!s.cover_url && <Puzzle size={26} strokeWidth={1.5} style={{ color: 'var(--text-muted)' }} />}
             </div>
             <div className="sb-card-body">
               <div className="sb-card-top">
@@ -101,10 +119,9 @@ function SkillList({ userId }) {
               </div>
               <p className="sb-card-title">{s.title || 'Untitled Skill'}</p>
               {s.outcome && <p className="sb-card-outcome">{s.outcome}</p>}
-              <div className="div-sb-card-bottom">
-                <span className='sb-card-bottom'>
-                  {s.kind}
-                </span>
+              <div className="sb-card-type">
+                <span className="sb-card-type-label">Type</span>
+                <span className="sb-card-type-val">{TYPE_BY_ID[s.kind]?.label ?? s.kind}</span>
               </div>
             </div>
           </Link>
@@ -669,20 +686,28 @@ function BuilderStyles() {
     .sb-empty { text-align:center; padding:48px 0; }
     .sb-empty-t { font-weight:700; font-size:18px; margin-top:8px; }
 
+    .sb-filterbar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; }
+    .sb-filterchip { width:auto; min-width:0; display:inline-flex; align-items:center; gap:7px; padding:7px 15px; border-radius:var(--r-full); border:1.5px solid var(--border); background:var(--surface); color:var(--text-secondary); font-size:13px; font-weight:600; cursor:pointer; transition:background .14s ease, border-color .14s ease, color .14s ease; }
+    .sb-filterchip:hover { border-color:var(--border-strong); color:var(--text); }
+    .sb-filterchip.on { background:var(--accent); color:#fff; border-color:var(--accent); box-shadow:var(--shadow-sm); }
+    .sb-filtercount { font-size:11px; font-weight:800; padding:1px 7px; border-radius:var(--r-full); background:var(--surface-alt); color:var(--text-muted); }
+    .sb-filterchip.on .sb-filtercount { background:rgba(255,255,255,.25); color:#fff; }
+
     .sb-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:16px; }
     .sb-card { display:flex; flex-direction:column; border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden; background:var(--surface); text-decoration:none; box-shadow:var(--shadow-sm); transition:transform .12s ease, box-shadow .12s ease; }
     .sb-card:hover { transform:translateY(-2px); box-shadow:var(--shadow); }
     .sb-cover { aspect-ratio:16/9; background:var(--surface-alt) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-size:32px; }
-    .sb-card-body { padding:12px 14px 14px; min-height:200px; display:flex; flex-direction:column; }
-    .sb-card-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
-    .div-sb-card-bottom { margin-top:auto; }
-    .sb-card-bottom { display:flex; justify-content:space-between; align-items:center; font-weight:800;}
+    .sb-card-body { padding:12px 14px 14px; display:flex; flex-direction:column; gap:5px; }
+    .sb-card-top { display:flex; justify-content:space-between; align-items:center; }
+    .sb-card-type { margin-top:10px; padding-top:10px; display:flex; align-items:center; gap:8px; border-top:1px solid var(--border); }
+    .sb-card-type-label { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); }
+    .sb-card-type-val { font-size:12px; font-weight:700; color:var(--accent); background:var(--accent-light); padding:2px 9px; border-radius:var(--r-full); }
     .sb-pill { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:3px 8px; border-radius:var(--r-full); }
     .sb-pill.published { background:var(--green-light); color:var(--green); }
     .sb-pill.draft { background:var(--surface-alt); color:var(--text-muted); }
     .sb-price { font-weight:700; color:var(--text); font-size:14px; }
     .sb-card-title { font-weight:700; color:var(--text); }
-    .sb-card-outcome { font-size:13px; color:var(--text-secondary); margin-top:2px; }
+    .sb-card-outcome { font-size:13px; color:var(--text-secondary); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 
     .sb-editbar { display:flex; align-items:center; justify-content:space-between; gap:12px; row-gap:12px; margin-bottom:24px; padding-bottom:18px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
     .sb-editbar-actions { display:flex; gap:8px; flex-wrap:wrap; }

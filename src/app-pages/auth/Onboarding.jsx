@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useUser, useProfile, useAuth, AVAILABILITY_OPTIONS } from '@/lib/stores';
+import { useUser, useProfile, useAuth, DAYS_OF_WEEK } from '@/lib/stores';
 import { LEGACY_MODE } from '@/lib/config';
 import ProfileView from '@/components/Profileview';
 
@@ -26,7 +26,8 @@ function usernameError(name) {
     return null;
 }
 
-const STEP_LABELS = ['About You', 'Availability'];
+const STEP_LABELS = ['About you', 'Availability'];
+const TIME_SLOTS = ['Morning', 'Midday', 'Evening'];
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ export default function OnboardingPage() {
     const [usernameStatus, setUsernameStatus] = useState(null); // null | 'checking' | 'available' | 'taken'
     const [bio, setBio] = useState('');
     const [availability, setAvailability] = useState([]);
+    const [phone, setPhone] = useState(''); // captured at account creation, persisted here
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [step, setStep] = useState(1);
@@ -54,12 +56,15 @@ export default function OnboardingPage() {
             setUsername(profile.username ?? '');
             setBio(profile.bio ?? '');
             setAvailability(profile.availability ?? []);
+            setPhone(profile.phone ?? '');
             if (profile.full_name) setViewMode(true);
         } else {
-            // New Google user has no profile row yet — prefill the name Google gave us.
+            // New user — prefill the name + phone captured at account creation
+            // (email signup metadata, or the name Google gave us).
             const meta = user.user_metadata || {};
-            const googleName = meta.full_name || meta.name;
-            if (googleName) setFullName(googleName);
+            const signupName = meta.full_name || meta.name;
+            if (signupName) setFullName(signupName);
+            if (meta.phone) setPhone(meta.phone);
         }
     }, [user, profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -87,9 +92,13 @@ export default function OnboardingPage() {
 
     // ── Availability toggle ──────────────────────────────────────────────────
 
-    function toggleAvailability(opt) {
+    // Stored as "<Day> <Time>" combo strings in the flat availability array —
+    // keeps profiles.availability column-compatible with the legacy day/time
+    // substring filters, while letting creators pick per-day time-of-day slots.
+    function toggleSlot(day, time) {
+        const key = `${day} ${time}`;
         setAvailability(prev =>
-            prev.includes(opt) ? prev.filter(a => a !== opt) : [...prev, opt]
+            prev.includes(key) ? prev.filter(a => a !== key) : [...prev, key]
         );
     }
 
@@ -109,6 +118,7 @@ export default function OnboardingPage() {
             username,
             bio: bio.trim(),
             availability,
+            phone: phone.trim() || null,
         });
         setBusy(false);
         if (e) {
@@ -123,368 +133,484 @@ export default function OnboardingPage() {
 
     // ── Render ───────────────────────────────────────────────────────────────
 
+    const handleValid = username && !usernameError(username);
+    // Name is captured at account creation (email signup metadata / Google). Only
+    // show the name field when editing an existing profile, or as a fallback if no
+    // name came through — so a fresh signup goes straight to claiming the handle.
+    const nameFromAccount = !!(user?.user_metadata?.full_name || user?.user_metadata?.name);
+    const showNameField = !!profile?.full_name || !nameFromAccount;
+
     return (
         <>
             <title>Set up your profile — SkillJoy</title>
 
-            <div className="onboard-bg">
-                <div className="onboard-card fade-up">
+            <div className="onb">
+                <div className={`onb-shell fade-up${viewMode ? ' onb-shell-solo' : ''}`}>
 
-                    {viewMode && profile ? (
-                        <ProfileView
-                            profile={profile}
-                            acceptedSwapsCount={0}
-                            onEdit={() => setViewMode(false)}
-                        />
-                    ) : (
-                        <>
-                            {/* Header: step dots + exit */}
-                            <div className="onboard-header">
-                                <div className="step-dots">
+                    {/* ── Left: brand / value panel ── */}
+                    {!viewMode && (
+                        <aside className="onb-brand">
+                            <div>
+                                <div className="onb-logo">SkillJoy</div>
+                                <h2 className="onb-brand-h">Your link in bio,<br />built to sell.</h2>
+                                <p className="onb-brand-sub">A customizable page for all your links, socials &amp; everything you sell — one link in your bio.</p>
+                            </div>
+
+                            <ul className="onb-benefits">
+                                <li><span className="onb-check">✓</span> A customizable link-in-bio page</li>
+                                <li><span className="onb-check">✓</span> All your links &amp; socials in one place</li>
+                                <li><span className="onb-check">✓</span> Sell products, courses &amp; memberships</li>
+                            </ul>
+
+                            <div className="onb-linkcard">
+                                <span className="onb-linkcard-label">Your link</span>
+                                <span className="onb-linkcard-url">skilljoy.me/@<b>{username || 'yourname'}</b></span>
+                            </div>
+                        </aside>
+                    )}
+
+                    {/* ── Right: form card ── */}
+                    <div className="onb-card">
+                        {viewMode && profile ? (
+                            <ProfileView
+                                profile={profile}
+                                acceptedSwapsCount={0}
+                                onEdit={() => setViewMode(false)}
+                            />
+                        ) : (
+                            <>
+                                <div className="onb-top">
+                                    <span className="onb-step-label">Step {step} of {TOTAL_STEPS} · {STEP_LABELS[step - 1]}</span>
+                                    <button
+                                        type="button"
+                                        className="onb-exit"
+                                        onClick={() => profile?.full_name ? setViewMode(true) : navigate('/')}
+                                    >
+                                        {profile?.full_name ? 'Cancel' : 'Exit'}
+                                    </button>
+                                </div>
+
+                                <div className="onb-progress">
                                     {STEP_LABELS.map((label, i) => (
-                                        <div key={label} className="step-dot-group">
-                                            <div className={`step-dot ${i + 1 < step ? 'done' : ''} ${i + 1 === step ? 'current' : ''}`}>
-                                                {i + 1 < step ? '\u2713' : i + 1}
-                                            </div>
-                                            <span className={`step-dot-label ${i + 1 === step ? 'current' : ''}`}>{label}</span>
-                                        </div>
+                                        <span key={label} className={`onb-progress-seg${i < step ? ' on' : ''}`} />
                                     ))}
                                 </div>
-                                <button
-                                    className="btn btn-ghost exit-link"
-                                    onClick={() => profile?.full_name ? setViewMode(true) : navigate('/')}
-                                >
-                                    {profile?.full_name ? 'Cancel' : 'Exit'}
-                                </button>
-                            </div>
 
-                            {/* Progress bar */}
-                            <div className="progress-bar">
-                                <div className="progress-fill" style={{ width: `${(step / TOTAL_STEPS) * 100}%` }} />
-                            </div>
+                                <div className="onb-step" key={step}>
+                                    {/* ── Step 1: Name + handle + bio ── */}
+                                    {step === 1 && (
+                                        <>
+                                            <h1 className="onb-h1">Let’s set up your page</h1>
+                                            <p className="onb-p">Tell your audience who you are and claim your link.</p>
 
-                            {/* ── Step 1: Name + Bio ── */}
-                            {step === 1 && (
-                                <div className="step-body">
-                                    <h1 className="onboard-title">Let's set up your storefront</h1>
-                                    <p className="onboard-sub">Tell your audience a little about you and claim your link.</p>
-                                    <div className="field">
-                                        <label htmlFor="name">Your full name</label>
-                                        <input id="name" type="text" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="e.g. Maya Chen" autoComplete="name" />
-                                    </div>
-                                    <div className="field" style={{ marginTop: 20 }}>
-                                        <label htmlFor="username">Your storefront link</label>
-                                        <div className="username-input">
-                                            <span className="username-prefix">skilljoy.me/@</span>
-                                            <input
-                                                id="username"
-                                                type="text"
-                                                value={username}
-                                                onChange={e => handleUsernameChange(e.target.value)}
-                                                placeholder="mayachen"
-                                                autoComplete="off"
-                                                autoCapitalize="none"
-                                                spellCheck={false}
-                                            />
-                                        </div>
-                                        {username && usernameStatus === 'checking' && <p className="username-hint">Checking…</p>}
-                                        {username && usernameStatus === 'available' && <p className="username-hint ok">✓ @{username} is available</p>}
-                                        {username && usernameStatus === 'taken' && <p className="username-hint bad">That handle is taken</p>}
-                                        {username && usernameError(username) && <p className="username-hint bad">{usernameError(username)}</p>}
-                                    </div>
-                                    <div className="field" style={{ marginTop: 20 }}>
-                                        <label htmlFor="bio">
-                                            Short bio <span className="label-optional">(optional)</span>
-                                        </label>
-                                        <textarea id="bio" value={bio} onChange={e => setBio(e.target.value)} placeholder="e.g. CS junior who loves code and music." rows={3} style={{ resize: 'vertical' }} />
-                                    </div>
+                                            {showNameField && (
+                                                <div className="onb-field">
+                                                    <label htmlFor="name">Your name</label>
+                                                    <input id="name" type="text" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="e.g. Maya Chen" autoComplete="name" />
+                                                </div>
+                                            )}
+
+                                            <div className="onb-field">
+                                                <label htmlFor="username">Your page link</label>
+                                                <div className={`onb-handle${usernameStatus === 'taken' || (username && usernameError(username)) ? ' bad' : (handleValid && usernameStatus === 'available') ? ' ok' : ''}`}>
+                                                    <span className="onb-handle-prefix">skilljoy.me/@</span>
+                                                    <input
+                                                        id="username"
+                                                        type="text"
+                                                        value={username}
+                                                        onChange={e => handleUsernameChange(e.target.value)}
+                                                        placeholder="mayachen"
+                                                        autoComplete="off"
+                                                        autoCapitalize="none"
+                                                        spellCheck={false}
+                                                    />
+                                                    <span className="onb-handle-state">
+                                                        {handleValid && usernameStatus === 'checking' && <span className="onb-mini-spin" />}
+                                                        {handleValid && usernameStatus === 'available' && '✓'}
+                                                        {(usernameStatus === 'taken') && '✕'}
+                                                    </span>
+                                                </div>
+                                                {username && usernameError(username) && <p className="onb-hint bad">{usernameError(username)}</p>}
+                                                {handleValid && usernameStatus === 'available' && <p className="onb-hint ok">@{username} is yours ✨</p>}
+                                                {handleValid && usernameStatus === 'taken' && <p className="onb-hint bad">That handle is taken — try another.</p>}
+                                            </div>
+
+                                            <div className="onb-field">
+                                                <label htmlFor="bio">Short bio <span className="onb-opt">(optional)</span></label>
+                                                <textarea id="bio" value={bio} onChange={e => setBio(e.target.value)} placeholder="e.g. CS junior who loves code and music." rows={3} style={{ resize: 'vertical' }} />
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {/* ── Step 2: Availability ── */}
+                                    {step === 2 && (
+                                        <>
+                                            <h1 className="onb-h1">When are you available?</h1>
+                                            <p className="onb-p">Optional — pick the times you can take calls or sessions, by day. You can change this anytime.</p>
+                                            <div className="onb-avail">
+                                                <div className="onb-avail-head">
+                                                    <span />
+                                                    {TIME_SLOTS.map(t => <span key={t} className="onb-avail-th">{t}</span>)}
+                                                </div>
+                                                {DAYS_OF_WEEK.map(day => (
+                                                    <div key={day} className="onb-avail-row">
+                                                        <span className="onb-avail-day">{day.slice(0, 3)}</span>
+                                                        {TIME_SLOTS.map(t => {
+                                                            const on = availability.includes(`${day} ${t}`);
+                                                            return (
+                                                                <button
+                                                                    key={t}
+                                                                    type="button"
+                                                                    className={`onb-slot${on ? ' on' : ''}`}
+                                                                    onClick={() => toggleSlot(day, t)}
+                                                                    aria-pressed={on}
+                                                                    aria-label={`${day} ${t}`}
+                                                                >
+                                                                    {on ? '✓' : ''}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
-                            )}
 
-                            {/* ── Step 2: Availability ── */}
-                            {step === 2 && (
-                                <div className="step-body">
-                                    <h1 className="onboard-title">When are you available?</h1>
-                                    <p className="onboard-sub">Optional — helps buyers know when you can take coaching calls or sessions.</p>
-                                    <div className="avail-grid">
-                                        {AVAILABILITY_OPTIONS.map(opt => (
-                                            <button
-                                                key={opt}
-                                                className={`avail-chip ${availability.includes(opt) ? 'active' : ''}`}
-                                                onClick={() => toggleAvailability(opt)}
-                                            >
-                                                {opt}
-                                            </button>
-                                        ))}
-                                    </div>
+                                {error && <p className="form-error onb-err">{error}</p>}
+
+                                <div className="onb-nav">
+                                    {step > 1 ? (
+                                        <button className="btn btn-secondary" onClick={() => { setStep(s => s - 1); setError(''); }}>Back</button>
+                                    ) : (
+                                        <div />
+                                    )}
+                                    {step < TOTAL_STEPS ? (
+                                        <button className="btn btn-primary" onClick={() => { setError(''); setStep(s => s + 1); }}>Continue</button>
+                                    ) : (
+                                        <button className="btn btn-primary" onClick={save} disabled={busy}>
+                                            {busy && <span className="spinner" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white', width: 16, height: 16 }} />}
+                                            Save &amp; start building
+                                        </button>
+                                    )}
                                 </div>
-                            )}
-
-                            {error && <p className="form-error">{error}</p>}
-
-                            {/* Nav */}
-                            <div className="step-nav">
-                                {step > 1 ? (
-                                    <button className="btn btn-secondary" onClick={() => { setStep(s => s - 1); setError(''); }}>Back</button>
-                                ) : (
-                                    <div />
-                                )}
-                                {step < TOTAL_STEPS ? (
-                                    <button className="btn btn-primary" onClick={() => { setError(''); setStep(s => s + 1); }}>Continue</button>
-                                ) : (
-                                    <button className="btn btn-primary" onClick={save} disabled={busy}>
-                                        {busy && <span className="spinner" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white', width: 16, height: 16 }} />}
-                                        Save & start building
-                                    </button>
-                                )}
-                            </div>
-                        </>
-                    )}
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
 
             <style>{`
-        .onboard-bg {
+        .onb {
             min-height: 100vh;
             display: flex;
-            align-items: flex-start;
+            align-items: center;
             justify-content: center;
-            padding: 40px 20px 80px;
+            padding: 40px 20px;
             background: var(--bg);
+            position: relative;
         }
-        .onboard-card {
+        /* Ambient warmth — soft, restrained (no hard glows). */
+        .onb::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(58% 55% at 14% 8%, rgb(var(--accent-bright-rgb) / 0.08), transparent 68%),
+                radial-gradient(48% 50% at 92% 96%, rgba(201, 151, 114, 0.07), transparent 70%);
+        }
+
+        .onb-shell {
+            position: relative;
             width: 100%;
-            max-width: 620px;
+            max-width: 960px;
+            display: grid;
+            grid-template-columns: 0.82fr 1fr;
             background: var(--surface);
-            border-radius: 16px;
-            padding: 36px 40px 40px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
-        }
-
-        /* ── Header ── */
-        .onboard-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 20px;
-        }
-        .step-dots {
-            display: flex;
-            gap: 20px;
-        }
-        .step-dot-group {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 6px;
-        }
-        .step-dot {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 13px;
-            font-weight: 600;
-            border: 2px solid var(--border-strong);
-            color: var(--text-muted);
-            background: var(--surface);
-            transition: all 0.2s ease;
-        }
-        .step-dot.current {
-            border-color: var(--accent);
-            color: var(--surface);
-            background: var(--accent);
-        }
-        .step-dot.done {
-            border-color: var(--accent);
-            color: var(--accent);
-            background: var(--accent-light);
-        }
-        .step-dot-label {
-            font-size: 11px;
-            color: var(--text-muted);
-            font-weight: 500;
-            letter-spacing: 0.02em;
-        }
-        .step-dot-label.current {
-            color: var(--text);
-            font-weight: 600;
-        }
-        .exit-link {
-            font-size: 14px;
-            color: var(--text-muted);
-            padding: 6px 0;
-            margin-top: 4px;
-        }
-        .exit-link:hover { color: var(--text); }
-
-        /* ── Progress bar ── */
-        .progress-bar {
-            height: 4px;
-            background: var(--border);
-            border-radius: var(--r-full);
-            margin-bottom: 32px;
+            border: 1px solid var(--border);
+            border-radius: var(--r-2xl);
+            box-shadow: var(--shadow-xl);
             overflow: hidden;
         }
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--accent), #e8774a);
-            border-radius: var(--r-full);
-            transition: width 0.35s ease;
+        .onb-shell-solo { grid-template-columns: 1fr; max-width: 640px; }
+
+        /* ── Brand / value panel ── */
+        .onb-brand {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 30px;
+            padding: 46px 40px;
+            background: linear-gradient(158deg, var(--accent-light) 0%, var(--surface-alt) 100%);
+            border-right: 1px solid var(--border);
         }
-
-        /* ── Step body ── */
-        .step-body { min-height: 200px; }
-
-        .onboard-title {
-            font-size: 28px;
-            font-weight: 700;
+        .onb-logo {
+            font-family: var(--font-display);
+            font-weight: 800;
+            font-size: 20px;
+            letter-spacing: -0.02em;
             color: var(--text);
-            margin-bottom: 6px;
-            line-height: 1.2;
         }
-        .onboard-sub {
+        .onb-brand-h {
+            font-size: 30px;
+            font-weight: 800;
+            line-height: 1.12;
+            letter-spacing: -0.025em;
+            color: var(--text);
+            margin-top: 26px;
+        }
+        .onb-brand-sub {
             font-size: 15px;
             color: var(--text-secondary);
-            margin-bottom: 32px;
-            line-height: 1.5;
+            line-height: 1.55;
+            margin-top: 12px;
+            max-width: 30ch;
         }
-        .label-optional {
+        .onb-benefits {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 13px;
+        }
+        .onb-benefits li {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+        .onb-check {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .onb-linkcard {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 14px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r);
+            box-shadow: var(--shadow-sm);
+        }
+        .onb-linkcard-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
             color: var(--text-muted);
-            font-weight: 400;
-            text-transform: none;
+        }
+        .onb-linkcard-url { font-size: 15px; font-weight: 600; color: var(--text-secondary); }
+        .onb-linkcard-url b { color: var(--accent); font-weight: 700; }
+
+        /* ── Form card ── */
+        .onb-card {
+            display: flex;
+            flex-direction: column;
+            padding: 44px 44px 38px;
         }
 
-        /* ── Username / storefront handle ── */
-        .username-input {
+        .onb-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .onb-step-label {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+        .onb-exit {
+            width: auto;
+            min-width: 0;
+            padding: 0;
+            background: none;
+            border: none;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+        .onb-exit:hover { color: var(--text); }
+
+        .onb-progress {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 30px;
+        }
+        .onb-progress-seg {
+            flex: 1;
+            height: 5px;
+            border-radius: var(--r-full);
+            background: var(--border);
+            transition: background 0.3s ease;
+        }
+        .onb-progress-seg.on { background: var(--accent); }
+
+        .onb-step { animation: onbStep 0.32s ease; }
+        @keyframes onbStep {
+            from { opacity: 0; transform: translateY(9px); }
+            to   { opacity: 1; transform: none; }
+        }
+
+        .onb-h1 {
+            font-size: 27px;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+            line-height: 1.15;
+            color: var(--text);
+        }
+        .onb-p {
+            font-size: 15px;
+            color: var(--text-secondary);
+            line-height: 1.55;
+            margin: 8px 0 26px;
+        }
+
+        .onb-field { display: flex; flex-direction: column; margin-bottom: 18px; }
+        .onb-field label {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+        .onb-opt { color: var(--text-muted); font-weight: 500; text-transform: none; letter-spacing: 0; }
+
+        /* ── "Claim your handle" input ── */
+        .onb-handle {
             display: flex;
             align-items: center;
             border: 1.5px solid var(--border-strong);
             border-radius: var(--r);
             background: var(--surface);
             overflow: hidden;
+            transition: border-color 0.15s, box-shadow 0.15s;
         }
-        .username-input:focus-within { border-color: var(--accent); }
-        .username-prefix {
-            padding: 0 4px 0 12px;
-            font-size: 14px;
+        .onb-handle:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgb(var(--accent-rgb) / 0.15); }
+        .onb-handle.ok { border-color: var(--accent); }
+        .onb-handle.bad { border-color: #dc2626; }
+        .onb-handle-prefix {
+            padding: 0 2px 0 14px;
+            font-size: 15px;
             color: var(--text-muted);
             white-space: nowrap;
             user-select: none;
         }
-        .username-input input {
+        .onb-handle input {
+            flex: 1;
             border: none;
             outline: none;
-            flex: 1;
-            padding: 10px 12px 10px 0;
+            padding: 13px 6px 13px 0;
             background: transparent;
-            font-size: 14px;
+            font-size: 15px;
+            box-shadow: none;
         }
-        .username-hint { font-size: 13px; margin-top: 6px; color: var(--text-muted); }
-        .username-hint.ok { color: #16a34a; }
-        .username-hint.bad { color: var(--accent); }
-
-        /* ── Skills ── */
-        .skill-group { margin-bottom: 24px; }
-        .skill-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-        .custom-input { display: flex; gap: 8px; margin-top: 24px; margin-bottom: 8px; }
-        .custom-input input { flex: 1; }
-        .selected-preview {
-            margin-top: 24px;
-            padding: 20px;
-            background: var(--surface-alt);
-            border-radius: var(--r);
-            border: 1px solid var(--border);
-        }
-
-        /* ── Availability ── */
-        .avail-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 28px; }
-        .avail-chip {
-            padding: 10px 18px;
-            border-radius: var(--r-full);
-            border: 1.5px solid var(--border-strong);
-            background: var(--surface);
-            color: var(--text-secondary);
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.15s ease;
-        }
-        .avail-chip:hover {
-            border-color: var(--accent-mid);
-            background: var(--surface-alt);
-        }
-        .avail-chip.active {
-            background: var(--accent-light);
-            color: var(--accent);
-            border-color: var(--accent);
-            font-weight: 600;
-        }
-
-        /* ── Service type ── */
-        .service-section { margin-top: 32px; }
-        .service-options { display: flex; flex-direction: column; gap: 10px; }
-        .service-option {
+        .onb-handle input:focus { box-shadow: none; }
+        .onb-handle-state {
             display: flex;
             align-items: center;
-            gap: 12px;
-            cursor: pointer;
-            padding: 14px 16px;
-            background: var(--surface);
-            border-radius: var(--r);
-            border: 1.5px solid var(--border);
-            transition: all 0.15s ease;
-        }
-        .service-option:hover { border-color: var(--border-strong); }
-        .service-option.selected {
-            background: var(--surface-alt);
-            border-color: var(--accent);
-        }
-        .service-option input[type="radio"] {
-            width: 18px;
-            height: 18px;
-            accent-color: var(--accent);
-            flex-shrink: 0;
-        }
-        .service-label {
-            font-weight: 600;
+            justify-content: center;
+            width: 40px;
             font-size: 15px;
-            color: var(--text);
-        }
-        .service-desc {
-            font-size: 13px;
+            font-weight: 800;
             color: var(--text-muted);
-            margin-top: 2px;
         }
+        .onb-handle.ok .onb-handle-state { color: var(--accent); }
+        .onb-handle.bad .onb-handle-state { color: #dc2626; }
+        .onb-mini-spin {
+            width: 14px; height: 14px;
+            border: 2px solid var(--border-strong);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        .onb-hint { font-size: 13px; font-weight: 500; margin-top: 7px; }
+        .onb-hint.ok { color: var(--accent); }
+        .onb-hint.bad { color: #dc2626; }
 
-        /* ── Nav + Error ── */
-        .step-nav {
+        /* ── Availability grid (day × time-of-day) ── */
+        .onb-avail { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+        .onb-avail-head, .onb-avail-row {
+            display: grid;
+            grid-template-columns: 52px repeat(3, 1fr);
+            gap: 8px;
+            align-items: center;
+        }
+        .onb-avail-th {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-muted);
+            text-align: center;
+        }
+        .onb-avail-day { font-size: 13px; font-weight: 700; color: var(--text-secondary); }
+        .onb-slot {
+            width: 100%;
+            min-width: 0;
+            height: 38px;
+            padding: 0;
+            border-radius: var(--r-sm);
+            border: 1.5px solid var(--border-strong);
+            background: var(--surface);
+            color: var(--accent);
+            font-size: 14px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.13s ease;
+        }
+        .onb-slot:hover { border-color: var(--accent-mid); background: var(--surface-alt); }
+        .onb-slot.on { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: var(--shadow-sm); }
+
+        /* ── Nav + error ── */
+        .onb-nav {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-top: 36px;
-            padding-top: 24px;
+            margin-top: 32px;
+            padding-top: 22px;
             border-top: 1px solid var(--border);
         }
-        .form-error {
+        .form-error.onb-err {
             font-size: 13px;
-            color: var(--accent);
-            background: var(--accent-light);
-            border: 1px solid var(--accent-mid);
+            color: #b91c1c;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
             border-radius: var(--r-sm);
             padding: 10px 14px;
-            margin-top: 16px;
+            margin-top: 18px;
         }
 
         /* ── Responsive ── */
-        @media (max-width: 600px) {
-            .onboard-card { padding: 28px 20px 32px; border-radius: 12px; }
-            .onboard-title { font-size: 24px; }
-            .step-dots { gap: 12px; }
-            .step-dot { width: 28px; height: 28px; font-size: 12px; }
-            .step-dot-label { font-size: 10px; }
+        @media (max-width: 820px) {
+            .onb { padding: 24px 16px; align-items: flex-start; }
+            .onb-shell, .onb-shell-solo { grid-template-columns: 1fr; max-width: 480px; }
+            .onb-brand {
+                padding: 28px 26px;
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+                gap: 18px;
+            }
+            .onb-brand-h { font-size: 24px; margin-top: 14px; }
+            .onb-benefits { display: none; }
+            .onb-card { padding: 30px 24px 26px; }
+            .onb-h1 { font-size: 23px; }
         }
       `}</style>
         </>

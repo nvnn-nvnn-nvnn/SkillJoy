@@ -482,7 +482,7 @@ export default function ProfilePage() {
                             </div>
                             <div style={{ display: 'flex', gap: 8 }}>
                                 <Link to={`/@${profile.username}`} className="btn btn-secondary">View storefront</Link>
-                                {isOwnProfile && <Link to="/services" className="btn btn-primary">Manage services</Link>}
+                                {isOwnProfile && <Link to="/build" className="btn btn-primary">Manage products</Link>}
                             </div>
                         </div>
                     ) : (

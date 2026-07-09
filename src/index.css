@@ -22,22 +22,24 @@
   --text-muted: #97917F;
 
   --primary: #1A1916;
-  --primary-hover: #0A6E5D;
-  --primary-light: #E5F6F1;
-  --primary-mid: #ADE4D7;
+  --primary-hover: #00A37A;
+  --primary-light: #E0F8F1;
+  --primary-mid: #9FE6D0;
 
-  /* ── Seafoam accent ──
-     --accent is the AA-safe functional green (buttons, links, focus).
-     --accent-bright is the softer decorative seafoam (fills, chips). */
-  --accent: #20B366;
-  --accent-hover: #0A6E5D;
-  --accent-bright: #2FC4AD;
-  --accent-light: #E5F6F1;
-  --accent-mid: #ADE4D7;
+  /* ── Caribbean green accent ──
+     --accent is the brand green (buttons, links, focus).
+     --accent-bright is the softer decorative variant (fills, chips).
+     Keep --accent-rgb in sync with --accent — it drives every shadow,
+     focus ring, and glow via rgb(var(--accent-rgb) / <alpha>). */
+  --accent: #00CC99;
+  --accent-hover: #00A37A;
+  --accent-bright: #2FD9AB;
+  --accent-light: #E0F8F1;
+  --accent-mid: #9FE6D0;
   --accent-foreground: #FFFFFF;
 
-  --accent-rgb: 12 132 112;
-  --accent-bright-rgb: 47 196 173;
+  --accent-rgb: 0 204 153;
+  --accent-bright-rgb: 47 217 171;
 
   --green: #2A7A4B;
   --green-light: #E6F7EE;

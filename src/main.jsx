@@ -15,7 +15,7 @@ class ErrorBoundary extends Component {
     return this.props.children;
   }
 }
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './lib/stores'
 import { DialogProvider } from './components/Dialog'
 import { LEGACY_MODE } from './lib/config'
@@ -69,7 +69,7 @@ import AdminPayouts from './app-pages/AdminPayouts'
 
 function AppRoutes() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+    <div className="app-shell" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <Header />
       <div style={{ flex: 1 }}>
         <Routes>
@@ -78,14 +78,17 @@ function AppRoutes() {
           <Route path="/onboarding" element={<Onboarding />} />
 
           {/* ── v3 Skill-platform routes ── */}
-          <Route path="/build" element={<SkillBuilder />} />
+          {/* Products hub — the ServicesDashboard is the single "everything I sell"
+              surface. /build/new (create) + /build/:id (editor) stay below. */}
+          <Route path="/build" element={<ServicesDashboard />} />
           <Route path="/build/new" element={<AddProduct />} />
           <Route path="/build/:skillId/lesson/:lessonId" element={<LessonEditor />} />
           <Route path="/build/:skillId" element={<SkillBuilder />} />
           <Route path="/locker" element={<Locker />} />
           <Route path="/locker/:skillId" element={<Locker />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/services" element={<ServicesDashboard />} />
+          {/* Old /services route folded into the products hub. */}
+          <Route path="/services" element={<Navigate to="/build" replace />} />
           <Route path="/discover" element={<Discover />} />
           <Route path="/storefront/edit" element={<StorefrontEditor />} />
           <Route path="/checkout/:skillId" element={<Checkout />} />

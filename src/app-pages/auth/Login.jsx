@@ -17,6 +17,8 @@ export default function LoginPage() {
     );
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [name, setName] = useState('');       // collected at account creation
+    const [phone, setPhone] = useState('');     // collected at account creation
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
@@ -62,7 +64,14 @@ export default function LoginPage() {
         setError(''); setSuccess(''); setBusy(true);
         try {
             if (mode === 'signup') {
-                const { error: e } = await supabase.auth.signUp({ email, password });
+                if (!name.trim()) throw new Error('Please enter your name.');
+                if (!phone.trim()) throw new Error('Please enter your phone number.');
+                // Name + phone are captured now (account creation) and carried in
+                // user_metadata; the handle is claimed afterward in onboarding.
+                const { error: e } = await supabase.auth.signUp({
+                    email, password,
+                    options: { data: { full_name: name.trim(), phone: phone.trim() } },
+                });
                 if (e) throw e;
                 setSuccess('Check your email to confirm your account, then sign in.');
             } else if (mode === 'reset') {
@@ -166,6 +175,35 @@ export default function LoginPage() {
                             </>
                         ) : (
                             <>
+                                {mode === 'signup' && (
+                                    <>
+                                        <div className="field">
+                                            <label htmlFor="name">Full name</label>
+                                            <input
+                                                id="name"
+                                                type="text"
+                                                value={name}
+                                                onChange={(e) => setName(e.target.value)}
+                                                placeholder="Maya Chen"
+                                                required
+                                                autoComplete="name"
+                                            />
+                                        </div>
+                                        <div className="field">
+                                            <label htmlFor="phone">Phone number</label>
+                                            <input
+                                                id="phone"
+                                                type="tel"
+                                                value={phone}
+                                                onChange={(e) => setPhone(e.target.value)}
+                                                placeholder="(555) 123-4567"
+                                                required
+                                                autoComplete="tel"
+                                            />
+                                        </div>
+                                    </>
+                                )}
+
                                 <div className="field">
                                     <label htmlFor="email">Email</label>
                                     <input
