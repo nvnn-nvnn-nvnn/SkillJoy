@@ -74,6 +74,11 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
     '--accent': theme.accent,
     '--lp-card-bg': `color-mix(in srgb, var(--lp-surface) ${theme.card_opacity ?? 100}%, transparent)`,
     '--lp-card-blur': `${theme.card_blur ?? 0}px`,
+    '--lp-item-bg': `color-mix(in srgb, var(--lp-surface) ${theme.product_opacity ?? 100}%, transparent)`,
+    '--lp-item-blur': `${theme.product_blur ?? 0}px`,
+    '--lp-bio-size': `${theme.bio_size ?? 15}px`,
+    '--lp-bio-weight': theme.bio_weight ?? 400,
+    '--lp-bio-glow': `${theme.bio_glow ?? 0}px`,
   };
   if (theme.text_color) style['--lp-text'] = theme.text_color;
   if (theme.title_color) style['--lp-title'] = theme.title_color;
@@ -90,7 +95,7 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
         {bio && <div className="lp-bio">{bio}</div>}
         {(socials || []).filter(s => s.url).length > 0 && (
           <div className="lp-socials">
-            {(socials || []).filter(s => s.url).map((s, i) => <span key={i} className="lp-social"><BrandIcon type={s.type} size={15} /></span>)}
+            {(socials || []).filter(s => s.url).map((s, i) => <span key={i} className="lp-social"><BrandIcon type={s.type} size={20} /></span>)}
           </div>
         )}
       </div>
@@ -247,7 +252,7 @@ export default function StorefrontEditor() {
                       <input type="file" accept="image/*" hidden onChange={onAvatar} />
                       {savingAvatar ? 'Uploading…' : <><Camera size={14} /> {avatarUrl ? 'Change' : 'Upload'}</>}
                     </label>
-                    {avatarUrl && <button className="std-textbtn" onClick={() => setAvatarUrl('')}>Remove</button>}
+                    {avatarUrl && <button className="std-removebtn" onClick={() => setAvatarUrl('')}><X size={13} /> Remove</button>}
                   </div>
                 </Field>
                 <Field label="Display name">
@@ -271,7 +276,7 @@ export default function StorefrontEditor() {
                       <input type="file" accept="image/*" hidden onChange={onBgImage} />
                       <span>{savingBg ? 'Uploading…' : <><ImagePlus size={15} /> {theme.bg_image ? 'Change image' : 'Upload image'}</>}</span>
                     </label>
-                    {theme.bg_image && <button className="std-textbtn" onClick={() => set({ bg_image: '' })}>Remove background</button>}
+                    {theme.bg_image && <button className="std-removebtn" onClick={() => set({ bg_image: '' })}><X size={13} /> Remove background</button>}
                   </>
                 )}
 
@@ -280,7 +285,7 @@ export default function StorefrontEditor() {
                     <input type="file" accept="image/*" hidden onChange={onBanner} />
                     <span>{savingBanner ? 'Uploading…' : <><ImagePlus size={15} /> {theme.banner_url ? 'Change banner' : 'Add banner'}</>}</span>
                   </label>
-                  {theme.banner_url && <button className="std-textbtn" onClick={() => set({ banner_url: '' })}>Remove banner</button>}
+                  {theme.banner_url && <button className="std-removebtn" onClick={() => set({ banner_url: '' })}><X size={13} /> Remove banner</button>}
                 </Field>
 
                 <Field label="Custom cursor">
@@ -288,7 +293,7 @@ export default function StorefrontEditor() {
                     <input type="file" accept="image/*" hidden onChange={onCursor} />
                     <span>{savingCursor ? '…' : <><MousePointer2 size={14} /> {theme.cursor_url ? 'Change' : 'Upload'}</>}</span>
                   </label>
-                  {theme.cursor_url && <button className="std-textbtn" onClick={() => set({ cursor_url: '' })}>Remove</button>}
+                  {theme.cursor_url && <button className="std-removebtn" onClick={() => set({ cursor_url: '' })}><X size={13} /> Remove</button>}
                 </Field>
 
                 <div className="std-soontiles">
@@ -301,6 +306,14 @@ export default function StorefrontEditor() {
                 <Field label="Profile opacity"><Slider value={theme.card_opacity ?? 100} min={0} max={100} suffix="%" onChange={v => set({ card_opacity: v })} /></Field>
                 <Field label="Profile blur (glass)"><Slider value={theme.card_blur ?? 0} min={0} max={24} suffix="px" onChange={v => set({ card_blur: v })} /></Field>
                 <p className="std-note">Lower opacity + more blur = frosted glass over your background.</p>
+
+
+                {/* Bio size */}
+
+                <Field label="Bio Size"> <Slider value={theme.bio_size ?? 15} min={11} max={25} suffix="px" onChange={v => set({ bio_size: v })} /></Field>
+                <Field label="Bio weight"><Slider value={theme.bio_weight ?? 400} min={300} max={800} step={100} onChange={v => set({ bio_weight: v })} /></Field>
+                <Field label="Bio glow"><Slider value={theme.bio_glow ?? 0} min={0} max={20} suffix="px" onChange={v => set({ bio_glow: v })} /></Field>
+                <p className="std-note">Size, boldness &amp; accent glow for your bio.</p>
               </Panel>
 
               <Panel icon={Palette} title="Color &amp; Theme">
@@ -318,6 +331,17 @@ export default function StorefrontEditor() {
                     {theme.text_color && <button className="std-textbtn" onClick={() => set({ text_color: '' })}>Reset</button>}
                   </div>
                 </Field>
+                {/* Bio Size */}
+                {/* <Field label="Bio Size">
+                  <div className="std-colorrow">
+
+                  </div>
+
+                </Field> */}
+
+
+
+
                 <Field label="Title Color">
                   <div className="std-colorrow">
                     <input type="color" value={theme.title_color || '#fff'} onChange={e => set({title_color: e.target.value})}/>
@@ -326,12 +350,15 @@ export default function StorefrontEditor() {
                   </div>
 
                 </Field>
+                
               </Panel>
 
               <Panel icon={Wand2} title="Animations &amp; Effects">
                 <Field label="Button style"><Seg value={theme.button_style} onChange={v => set({ button_style: v })} options={[{ v: 'rounded', label: 'Rounded' }, { v: 'pill', label: 'Pill' }, { v: 'sharp', label: 'Sharp' }]} /></Field>
                 <Field label="Product layout"><Seg value={theme.layout} onChange={v => set({ layout: v })} options={[{ v: 'list', label: 'List' }, { v: 'grid', label: 'Grid' }]} /></Field>
                 <Field label="Product glow"><Seg value={theme.product_glow || 'none'} onChange={v => set({ product_glow: v })} options={[{ v: 'none', label: 'None' }, { v: 'soft', label: 'Soft' }, { v: 'strong', label: 'Strong' }]} /></Field>
+                <Field label="Product opacity (glass)"><Slider value={theme.product_opacity ?? 100} min={40} max={100} suffix="%" onChange={v => set({ product_opacity: v })} /></Field>
+                <Field label="Product blur (glass)"><Slider value={theme.product_blur ?? 0} min={0} max={24} suffix="px" onChange={v => set({ product_blur: v })} /></Field>
                 <Toggle on={!!theme.mono_icons} onChange={v => set({ mono_icons: v })} label="Monochrome icons" hint="Grayscale social icons" />
                 <Toggle on={!!theme.animated_name} onChange={v => set({ animated_name: v })} label="Animated username" hint="Subtle accent glow" />
                 <div className="std-soontiles">
@@ -507,6 +534,9 @@ function Styles() {
     .std-upload span { display:inline-flex; align-items:center; gap:7px; background:rgba(0,0,0,.6); color:#fff; padding:8px 14px; border-radius:var(--r-full); font-size:13px; font-weight:600; }
     .std-textbtn { width:auto; background:none; border:none; color:var(--text-muted); font-size:12px; cursor:pointer; margin-left:10px; padding:0; }
     .std-textbtn:hover { color:var(--accent); }
+    .std-removebtn { width:auto; display:inline-flex; align-items:center; gap:5px; margin-top:9px; padding:6px 12px; border-radius:var(--r-full); border:1px solid var(--border-strong, var(--border)); background:var(--surface); color:var(--text-secondary); font-size:12px; font-weight:700; cursor:pointer; transition:border-color .13s ease, color .13s ease, background .13s ease; }
+    .std-removebtn:hover { border-color:#ef4444; color:#ef4444; background:color-mix(in srgb, #ef4444 8%, transparent); }
+    .std-removebtn svg { flex-shrink:0; }
 
     .std-soontiles { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
     .std-soontile { display:inline-flex; align-items:center; gap:7px; padding:9px 13px; border:1px dashed var(--border-strong); border-radius:var(--r);
@@ -568,18 +598,20 @@ function Styles() {
     .lp-name { font-size:20px; font-weight:800; letter-spacing:-.01em; margin-top:12px; color:var(--lp-title, inherit); }
     .lp-anim .lp-name { animation:sfNameGlow 2.6s ease-in-out infinite; }
     .lp-handle { font-size:13px; font-weight:600; color:var(--accent); margin-top:2px; }
-    .lp-bio { font-size:13px; color:color-mix(in srgb, var(--lp-text, #5b574e) 75%, transparent); margin-top:10px; max-width:34ch; line-height:1.5; }
-    .lp-socials { display:flex; gap:8px; justify-content:center; margin-top:14px; }
-    .lp-social { width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center;
-      background:color-mix(in srgb, var(--lp-text,#000) 8%, transparent); border:1px solid color-mix(in srgb, var(--lp-text, #000) 12%, transparent); color:var(--lp-text, #1a1916); }
+    .lp-bio { font-size:var(--lp-bio-size, 15px); font-weight:var(--lp-bio-weight, 400); color:color-mix(in srgb, var(--lp-text, #5b574e) 75%, transparent); margin-top:10px; max-width:34ch; line-height:1.5;
+      filter:drop-shadow(0 0 var(--lp-bio-glow, 0px) color-mix(in srgb, var(--accent) 70%, transparent)); }
+    .lp-socials { display:flex; gap:8px; justify-content:center; margin-top:14px; color:var(--lp-text, #5b574e) }
+    .lp-social { display:inline-flex; align-items:center; justify-content:center; padding:3px; color:var(--lp-text, #1a1916);
+      filter:drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 55%, transparent)); }
     .lp-mono .lp-social svg { filter:grayscale(1); opacity:.8; }
     .lp-ghost { border-color:transparent; box-shadow:none; }
     .lp-list { display:flex; flex-direction:column; gap:11px; margin:14px 14px 20px; }
-    .lp-glow-soft .lp-card, .lp-glow-soft .lp-linkbtn { box-shadow:0 0 16px color-mix(in srgb, var(--accent) 32%, transparent); }
-    .lp-glow-strong .lp-card, .lp-glow-strong .lp-linkbtn { box-shadow:0 0 26px color-mix(in srgb, var(--accent) 55%, transparent); }
+    .lp-glow-soft .lp-card { box-shadow:0 0 16px color-mix(in srgb, var(--accent) 32%, transparent); }
+    .lp-glow-strong .lp-card { box-shadow:0 0 26px color-mix(in srgb, var(--accent) 55%, transparent); }
     .lp-grid { display:grid; grid-template-columns:1fr 1fr; }
     .lp-card { display:flex; gap:11px; align-items:center; text-align:left; padding:10px; border-radius:16px;
-      background:color-mix(in srgb, var(--lp-text,#000) 6%, transparent); border:1px solid color-mix(in srgb, var(--lp-text, #000) 10%, transparent); }
+      backdrop-filter:blur(var(--lp-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--lp-item-blur, 0px));
+      background:color-mix(in srgb, var(--lp-text,#000) 6%, var(--lp-item-bg, transparent)); border:1px solid color-mix(in srgb, var(--lp-text, #000) 10%, transparent); }
     .lp-grid .lp-card { flex-direction:column; align-items:stretch; }
     .lp-empty { justify-content:center; color:color-mix(in srgb, var(--lp-text,#000) 45%, transparent); font-size:12px; font-weight:600; padding:22px; }
     .lp-cover { width:52px; height:52px; flex-shrink:0; border-radius:11px; background:color-mix(in srgb, var(--lp-text,#000) 8%, transparent) center/cover no-repeat; }
@@ -587,10 +619,11 @@ function Styles() {
     .lp-card-body { min-width:0; }
     .lp-card-title { font-size:13.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .lp-price { font-size:13px; font-weight:800; margin-top:3px; }
-    .lp-linkbtn { display:flex; align-items:center; justify-content:center; gap:8px; padding:13px; border-radius:16px; font-size:13.5px; font-weight:700;
-      background:color-mix(in srgb, var(--lp-text,#000) 6%, transparent); border:1px solid color-mix(in srgb, var(--lp-text,#000) 10%, transparent); }
-    .lp-btn-pill .lp-card, .lp-btn-pill .lp-linkbtn, .lp-btn-pill .lp-cover { border-radius:999px; }
-    .lp-btn-sharp .lp-card, .lp-btn-sharp .lp-linkbtn, .lp-btn-sharp .lp-cover { border-radius:5px; }
+    .lp-linkbtn { display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-radius:999px; font-size:13px; font-weight:700;
+      backdrop-filter:blur(var(--lp-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--lp-item-blur, 0px));
+      background:color-mix(in srgb, var(--accent) 12%, var(--lp-item-bg, transparent)); border:1.5px solid color-mix(in srgb, var(--accent) 32%, transparent); }
+    .lp-btn-pill .lp-card, .lp-btn-pill .lp-cover { border-radius:999px; }
+    .lp-btn-sharp .lp-card, .lp-btn-sharp .lp-cover { border-radius:5px; }
 
     @keyframes sfNameGlow { 0%,100% { text-shadow:0 0 0 transparent; } 50% { text-shadow:0 0 16px color-mix(in srgb, var(--accent) 65%, transparent); } }
 

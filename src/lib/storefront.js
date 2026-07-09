@@ -24,6 +24,11 @@ export const DEFAULT_THEME = {
   mono_icons: false,        // grayscale the social icons
   animated_name: false,     // subtle animated glow on the display name
   product_glow: 'soft',     // 'none' | 'soft' | 'strong' — accent glow on product cards
+  product_opacity: 100,     // 40–100 — product/link fill opacity (glass)
+  product_blur: 0,          // 0–24 px — backdrop blur behind products/links (glass)
+  bio_size: 15,             // px — bio font size
+  bio_weight: 400,          // 300–800 — bio font weight
+  bio_glow: 0,              // 0–20 px — accent drop-shadow glow on the bio
 };
 
 export const SOCIAL_TYPES = [

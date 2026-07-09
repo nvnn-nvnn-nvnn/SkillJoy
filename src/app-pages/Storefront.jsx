@@ -74,6 +74,11 @@ export default function Storefront() {
     '--accent': theme.accent,
     '--sf-panel-bg': `color-mix(in srgb, var(--surface) ${theme.card_opacity ?? 100}%, transparent)`,
     '--sf-panel-blur': `${theme.card_blur ?? 0}px`,
+    '--sf-item-bg': `color-mix(in srgb, var(--surface) ${theme.product_opacity ?? 100}%, transparent)`,
+    '--sf-item-blur': `${theme.product_blur ?? 0}px`,
+    '--sf-bio-size': `${theme.bio_size ?? 15}px`,
+    '--sf-bio-weight': theme.bio_weight ?? 400,
+    '--sf-bio-glow': `${theme.bio_glow ?? 0}px`,
   };
   if (theme.text_color) {
     wrapStyle['--text'] = theme.text_color;
@@ -111,7 +116,7 @@ export default function Storefront() {
           <div className="sf-socials">
             {socials.map((s, i) => (
               <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="sf-social" title={s.type}>
-                <BrandIcon type={s.type} size={18} />
+                <BrandIcon type={s.type} size={23} />
               </a>
             ))}
           </div>
@@ -176,10 +181,9 @@ function StoreStyles() {
     /* Explicit dark canvas so it never falls back to the app's light bg. */
     .sf-mode-dark .sf-bg { background:#121316; }
     .sf-has-bgimg .sf-name, .sf-has-bgimg .sf-handle, .sf-has-bgimg .sf-bio { text-shadow:0 1px 14px rgba(0,0,0,.5); }
+    /* Button-style + glow apply to PRODUCTS only — links have their own look below. */
     .sf-btn-pill .sf-card, .sf-btn-pill .sf-cover { border-radius:var(--r-2xl); }
-    .sf-btn-pill .sf-linkbtn, .sf-btn-pill .sf-social { border-radius:var(--r-full); }
-    .sf-btn-sharp .sf-card, .sf-btn-sharp .sf-cover, .sf-btn-sharp .sf-linkbtn { border-radius:6px; }
-    .sf-btn-sharp .sf-social { border-radius:8px; }
+    .sf-btn-sharp .sf-card, .sf-btn-sharp .sf-cover { border-radius:6px; }
 
     /* Main glass panel — wraps the profile info so the background never bleeds
        into the text. Opacity + blur sliders drive --sf-panel-bg / --sf-panel-blur. */
@@ -196,10 +200,10 @@ function StoreStyles() {
     /* Opacity 0 → the panel becomes an invisible container (info floats on the bg). */
     .sf-panel-ghost { border-color:transparent; box-shadow:none; }
 
-    /* Product glow — resting accent glow on cards/link buttons, stronger on hover. */
-    .sf-glow-soft .sf-card, .sf-glow-soft .sf-linkbtn { box-shadow:0 0 22px color-mix(in srgb, var(--accent) 24%, transparent), var(--shadow-sm); }
-    .sf-glow-strong .sf-card, .sf-glow-strong .sf-linkbtn { box-shadow:0 0 38px color-mix(in srgb, var(--accent) 48%, transparent), var(--shadow); }
-    .sf-glow-soft .sf-card:hover, .sf-glow-strong .sf-card:hover, .sf-glow-soft .sf-linkbtn:hover, .sf-glow-strong .sf-linkbtn:hover { box-shadow:0 0 46px color-mix(in srgb, var(--accent) 60%, transparent), 0 12px 26px color-mix(in srgb, var(--accent) 20%, transparent); }
+    /* Product glow — resting accent glow on product cards only, stronger on hover. */
+    .sf-glow-soft .sf-card { box-shadow:0 0 22px color-mix(in srgb, var(--accent) 24%, transparent), var(--shadow-sm); }
+    .sf-glow-strong .sf-card { box-shadow:0 0 38px color-mix(in srgb, var(--accent) 48%, transparent), var(--shadow); }
+    .sf-glow-soft .sf-card:hover, .sf-glow-strong .sf-card:hover { box-shadow:0 0 46px color-mix(in srgb, var(--accent) 60%, transparent), 0 12px 26px color-mix(in srgb, var(--accent) 20%, transparent); }
 
     .sf-mono .sf-social svg { filter:grayscale(1); opacity:.82; }
     .sf-anim-name .sf-name { animation:sfNameGlow 2.6s ease-in-out infinite; }
@@ -215,15 +219,20 @@ function StoreStyles() {
     .sf-avatar { width:100px; height:100px; border-radius:50%; margin:0 auto 14px; background:color-mix(in srgb, var(--accent) 14%, white) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:34px; color:var(--accent); border:4px solid var(--surface); box-shadow:var(--shadow-lg); }
     .sf-name { font-size:27px; font-weight:800; font-family:var(--font-display); letter-spacing:-.02em; line-height:1.15; color:var(--sf-title, inherit); }
     .sf-handle { color:var(--accent); font-size:14px; font-weight:600; margin-top:3px; }
-    .sf-bio { color:var(--text-secondary); font-size:15px; margin:12px auto 0; line-height:1.55; max-width:42ch; }
-    .sf-socials { display:flex; gap:10px; justify-content:center; margin-top:18px; }
-    .sf-social { width:42px; height:42px; border-radius:50%; background:var(--surface); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:18px; text-decoration:none; box-shadow:var(--shadow-sm); transition:transform .14s ease, border-color .14s ease, box-shadow .14s ease; }
-    .sf-social:hover { transform:translateY(-2px); border-color:var(--accent); box-shadow:var(--shadow); }
+    .sf-bio { color:var(--text-secondary); font-size:var(--sf-bio-size, 15px); font-weight:var(--sf-bio-weight, 400); margin:12px auto 0; line-height:1.55; max-width:42ch;
+      filter:drop-shadow(0 0 var(--sf-bio-glow, 0px) color-mix(in srgb, var(--accent) 70%, transparent)); }
+    .sf-socials { display:flex; gap:16px; justify-content:center; margin-top:20px; }
+    /* Bare icons (no circle) with a shape-hugging glow via filter:drop-shadow. */
+    .sf-social { display:inline-flex; align-items:center; justify-content:center; padding:5px; color:var(--text); text-decoration:none;
+      transition:transform .16s cubic-bezier(.34,1.4,.64,1), color .14s ease, filter .16s ease;
+      filter:drop-shadow(0 0 7px color-mix(in srgb, var(--accent) 55%, transparent)); }
+    .sf-social:hover { transform:translateY(-2px) scale(1.12); color:var(--accent);
+      filter:drop-shadow(0 0 5px var(--accent)) drop-shadow(0 0 14px var(--accent)); }
 
     /* Product cards + link buttons — a separate section below the profile panel */
     .sf-list { display:flex; flex-direction:column; gap:14px; margin-top:18px; }
     .sf-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; }
-    .sf-card { display:flex; gap:14px; align-items:center; padding:12px; border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); text-decoration:none; box-shadow:var(--shadow-sm); transition:transform .16s cubic-bezier(.34,1.4,.64,1), box-shadow .16s ease, border-color .16s ease; }
+    .sf-card { display:flex; gap:14px; align-items:center; padding:12px; border:1px solid var(--border); border-radius:var(--r-lg); background:var(--sf-item-bg, var(--surface)); backdrop-filter:blur(var(--sf-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--sf-item-blur, 0px)); text-decoration:none; box-shadow:var(--shadow-sm); transition:transform .16s cubic-bezier(.34,1.4,.64,1), box-shadow .16s ease, border-color .16s ease; }
     .sf-card:hover { transform:translateY(-3px); border-color:color-mix(in srgb, var(--accent) 45%, var(--border)); box-shadow:0 12px 26px color-mix(in srgb, var(--accent) 16%, transparent), var(--shadow); }
     .sf-grid .sf-card { flex-direction:column; align-items:stretch; gap:10px; padding:10px; }
     .sf-cover { width:88px; height:88px; flex-shrink:0; border-radius:var(--r); background:var(--surface-alt) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-size:30px; }
@@ -235,9 +244,10 @@ function StoreStyles() {
     .sf-price { font-weight:800; color:var(--text); font-size:15px; }
     .sf-tag { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, white); padding:3px 9px; border-radius:var(--r-full); }
 
-    .sf-linkbtn { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:16px 18px; border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); text-decoration:none; color:var(--text); font-weight:700; box-shadow:var(--shadow-sm); transition:transform .16s cubic-bezier(.34,1.4,.64,1), box-shadow .16s ease, border-color .16s ease; }
-    .sf-linkbtn:hover { transform:translateY(-3px); border-color:var(--accent); box-shadow:0 12px 26px color-mix(in srgb, var(--accent) 16%, transparent); }
-    .sf-grid .sf-linkbtn { justify-content:center; gap:6px; }
+    /* Link buttons — deliberately distinct from product cards: pill, accent-tinted,
+       centered label, no cover/border-box. */
+    .sf-linkbtn { display:flex; align-items:center; justify-content:center; gap:9px; padding:14px 18px; border:1.5px solid color-mix(in srgb, var(--accent) 32%, transparent); border-radius:var(--r-full); background:color-mix(in srgb, var(--accent) 10%, var(--sf-item-bg, var(--surface))); backdrop-filter:blur(var(--sf-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--sf-item-blur, 0px)); text-decoration:none; color:var(--text); font-weight:700; transition:transform .16s cubic-bezier(.34,1.4,.64,1), background .16s ease, border-color .16s ease, box-shadow .16s ease; }
+    .sf-linkbtn:hover { transform:translateY(-2px); background:color-mix(in srgb, var(--accent) 18%, var(--surface)); border-color:var(--accent); box-shadow:0 8px 22px color-mix(in srgb, var(--accent) 22%, transparent); }
     .sf-linkbtn-label { display:inline-flex; align-items:center; gap:9px; }
     .sf-linkbtn-arrow { color:var(--accent); flex-shrink:0; }
 
