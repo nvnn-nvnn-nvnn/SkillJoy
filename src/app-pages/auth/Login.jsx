@@ -4,7 +4,7 @@ import { useUser } from '@/lib/stores';
 import { LEGACY_MODE } from '@/lib/config';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import SkillJoyLogo3 from '../../assets/SkillJoy-Logo2.svg'
-import SkillJoyGreen from '@/assets/SkillJoy-green.svg'; // adjust alias if needed
+import SkillJoyGreen from '@/assets/skillJoy-green.svg'; // adjust alias if needed
 
 // Base site URL with any trailing slash(es) stripped. Without this, a
 // VITE_SITE_URL like "https://skilljoy.me/" + "/login" becomes
