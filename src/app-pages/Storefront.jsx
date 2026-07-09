@@ -6,14 +6,11 @@ import { listPublishedSkills } from '@/lib/skills';
 import { resolveTheme, listLinks } from '@/lib/storefront';
 import { recordEvent } from '@/lib/metrics';
 import { initials } from '@/lib/stores';
-import { Pencil, Puzzle, Link2, ArrowUpRight, Sparkles, Search, Camera, Play, AtSign, Globe, Music2 } from 'lucide-react';
+import { Pencil, Puzzle, Link2, ArrowUpRight, Sparkles, Search } from 'lucide-react';
+import { BrandIcon } from '@/lib/brandIcons';
 import SubscribeForm from '@/components/SubscribeForm';
 import Seo from '@/components/Seo';
 import { injectPixels } from '@/lib/pixels';
-
-// This lucide build has no brand logos, so generic line icons stand in per
-// platform (camera / play / @ / music / globe); unknown types fall back to a link.
-const SOCIAL_LUCIDE = { instagram: Camera, tiktok: Music2, youtube: Play, x: AtSign, website: Globe };
 
 // Phase 3/7 — public, mobile-first link-in-bio storefront at /@username, themed.
 export default function Storefront() {
@@ -83,6 +80,7 @@ export default function Storefront() {
     wrapStyle['--text-secondary'] = `color-mix(in srgb, ${theme.text_color} 72%, transparent)`;
     wrapStyle['--text-muted'] = `color-mix(in srgb, ${theme.text_color} 50%, transparent)`;
   }
+  if (theme.title_color) wrapStyle['--sf-title'] = theme.title_color;
   if (theme.cursor_url) wrapStyle.cursor = `url(${theme.cursor_url}), auto`;
 
   return (
@@ -111,14 +109,11 @@ export default function Storefront() {
         {profile.bio && <p className="sf-bio">{profile.bio}</p>}
         {socials.length > 0 && (
           <div className="sf-socials">
-            {socials.map((s, i) => {
-              const Icon = SOCIAL_LUCIDE[s.type] || Link2;
-              return (
-                <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="sf-social" title={s.type}>
-                  <Icon size={18} strokeWidth={2} />
-                </a>
-              );
-            })}
+            {socials.map((s, i) => (
+              <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="sf-social" title={s.type}>
+                <BrandIcon type={s.type} size={18} />
+              </a>
+            ))}
           </div>
         )}
       </header>
@@ -218,7 +213,7 @@ function StoreStyles() {
     /* Header / hero — sits inside the glass panel */
     .sf-head { text-align:center; margin:0 0 22px; }
     .sf-avatar { width:100px; height:100px; border-radius:50%; margin:0 auto 14px; background:color-mix(in srgb, var(--accent) 14%, white) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:34px; color:var(--accent); border:4px solid var(--surface); box-shadow:var(--shadow-lg); }
-    .sf-name { font-size:27px; font-weight:800; font-family:var(--font-display); letter-spacing:-.02em; line-height:1.15; }
+    .sf-name { font-size:27px; font-weight:800; font-family:var(--font-display); letter-spacing:-.02em; line-height:1.15; color:var(--sf-title, inherit); }
     .sf-handle { color:var(--accent); font-size:14px; font-weight:600; margin-top:3px; }
     .sf-bio { color:var(--text-secondary); font-size:15px; margin:12px auto 0; line-height:1.55; max-width:42ch; }
     .sf-socials { display:flex; gap:10px; justify-content:center; margin-top:18px; }

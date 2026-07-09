@@ -11,11 +11,11 @@ import { uploadBanner } from '@/lib/storage';
 import {
   Palette, Link2, LayoutTemplate, Eye, ImagePlus, X, Plus, ChevronUp, ChevronDown,
   ExternalLink, Check, Upload, MousePointer2, Type, Video, Music, Wand2, SlidersHorizontal,
-  Image as ImageIcon, Sparkles, Globe, Camera, Play, AtSign, Music2, User,
+  Image as ImageIcon, Sparkles, Camera, AtSign, User,
 } from 'lucide-react';
+import { BrandIcon } from '@/lib/brandIcons';
 
 const ACCENT_PRESETS = ['#00CC99', '#2563EB', '#7C3AED', '#DB2777', '#F59E0B', '#EF4444', '#0D9488', '#F8FAFC'];
-const SOCIAL_LUCIDE = { instagram: Camera, tiktok: Music2, youtube: Play, x: AtSign, website: Globe };
 
 // ── Small reusable controls ───────────────────────────────────────────────────
 function Panel({ icon: Icon, title, soon, children }) {
@@ -76,6 +76,7 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
     '--lp-card-blur': `${theme.card_blur ?? 0}px`,
   };
   if (theme.text_color) style['--lp-text'] = theme.text_color;
+  if (theme.title_color) style['--lp-title'] = theme.title_color;
   const shown = (skills || []).filter(s => s.status === 'published').slice(0, 2);
 
   return (
@@ -89,7 +90,7 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
         {bio && <div className="lp-bio">{bio}</div>}
         {(socials || []).filter(s => s.url).length > 0 && (
           <div className="lp-socials">
-            {(socials || []).filter(s => s.url).map((s, i) => { const I = SOCIAL_LUCIDE[s.type] || Link2; return <span key={i} className="lp-social"><I size={15} /></span>; })}
+            {(socials || []).filter(s => s.url).map((s, i) => <span key={i} className="lp-social"><BrandIcon type={s.type} size={15} /></span>)}
           </div>
         )}
       </div>
@@ -265,10 +266,13 @@ export default function StorefrontEditor() {
                 {theme.bg === 'solid' && <div className="std-colorrow"><input type="color" value={theme.bg_color} onChange={e => set({ bg_color: e.target.value })} /><span>{theme.bg_color}</span></div>}
                 {theme.bg === 'gradient' && <div className="std-colorrow"><input type="color" value={theme.bg_color} onChange={e => set({ bg_color: e.target.value })} /><span>→</span><input type="color" value={theme.bg_color2} onChange={e => set({ bg_color2: e.target.value })} /></div>}
                 {theme.bg === 'image' && (
-                  <label className="std-upload" style={theme.bg_image ? { backgroundImage: `url(${theme.bg_image})` } : {}}>
-                    <input type="file" accept="image/*" hidden onChange={onBgImage} />
-                    <span>{savingBg ? 'Uploading…' : <><ImagePlus size={15} /> {theme.bg_image ? 'Change image' : 'Upload image'}</>}</span>
-                  </label>
+                  <>
+                    <label className="std-upload" style={theme.bg_image ? { backgroundImage: `url(${theme.bg_image})` } : {}}>
+                      <input type="file" accept="image/*" hidden onChange={onBgImage} />
+                      <span>{savingBg ? 'Uploading…' : <><ImagePlus size={15} /> {theme.bg_image ? 'Change image' : 'Upload image'}</>}</span>
+                    </label>
+                    {theme.bg_image && <button className="std-textbtn" onClick={() => set({ bg_image: '' })}>Remove background</button>}
+                  </>
                 )}
 
                 <Field label="Banner">
@@ -276,6 +280,7 @@ export default function StorefrontEditor() {
                     <input type="file" accept="image/*" hidden onChange={onBanner} />
                     <span>{savingBanner ? 'Uploading…' : <><ImagePlus size={15} /> {theme.banner_url ? 'Change banner' : 'Add banner'}</>}</span>
                   </label>
+                  {theme.banner_url && <button className="std-textbtn" onClick={() => set({ banner_url: '' })}>Remove banner</button>}
                 </Field>
 
                 <Field label="Custom cursor">
@@ -312,6 +317,14 @@ export default function StorefrontEditor() {
                     <span>{theme.text_color || 'Default'}</span>
                     {theme.text_color && <button className="std-textbtn" onClick={() => set({ text_color: '' })}>Reset</button>}
                   </div>
+                </Field>
+                <Field label="Title Color">
+                  <div className="std-colorrow">
+                    <input type="color" value={theme.title_color || '#fff'} onChange={e => set({title_color: e.target.value})}/>
+                    <span>{theme.title_color || 'Default'}</span>
+                    {theme.title_color && <button className="std-textbtn" onClick={() => set({ title_color: '' })}>Reset</button>}
+                  </div>
+
                 </Field>
               </Panel>
 
@@ -552,7 +565,7 @@ function Styles() {
     .lp-hasbanner .lp-avatar { margin-top:-42px; position:relative; z-index:1; }
     .lp-avatar { width:74px; height:74px; border-radius:50%; background:color-mix(in srgb, var(--accent) 16%, #fff) center/cover no-repeat;
       display:flex; align-items:center; justify-content:center; font-weight:800; font-size:26px; color:var(--accent); border:3px solid var(--lp-surface); box-shadow:var(--shadow); }
-    .lp-name { font-size:20px; font-weight:800; letter-spacing:-.01em; margin-top:12px; }
+    .lp-name { font-size:20px; font-weight:800; letter-spacing:-.01em; margin-top:12px; color:var(--lp-title, inherit); }
     .lp-anim .lp-name { animation:sfNameGlow 2.6s ease-in-out infinite; }
     .lp-handle { font-size:13px; font-weight:600; color:var(--accent); margin-top:2px; }
     .lp-bio { font-size:13px; color:color-mix(in srgb, var(--lp-text, #5b574e) 75%, transparent); margin-top:10px; max-width:34ch; line-height:1.5; }

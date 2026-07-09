@@ -17,6 +17,7 @@ export const DEFAULT_THEME = {
   button_style: 'rounded',  // 'rounded' | 'pill' | 'sharp'
   // ── Studio: glass + effects ──
   text_color: '',           // '' = palette default; else overrides body text
+  title_color: '',          // '' = follows text; else colors the display name
   card_opacity: 100,        // 60–100 — card fill opacity (glassmorphism)
   card_blur: 0,             // 0–24 px — backdrop blur behind cards
   cursor_url: '',           // custom cursor image url
