@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useUser, useProfile, useAuth, useUnreadCounts } from '@/lib/stores';
-import { LEGACY_MODE } from '@/lib/config';
+import { useUser, useProfile, useAuth } from '@/lib/stores';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Package, Store, BarChart3, Compass, Lock, ExternalLink, User, Settings,
-  Users, Repeat, ShoppingBag, MessageCircle, Scale,
 } from 'lucide-react';
 import Notifications from './Notifications';
 import SkillJoyGreen from '../assets/skilljoy-green.svg';
@@ -28,7 +26,6 @@ export default function Header() {
   const user = useUser();
   const profile = useProfile();
   const { loading } = useAuth();
-  const unread = useUnreadCounts();
   const location = useLocation();
   const currentPath = location.pathname;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -79,18 +76,6 @@ export default function Header() {
           <NavItem to="/dashboard" icon={BarChart3} label="Dashboard" active={on('/dashboard')} onClick={close} />
           <NavItem to="/discover" icon={Compass} label="Discover" active={on('/discover')} onClick={close} />
           <NavItem to="/locker" icon={Lock} label="Locker" active={on('/locker')} onClick={close} />
-
-          {LEGACY_MODE && (
-            <>
-              <span className="sb-group">Campus</span>
-              <NavItem to="/matches" icon={Users} label="Matches" active={currentPath === '/matches'} onClick={close} />
-              <NavItem to="/swaps" icon={Repeat} label="Swaps" active={currentPath === '/swaps'} badge={unread.swap} onClick={close} />
-              <NavItem to="/gigs" icon={ShoppingBag} label="Gigs" active={currentPath === '/gigs'} badge={unread.gig} onClick={close} />
-              <NavItem to="/my-orders" icon={Package} label="Orders" active={currentPath === '/my-orders'} badge={unread.gig} onClick={close} />
-              <NavItem to="/disputes" icon={Scale} label="Disputes" active={currentPath === '/disputes'} onClick={close} />
-              <NavItem to="/chat" icon={MessageCircle} label="Chat" active={currentPath === '/chat'} badge={unread.gig + unread.swap} onClick={close} />
-            </>
-          )}
 
           {isAdmin && <NavItem to="/admin" icon={Settings} label="Admin" active={currentPath === '/admin'} onClick={close} />}
         </nav>

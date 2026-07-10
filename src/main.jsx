@@ -4,12 +4,23 @@ import { createRoot } from 'react-dom/client'
 class ErrorBoundary extends Component {
   state = { error: null };
   static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) {
+    // Surface the crash so it isn't swallowed silently in prod.
+    // TODO(observability): forward to Sentry/LogRocket here.
+    console.error('[ErrorBoundary]', error, info?.componentStack);
+  }
   render() {
     if (this.state.error) return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
-        <h2>Something went wrong.</h2>
-        <p style={{ color: '#888', marginBottom: 16 }}>{this.state.error.message}</p>
-        <button onClick={() => window.location.reload()}>Reload page</button>
+      <div style={{
+        minHeight: '70vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 24px',
+      }}>
+        <div style={{ fontSize: 64, marginBottom: 12, lineHeight: 1 }}>😵</div>
+        <h1 style={{ fontSize: 32, fontWeight: 800, margin: '0 0 8px', fontFamily: 'var(--font-display)' }}>Something went wrong</h1>
+        <p style={{ fontSize: 15, color: 'var(--text-secondary)', margin: '0 0 28px', maxWidth: 380, lineHeight: 1.6 }}>
+          An unexpected error crashed this page. Try reloading — if it keeps happening, let us know.
+        </p>
+        <button className="btn btn-primary" onClick={() => window.location.reload()}>Reload page</button>
       </div>
     );
     return this.props.children;
@@ -18,7 +29,6 @@ class ErrorBoundary extends Component {
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './lib/stores'
 import { DialogProvider } from './components/Dialog'
-import { LEGACY_MODE } from './lib/config'
 import './index.css'
 import './App.css'
 
@@ -36,22 +46,10 @@ import HowItWorks from './introduction-pages/HowItWorks'
 import Terms from './introduction-pages/Terms'
 import Privacy from './introduction-pages/Privacy'
 import RefundPolicy from './introduction-pages/RefundPolicy'
-import ChatPage from './app-pages/Chat'
-import MatchesPage from './app-pages/Matches'
 import Discover from './app-pages/Discover'
-import Swaps from './app-pages/Swaps'
-import MySwaps from './app-pages/MySwaps'
-// import Rewards from './app-pages/Rewards'
-import Gigs from './app-pages/Gigs'
-import GigDetails from './app-pages/GigDetails'
-import MyListings from './app-pages/MyListings'
-import MyOrders from './app-pages/MyOrders'
-import Disputes from './app-pages/Disputes'
-import DisputeDetail from './app-pages/DisputeDetail'
 import Profile from './app-pages/Profile'
 import Settings from './app-pages/Settings'
 import Admin from './app-pages/Admin'
-import VerifyCollege from './app-pages/VerifyCollege'
 import NotFound from './app-pages/NotFound'
 // v3 Skill-platform pages
 import SkillBuilder from './app-pages/SkillBuilder'
@@ -92,23 +90,6 @@ function AppRoutes() {
           <Route path="/discover" element={<Discover />} />
           <Route path="/storefront/edit" element={<StorefrontEditor />} />
           <Route path="/checkout/:skillId" element={<Checkout />} />
-
-          {/* ── v1 legacy routes — parked behind LEGACY_MODE, never deleted ── */}
-          {LEGACY_MODE && <>
-            <Route path="/matches" element={<MatchesPage />} />
-            <Route path="/main-search" element={<Swaps />} />
-            <Route path="/chat" element={<ChatPage />} />
-            <Route path="/swaps" element={<Swaps />} />
-            <Route path="/my-swaps" element={<MySwaps />} />
-            {/* <Route path="/rewards" element={<Rewards />} /> */}
-            <Route path="/gigs" element={<Gigs />} />
-            <Route path="/gigs/:gigId" element={<GigDetails />} />
-            <Route path="/my-listings" element={<MyListings />} />
-            <Route path="/my-orders" element={<MyOrders />} />
-            <Route path="/disputes" element={<Disputes />} />
-            <Route path="/disputes/:disputeId" element={<DisputeDetail />} />
-            <Route path="/verify-college" element={<VerifyCollege />} />
-          </>}
 
           <Route path="/profile" element={<Profile />} />
           <Route path="/profile/:userId" element={<Profile />} />

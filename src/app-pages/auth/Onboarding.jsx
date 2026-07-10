@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useUser, useProfile, useAuth, DAYS_OF_WEEK } from '@/lib/stores';
-import { LEGACY_MODE } from '@/lib/config';
+import { useUser, useProfile, useAuth } from '@/lib/stores';
 import ProfileView from '@/components/Profileview';
 
-const TOTAL_STEPS = 2;
+const TOTAL_STEPS = 1;
 
 // Handles that collide with app routes — can't be claimed as a @username.
 const RESERVED_USERNAMES = new Set([
@@ -26,8 +25,7 @@ function usernameError(name) {
     return null;
 }
 
-const STEP_LABELS = ['About you', 'Availability'];
-const TIME_SLOTS = ['Morning', 'Midday', 'Evening'];
+const STEP_LABELS = ['About you'];
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -41,11 +39,9 @@ export default function OnboardingPage() {
     const [username, setUsername] = useState('');
     const [usernameStatus, setUsernameStatus] = useState(null); // null | 'checking' | 'available' | 'taken'
     const [bio, setBio] = useState('');
-    const [availability, setAvailability] = useState([]);
     const [phone, setPhone] = useState(''); // captured at account creation, persisted here
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
-    const [step, setStep] = useState(1);
     const [viewMode, setViewMode] = useState(false);
 
     useEffect(() => {
@@ -55,7 +51,6 @@ export default function OnboardingPage() {
             setFullName(profile.full_name ?? '');
             setUsername(profile.username ?? '');
             setBio(profile.bio ?? '');
-            setAvailability(profile.availability ?? []);
             setPhone(profile.phone ?? '');
             if (profile.full_name) setViewMode(true);
         } else {
@@ -90,25 +85,13 @@ export default function OnboardingPage() {
         return () => { cancelled = true; clearTimeout(t); };
     }, [username, user?.id]);
 
-    // ── Availability toggle ──────────────────────────────────────────────────
-
-    // Stored as "<Day> <Time>" combo strings in the flat availability array —
-    // keeps profiles.availability column-compatible with the legacy day/time
-    // substring filters, while letting creators pick per-day time-of-day slots.
-    function toggleSlot(day, time) {
-        const key = `${day} ${time}`;
-        setAvailability(prev =>
-            prev.includes(key) ? prev.filter(a => a !== key) : [...prev, key]
-        );
-    }
-
     // ── Save ─────────────────────────────────────────────────────────────────
 
     async function save() {
         if (!fullName.trim()) { setError('Please enter your name.'); return; }
         const uErr = usernameError(username);
-        if (uErr) { setError(uErr); setStep(1); return; }
-        if (usernameStatus === 'taken') { setError('That username is taken — try another.'); setStep(1); return; }
+        if (uErr) { setError(uErr); return; }
+        if (usernameStatus === 'taken') { setError('That username is taken — try another.'); return; }
 
         setError(''); setBusy(true);
         const { error: e } = await supabase.from('profiles').upsert({
@@ -117,7 +100,6 @@ export default function OnboardingPage() {
             full_name: fullName.trim(),
             username,
             bio: bio.trim(),
-            availability,
             phone: phone.trim() || null,
         });
         setBusy(false);
@@ -128,7 +110,7 @@ export default function OnboardingPage() {
         }
         const { data: updated } = await supabase.from('profiles').select('*').eq('id', user.id).single();
         if (updated) setProfile(updated);
-        navigate(LEGACY_MODE ? '/matches' : '/build');
+        navigate('/build');
     }
 
     // ── Render ───────────────────────────────────────────────────────────────
@@ -180,7 +162,7 @@ export default function OnboardingPage() {
                         ) : (
                             <>
                                 <div className="onb-top">
-                                    <span className="onb-step-label">Step {step} of {TOTAL_STEPS} · {STEP_LABELS[step - 1]}</span>
+                                    <span className="onb-step-label">Step 1 of {TOTAL_STEPS} · {STEP_LABELS[0]}</span>
                                     <button
                                         type="button"
                                         className="onb-exit"
@@ -191,16 +173,14 @@ export default function OnboardingPage() {
                                 </div>
 
                                 <div className="onb-progress">
-                                    {STEP_LABELS.map((label, i) => (
-                                        <span key={label} className={`onb-progress-seg${i < step ? ' on' : ''}`} />
+                                    {STEP_LABELS.map(label => (
+                                        <span key={label} className="onb-progress-seg on" />
                                     ))}
                                 </div>
 
-                                <div className="onb-step" key={step}>
-                                    {/* ── Step 1: Name + handle + bio ── */}
-                                    {step === 1 && (
-                                        <>
-                                            <h1 className="onb-h1">Let’s set up your page</h1>
+                                <div className="onb-step">
+                                    {/* ── Name + handle + bio ── */}
+                                    <h1 className="onb-h1">Let’s set up your page</h1>
                                             <p className="onb-p">Tell your audience who you are and claim your link.</p>
 
                                             {showNameField && (
@@ -239,60 +219,16 @@ export default function OnboardingPage() {
                                                 <label htmlFor="bio">Short bio <span className="onb-opt">(optional)</span></label>
                                                 <textarea id="bio" value={bio} onChange={e => setBio(e.target.value)} placeholder="e.g. CS junior who loves code and music." rows={3} style={{ resize: 'vertical' }} />
                                             </div>
-                                        </>
-                                    )}
-
-                                    {/* ── Step 2: Availability ── */}
-                                    {step === 2 && (
-                                        <>
-                                            <h1 className="onb-h1">When are you available?</h1>
-                                            <p className="onb-p">Optional — pick the times you can take calls or sessions, by day. You can change this anytime.</p>
-                                            <div className="onb-avail">
-                                                <div className="onb-avail-head">
-                                                    <span />
-                                                    {TIME_SLOTS.map(t => <span key={t} className="onb-avail-th">{t}</span>)}
-                                                </div>
-                                                {DAYS_OF_WEEK.map(day => (
-                                                    <div key={day} className="onb-avail-row">
-                                                        <span className="onb-avail-day">{day.slice(0, 3)}</span>
-                                                        {TIME_SLOTS.map(t => {
-                                                            const on = availability.includes(`${day} ${t}`);
-                                                            return (
-                                                                <button
-                                                                    key={t}
-                                                                    type="button"
-                                                                    className={`onb-slot${on ? ' on' : ''}`}
-                                                                    onClick={() => toggleSlot(day, t)}
-                                                                    aria-pressed={on}
-                                                                    aria-label={`${day} ${t}`}
-                                                                >
-                                                                    {on ? '✓' : ''}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </>
-                                    )}
                                 </div>
 
                                 {error && <p className="form-error onb-err">{error}</p>}
 
                                 <div className="onb-nav">
-                                    {step > 1 ? (
-                                        <button className="btn btn-secondary" onClick={() => { setStep(s => s - 1); setError(''); }}>Back</button>
-                                    ) : (
-                                        <div />
-                                    )}
-                                    {step < TOTAL_STEPS ? (
-                                        <button className="btn btn-primary" onClick={() => { setError(''); setStep(s => s + 1); }}>Continue</button>
-                                    ) : (
-                                        <button className="btn btn-primary" onClick={save} disabled={busy}>
-                                            {busy && <span className="spinner" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white', width: 16, height: 16 }} />}
-                                            Save &amp; start building
-                                        </button>
-                                    )}
+                                    <div />
+                                    <button className="btn btn-primary" onClick={save} disabled={busy}>
+                                        {busy && <span className="spinner" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white', width: 16, height: 16 }} />}
+                                        Save &amp; start building
+                                    </button>
                                 </div>
                             </>
                         )}
@@ -543,40 +479,6 @@ export default function OnboardingPage() {
         .onb-hint { font-size: 13px; font-weight: 500; margin-top: 7px; }
         .onb-hint.ok { color: var(--accent); }
         .onb-hint.bad { color: #dc2626; }
-
-        /* ── Availability grid (day × time-of-day) ── */
-        .onb-avail { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
-        .onb-avail-head, .onb-avail-row {
-            display: grid;
-            grid-template-columns: 52px repeat(3, 1fr);
-            gap: 8px;
-            align-items: center;
-        }
-        .onb-avail-th {
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            color: var(--text-muted);
-            text-align: center;
-        }
-        .onb-avail-day { font-size: 13px; font-weight: 700; color: var(--text-secondary); }
-        .onb-slot {
-            width: 100%;
-            min-width: 0;
-            height: 38px;
-            padding: 0;
-            border-radius: var(--r-sm);
-            border: 1.5px solid var(--border-strong);
-            background: var(--surface);
-            color: var(--accent);
-            font-size: 14px;
-            font-weight: 800;
-            cursor: pointer;
-            transition: all 0.13s ease;
-        }
-        .onb-slot:hover { border-color: var(--accent-mid); background: var(--surface-alt); }
-        .onb-slot.on { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: var(--shadow-sm); }
 
         /* ── Nav + error ── */
         .onb-nav {
