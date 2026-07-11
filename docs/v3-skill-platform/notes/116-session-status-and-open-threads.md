@@ -28,15 +28,24 @@ detailed notes rather than repeating them._
 
 ## Current state
 
-- Site healthy. Paywall OFF/deferred on purpose (blocked on Stripe 2FA). Local testing armed if
-  `STRIPE_PLATFORM_PRICE_ID` set + `023` run against dev DB.
+- **Paywall now ARMED on live** (owner set `STRIPE_PLATFORM_PRICE_ID` on Railway + ran `023` on
+  prod, 2026-07-11) — pending the verification below.
+- Phase 2 effects built (note 117) but NOT usable until the storefront bucket accepts video/audio.
 - Large amount of work in the working tree; **commit when ready.**
 
-## Open threads (priority order, none urgent)
+## Tomorrow's checklist / open threads
 
-1. **Arm the paywall** — blocked on owner Stripe 2FA/phone. Sequence: price id → env → deploy →
-   run `023` (backfill + re-arm) → sandbox-test the day-14 trial-FAIL path. Full checklist: note 112.
-2. **Persist TOS acceptance** — we only gate on the checkbox; store timestamp + ToS version on the
+1. **⚠️ Supabase `skill-covers` bucket config — REQUIRED for Phase 2 uploads to work.** The bucket
+   was set up for images; the new bg-video/audio uploads will error until:
+   - **Allowed MIME types** += `video/*` and `audio/*` (Storage → skill-covers → Edit bucket). Skip
+     if no MIME restriction is set.
+   - **File-size limit** raised to ~50MB (image caps are usually ~5MB; bg videos need more).
+   Then test: small mp4 → Background 'Video' → live + preview. (Detail: note 117.)
+2. **Verify the paywall actually works on live** — the risk is a TEST-mode price id under the live
+   `sk_live` key ("No such price" → nobody can subscribe). Do a real publish→trial on live: a live
+   Stripe Checkout (asks for a card) should open, and a `sub_...` row should land in
+   `platform_subscriptions`. Confirm the live webhook has `invoice.payment_failed`. (Note 111/112.)
+3. **Persist TOS acceptance** — we only gate on the checkbox; store timestamp + ToS version on the
    profile for real proof-of-consent (note 115 / 108 Legal item).
 3. **Email verification** — placeholder only. Real gate = `email_confirmed_at`; Google-OAuth users
    are the gap (auto-verified externally, nothing gated). Note 108 Phase 4.

@@ -7,11 +7,11 @@ import {
   resolveTheme, updateStorefront, SOCIAL_TYPES,
   listLinks, addLink, updateLink, deleteLink,
 } from '@/lib/storefront';
-import { uploadBanner } from '@/lib/storage';
+import { uploadBanner, uploadBgVideo, uploadAudio } from '@/lib/storage';
 import {
   Palette, Link2, LayoutTemplate, Eye, ImagePlus, X, Plus, ChevronUp, ChevronDown,
   ExternalLink, Check, Upload, MousePointer2, Type, Video, Music, Wand2, SlidersHorizontal,
-  Image as ImageIcon, Sparkles, Camera, AtSign, User,
+  Image as ImageIcon, Camera, AtSign, User,
 } from 'lucide-react';
 import { BrandIcon } from '@/lib/brandIcons';
 
@@ -87,7 +87,13 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
   return (
     <div className={cls} style={style}>
       <div className="lp-bg" style={bgStyle} />
-      <div className={`lp-inner${theme.banner_url ? ' lp-hasbanner' : ''}${theme.card_opacity === 0 ? ' lp-ghost' : ''}`}>
+      {theme.bg === 'video' && theme.bg_video && (
+        <video className="lp-bgvideo" src={theme.bg_video} autoPlay muted loop playsInline aria-hidden="true" />
+      )}
+      {theme.overlay && theme.overlay !== 'none' && <div className={`lp-overlay lp-overlay-${theme.overlay}`} aria-hidden="true" />}
+      {/* Cursor FX (cursor_fx) intentionally NOT simulated in the preview — control only. */}
+      {theme.audio_url && <span className="lp-audiopill" aria-hidden="true"><Music size={11} /></span>}
+      <div className={`lp-inner${theme.banner_url ? ' lp-hasbanner' : ''}${theme.card_opacity === 0 ? ' lp-ghost' : ''}${theme.profile_fx && theme.profile_fx !== 'none' ? ` lp-pfx-${theme.profile_fx}` : ''}`}>
         {theme.banner_url && <div className="lp-panelbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} />}
         <div className="lp-avatar" style={avatar ? { backgroundImage: `url(${avatar})` } : {}}>{!avatar && initials(name)}</div>
         <div className="lp-name">{name}</div>
@@ -132,6 +138,8 @@ export default function StorefrontEditor() {
   const [links, setLinks] = useState([]);
   const [savingBanner, setSavingBanner] = useState(false);
   const [savingBg, setSavingBg] = useState(false);
+  const [savingBgVideo, setSavingBgVideo] = useState(false);
+  const [savingAudio, setSavingAudio] = useState(false);
   const [savingCursor, setSavingCursor] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState('');
@@ -177,10 +185,10 @@ export default function StorefrontEditor() {
     } catch (e) { setErr(e.message); }
   }
 
-  async function uploadTo(file, setBusy, apply) {
+  async function uploadTo(file, setBusy, apply, uploader = uploadBanner) {
     if (!file) return;
     setBusy(true);
-    try { const url = await uploadBanner(user.id, file); apply(url); }
+    try { const url = await uploader(user.id, file); apply(url); }
     catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   }
@@ -188,6 +196,8 @@ export default function StorefrontEditor() {
   const onBgImage = (e) => uploadTo(e.target.files?.[0], setSavingBg, (url) => set({ bg_image: url, bg: 'image' }));
   const onCursor = (e) => uploadTo(e.target.files?.[0], setSavingCursor, (url) => set({ cursor_url: url }));
   const onAvatar = (e) => uploadTo(e.target.files?.[0], setSavingAvatar, (url) => setAvatarUrl(url));
+  const onBgVideo = (e) => uploadTo(e.target.files?.[0], setSavingBgVideo, (url) => set({ bg_video: url, bg: 'video' }), uploadBgVideo);
+  const onAudio = (e) => uploadTo(e.target.files?.[0], setSavingAudio, (url) => set({ audio_url: url }), uploadAudio);
 
   function setSocial(i, patch) { setTheme(t => ({ ...t, socials: t.socials.map((s, j) => j === i ? { ...s, ...patch } : s) })); }
   function addSocial() { setTheme(t => ({ ...t, socials: [...(t.socials || []), { type: 'instagram', url: '' }] })); }
@@ -266,7 +276,7 @@ export default function StorefrontEditor() {
 
               <Panel icon={ImageIcon} title="Assets">
                 <Field label="Background">
-                  <Seg value={theme.bg} onChange={v => set({ bg: v })} options={[{ v: 'canvas', label: 'Canvas' }, { v: 'solid', label: 'Solid' }, { v: 'gradient', label: 'Gradient' }, { v: 'image', label: 'Image' }]} />
+                  <Seg value={theme.bg} onChange={v => set({ bg: v })} options={[{ v: 'canvas', label: 'Canvas' }, { v: 'solid', label: 'Solid' }, { v: 'gradient', label: 'Gradient' }, { v: 'image', label: 'Image' }, { v: 'video', label: 'Video' }]} />
                 </Field>
                 {theme.bg === 'solid' && <div className="std-colorrow"><input type="color" value={theme.bg_color} onChange={e => set({ bg_color: e.target.value })} /><span>{theme.bg_color}</span></div>}
                 {theme.bg === 'gradient' && <div className="std-colorrow"><input type="color" value={theme.bg_color} onChange={e => set({ bg_color: e.target.value })} /><span>→</span><input type="color" value={theme.bg_color2} onChange={e => set({ bg_color2: e.target.value })} /></div>}
@@ -277,6 +287,16 @@ export default function StorefrontEditor() {
                       <span>{savingBg ? 'Uploading…' : <><ImagePlus size={15} /> {theme.bg_image ? 'Change image' : 'Upload image'}</>}</span>
                     </label>
                     {theme.bg_image && <button className="std-removebtn" onClick={() => set({ bg_image: '' })}><X size={13} /> Remove background</button>}
+                  </>
+                )}
+                {theme.bg === 'video' && (
+                  <>
+                    <label className="std-upload">
+                      <input type="file" accept="video/*" hidden onChange={onBgVideo} />
+                      <span>{savingBgVideo ? 'Uploading…' : <><Video size={15} /> {theme.bg_video ? 'Change video' : 'Upload video'}</>}</span>
+                    </label>
+                    <p className="std-note">Keep it small (a few MB) — big files load slowly.</p>
+                    {theme.bg_video && <button className="std-removebtn" onClick={() => set({ bg_video: '' })}><X size={13} /> Remove video</button>}
                   </>
                 )}
 
@@ -296,10 +316,14 @@ export default function StorefrontEditor() {
                   {theme.cursor_url && <button className="std-removebtn" onClick={() => set({ cursor_url: '' })}><X size={13} /> Remove</button>}
                 </Field>
 
-                <div className="std-soontiles">
-                  <div className="std-soontile"><Video size={15} /> Video / GIF background <span className="std-soon">Soon</span></div>
-                  <div className="std-soontile"><Music size={15} /> Audio + waveform <span className="std-soon">Soon</span></div>
-                </div>
+                <Field label="Site audio">
+                  <label className="std-upload std-upload-sm">
+                    <input type="file" accept="audio/*" hidden onChange={onAudio} />
+                    <span>{savingAudio ? 'Uploading…' : <><Music size={14} /> {theme.audio_url ? 'Change' : 'Upload'}</>}</span>
+                  </label>
+                  <p className="std-note">Visitors get a play/mute button — browsers block autoplay. Keep it small.</p>
+                  {theme.audio_url && <button className="std-removebtn" onClick={() => set({ audio_url: '' })}><X size={13} /> Remove audio</button>}
+                </Field>
               </Panel>
 
               <Panel icon={SlidersHorizontal} title="General">
@@ -359,10 +383,12 @@ export default function StorefrontEditor() {
                 <Field label="Product glow"><Seg value={theme.product_glow || 'none'} onChange={v => set({ product_glow: v })} options={[{ v: 'none', label: 'None' }, { v: 'soft', label: 'Soft' }, { v: 'strong', label: 'Strong' }]} /></Field>
                 <Field label="Product opacity (glass)"><Slider value={theme.product_opacity ?? 100} min={40} max={100} suffix="%" onChange={v => set({ product_opacity: v })} /></Field>
                 <Field label="Product blur (glass)"><Slider value={theme.product_blur ?? 0} min={0} max={24} suffix="px" onChange={v => set({ product_blur: v })} /></Field>
+                <Field label="Overlay effect"><Seg value={theme.overlay || 'none'} onChange={v => set({ overlay: v })} options={[{ v: 'none', label: 'None' }, { v: 'rain', label: 'Rain' }, { v: 'snow', label: 'Snow' }, { v: 'vhs', label: 'VHS' }]} /></Field>
+                <Field label="Cursor effect"><Seg value={theme.cursor_fx || 'none'} onChange={v => set({ cursor_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'trail', label: 'Trail' }, { v: 'sparkle', label: 'Sparkle' }]} /></Field>
+                <Field label="Profile effect"><Seg value={theme.profile_fx || 'none'} onChange={v => set({ profile_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'glow', label: 'Glow' }, { v: 'float', label: 'Float' }]} /></Field>
                 <Toggle on={!!theme.mono_icons} onChange={v => set({ mono_icons: v })} label="Monochrome icons" hint="Grayscale social icons" />
                 <Toggle on={!!theme.animated_name} onChange={v => set({ animated_name: v })} label="Animated username" hint="Subtle accent glow" />
                 <div className="std-soontiles">
-                  <div className="std-soontile"><Sparkles size={15} /> Particle effects <span className="std-soon">Soon</span></div>
                   <div className="std-soontile"><Type size={15} /> Custom fonts <span className="std-soon">Soon</span></div>
                 </div>
               </Panel>
@@ -587,6 +613,21 @@ function Styles() {
     .lp-mode-dark { --lp-surface:#1b1c20; color:var(--lp-text, #f2f0ea); }
     .lp-bg { position:absolute; inset:0; z-index:0; background:var(--bg); }
     .lp-mode-dark .lp-bg { background:#121316; }
+    .lp-bgvideo { position:absolute; inset:0; z-index:0; width:100%; height:100%; object-fit:cover; }
+    /* Overlay effect mirrors (scaled-down versions of the storefront's) */
+    .lp-overlay { position:absolute; inset:0; z-index:1; pointer-events:none; }
+    .lp-overlay-rain { background:repeating-linear-gradient(100deg, transparent 0 5px, color-mix(in srgb, #9ecbff 28%, transparent) 5px 6px, transparent 6px 11px); animation:lpRain .5s linear infinite; opacity:.35; }
+    @keyframes lpRain { from { background-position:0 0; } to { background-position:0 120px; } }
+    .lp-overlay-snow { background-image:radial-gradient(2px 2px at 20% 15%, #fff 60%, transparent), radial-gradient(1.5px 1.5px at 65% 40%, #fff 60%, transparent), radial-gradient(2px 2px at 40% 70%, #fff 60%, transparent), radial-gradient(1.5px 1.5px at 85% 20%, #fff 60%, transparent); background-size:140px 140px; animation:lpSnow 8s linear infinite; opacity:.55; }
+    @keyframes lpSnow { from { background-position:0 -140px; } to { background-position:18px 140px; } }
+    .lp-overlay-vhs { background:repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0,0,0,.14) 2px 3px); mix-blend-mode:overlay; animation:lpVhs 4s steps(2) infinite; }
+    @keyframes lpVhs { 0%,100% { opacity:.9; } 50% { opacity:.65; } }
+    .lp-audiopill { position:absolute; right:9px; bottom:9px; z-index:3; width:22px; height:22px; display:flex; align-items:center; justify-content:center; border-radius:50%; border:1px solid color-mix(in srgb, var(--accent) 40%, transparent); background:color-mix(in srgb, var(--accent) 14%, var(--lp-surface)); color:var(--lp-text, #1a1916); }
+    /* Profile FX mirrors */
+    .lp-pfx-glow { animation:lpPfxGlow 2.6s ease-in-out infinite; }
+    @keyframes lpPfxGlow { 0%,100% { box-shadow:0 0 12px color-mix(in srgb, var(--accent) 22%, transparent); } 50% { box-shadow:0 0 24px color-mix(in srgb, var(--accent) 48%, transparent); } }
+    .lp-pfx-float { animation:lpPfxFloat 4.5s ease-in-out infinite; }
+    @keyframes lpPfxFloat { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-4px); } }
     .lp-inner { position:relative; z-index:1; margin:20px 14px; padding:24px 16px 22px; border-radius:20px; overflow:hidden;
       background:var(--lp-card-bg, var(--lp-surface)); -webkit-backdrop-filter:blur(var(--lp-card-blur,0px)); backdrop-filter:blur(var(--lp-card-blur,0px));
       border:1px solid color-mix(in srgb, var(--lp-text,#000) 12%, transparent); box-shadow:var(--shadow-lg);

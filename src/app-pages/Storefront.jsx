@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useUser } from '@/lib/stores';
 import { getProfileByUsername } from '@/lib/profiles';
@@ -6,7 +6,7 @@ import { listPublishedSkills } from '@/lib/skills';
 import { resolveTheme, listLinks } from '@/lib/storefront';
 import { recordEvent } from '@/lib/metrics';
 import { initials } from '@/lib/stores';
-import { Pencil, Puzzle, Link2, ArrowUpRight, Sparkles, Search } from 'lucide-react';
+import { Pencil, Puzzle, Link2, ArrowUpRight, Sparkles, Search, Volume2, VolumeX } from 'lucide-react';
 import { BrandIcon } from '@/lib/brandIcons';
 import SubscribeForm from '@/components/SubscribeForm';
 import Seo from '@/components/Seo';
@@ -57,15 +57,17 @@ export default function Storefront() {
   const socials = (theme.socials || []).filter(s => s.url);
 
   // Full-page background layer. 'canvas' falls through to the mode palette's --bg.
+  // 'video' renders a separate <video> element below (bgStyle stays undefined).
   const bgStyle =
     theme.bg === 'solid'    ? { background: theme.bg_color } :
     theme.bg === 'gradient' ? { background: `linear-gradient(160deg, ${theme.bg_color}, ${theme.bg_color2})` } :
     (theme.bg === 'image' && theme.bg_image) ? { backgroundImage: `url(${theme.bg_image})`, backgroundSize: 'cover', backgroundPosition: 'center' } :
     undefined;
+  const hasBgVideo = theme.bg === 'video' && !!theme.bg_video;
   const wrapClass = [
     'sf-wrap', `sf-mode-${theme.mode}`, `sf-btn-${theme.button_style}`,
     `sf-glow-${theme.product_glow || 'none'}`,
-    theme.bg === 'image' && theme.bg_image ? 'sf-has-bgimg' : '',
+    (theme.bg === 'image' && theme.bg_image) || hasBgVideo ? 'sf-has-bgimg' : '',
     theme.mono_icons ? 'sf-mono' : '',
     theme.animated_name ? 'sf-anim-name' : '',
   ].filter(Boolean).join(' ');
@@ -91,6 +93,20 @@ export default function Storefront() {
   return (
     <div className={wrapClass} style={wrapStyle}>
       <div className="sf-bg" style={bgStyle} aria-hidden="true" />
+      {hasBgVideo && (
+        <video
+          className="sf-bgvideo"
+          src={theme.bg_video}
+          autoPlay muted loop playsInline
+          aria-hidden="true"
+          style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: -1 }}
+        />
+      )}
+      {theme.overlay && theme.overlay !== 'none' && (
+        <div className={`sf-overlay sf-overlay-${theme.overlay}`} aria-hidden="true" />
+      )}
+      {theme.audio_url && <AudioPill url={theme.audio_url} />}
+      {theme.cursor_fx && theme.cursor_fx !== 'none' && <CursorFx kind={theme.cursor_fx} />}
       <Seo
         title={`${profile.full_name || '@' + profile.username} — SkillJoy`}
         description={profile.bio || `Shop ${profile.full_name || '@' + profile.username}'s Skills on SkillJoy.`}
@@ -103,7 +119,7 @@ export default function Storefront() {
         <Link to="/storefront/edit" className="sf-editbtn"><Pencil size={15} /> Edit storefront</Link>
       )}
 
-      <div className={`sf-panel${theme.banner_url ? ' sf-panel-hasbanner' : ''}${theme.card_opacity === 0 ? ' sf-panel-ghost' : ''}`}>
+      <div className={`sf-panel${theme.banner_url ? ' sf-panel-hasbanner' : ''}${theme.card_opacity === 0 ? ' sf-panel-ghost' : ''}${theme.profile_fx && theme.profile_fx !== 'none' ? ` sf-pfx-${theme.profile_fx}` : ''}`}>
       {theme.banner_url && <div className="sf-panelbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} />}
       <header className="sf-head">
         <div className="sf-avatar" style={profile.avatar_url ? { backgroundImage: `url(${profile.avatar_url})` } : {}}>
@@ -164,6 +180,60 @@ export default function Storefront() {
   );
 }
 
+// ── Site audio: small fixed play/mute pill. Autoplay is browser-blocked, so we
+// start paused and require a tap; own component so the hook lives outside the
+// page's early returns.
+function AudioPill({ url }) {
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef(null);
+  useEffect(() => {
+    const a = new Audio(url);
+    a.loop = true;
+    audioRef.current = a;
+    return () => { a.pause(); audioRef.current = null; };
+  }, [url]);
+  function toggle() {
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) { a.pause(); setPlaying(false); }
+    else { a.play().then(() => setPlaying(true)).catch(() => {}); }
+  }
+  return (
+    <button className="sf-audiopill" onClick={toggle} aria-label={playing ? 'Mute music' : 'Play music'}>
+      {playing ? <Volume2 size={16} /> : <VolumeX size={16} />}
+    </button>
+  );
+}
+
+// ── Cursor particle effects (trail / sparkle). Distinct from the static
+// cursor_url. Spawns short-lived absolutely-positioned dots at the pointer,
+// capped + cleaned up on unmount. Cheap: plain DOM nodes + CSS animation.
+const CURSOR_FX_MAX = 24;
+function CursorFx({ kind }) {
+  useEffect(() => {
+    const layer = document.createElement('div');
+    layer.className = 'sf-fxlayer';
+    document.body.appendChild(layer);
+    let last = 0;
+    function onMove(e) {
+      const now = performance.now();
+      if (now - last < 28) return; // throttle spawn rate
+      last = now;
+      if (layer.childElementCount >= CURSOR_FX_MAX) layer.firstChild?.remove();
+      const p = document.createElement('div');
+      p.className = `sf-fxp sf-fxp-${kind}`;
+      p.style.left = `${e.clientX}px`;
+      p.style.top = `${e.clientY}px`;
+      if (kind === 'sparkle') p.textContent = '✦';
+      layer.appendChild(p);
+      setTimeout(() => p.remove(), 650);
+    }
+    window.addEventListener('mousemove', onMove);
+    return () => { window.removeEventListener('mousemove', onMove); layer.remove(); };
+  }, [kind]);
+  return null;
+}
+
 function StoreStyles() {
   return <style>{`
     .sf-wrap { max-width:540px; margin:0 auto; padding:0 18px 96px; position:relative; }
@@ -173,6 +243,73 @@ function StoreStyles() {
 
     /* ── Deeper theming: background layer, light/dark palette, button styles ── */
     .sf-bg { position:fixed; inset:0; z-index:-1; background:var(--bg); }
+
+    /* ── Overlay effects (rain / snow / vhs) — fixed, non-interactive, above bg,
+       below content (content is in normal flow above the z-indexed layers). */
+    .sf-overlay { position:fixed; inset:0; z-index:0; pointer-events:none; }
+    .sf-overlay-rain {
+      background:repeating-linear-gradient(100deg, transparent 0 6px, color-mix(in srgb, #9ecbff 28%, transparent) 6px 7px, transparent 7px 14px);
+      background-size:100% 200%;
+      animation:sfRain .5s linear infinite;
+      opacity:.35;
+    }
+    @keyframes sfRain { from { background-position:0 0; } to { background-position:0 200px; } }
+    .sf-overlay-snow {
+      background-image:
+        radial-gradient(2.5px 2.5px at 20% 15%, #fff 60%, transparent),
+        radial-gradient(2px 2px at 65% 40%, #fff 60%, transparent),
+        radial-gradient(3px 3px at 40% 70%, #fff 60%, transparent),
+        radial-gradient(2px 2px at 85% 20%, #fff 60%, transparent),
+        radial-gradient(2.5px 2.5px at 10% 55%, #fff 60%, transparent),
+        radial-gradient(2px 2px at 50% 10%, #fff 60%, transparent);
+      background-size:220px 220px;
+      animation:sfSnow 9s linear infinite;
+      opacity:.55;
+    }
+    @keyframes sfSnow { from { background-position:0 -220px; } to { background-position:28px 220px; } }
+    .sf-overlay-vhs {
+      background:repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0,0,0,.14) 2px 3px);
+      mix-blend-mode:overlay;
+      animation:sfVhs 4s steps(2) infinite;
+    }
+    @keyframes sfVhs { 0%,100% { opacity:.9; } 50% { opacity:.65; } }
+
+    /* ── Site audio pill ── */
+    .sf-audiopill {
+      position:fixed; right:18px; bottom:18px; z-index:5;
+      width:38px; height:38px; min-width:0; padding:0;
+      display:flex; align-items:center; justify-content:center;
+      border-radius:50%; cursor:pointer;
+      border:1.5px solid color-mix(in srgb, var(--accent) 40%, transparent);
+      background:color-mix(in srgb, var(--accent) 14%, var(--surface));
+      color:var(--text);
+      box-shadow:0 4px 16px color-mix(in srgb, var(--accent) 25%, transparent);
+      transition:transform .15s ease, box-shadow .15s ease;
+    }
+    .sf-audiopill:hover { transform:scale(1.08); box-shadow:0 6px 22px color-mix(in srgb, var(--accent) 40%, transparent); }
+
+    /* ── Cursor particle FX ── */
+    .sf-fxlayer { position:fixed; inset:0; z-index:60; pointer-events:none; overflow:hidden; }
+    .sf-fxp { position:absolute; transform:translate(-50%,-50%); animation:sfFxFade .65s ease-out forwards; }
+    .sf-fxp-trail { width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent); }
+    .sf-fxp-sparkle { color:var(--accent); font-size:12px; line-height:1; text-shadow:0 0 6px var(--accent); }
+    @keyframes sfFxFade { from { opacity:.9; scale:1; } to { opacity:0; scale:.2; } }
+
+    /* ── Profile panel FX (respect reduced motion) ── */
+    @media (prefers-reduced-motion: no-preference) {
+      .sf-pfx-glow { animation:sfPfxGlow 2.6s ease-in-out infinite; }
+      @keyframes sfPfxGlow {
+        0%,100% { box-shadow:0 0 18px color-mix(in srgb, var(--accent) 22%, transparent); }
+        50%     { box-shadow:0 0 34px color-mix(in srgb, var(--accent) 48%, transparent); }
+      }
+      .sf-pfx-float { animation:sfPfxFloat 4.5s ease-in-out infinite; }
+      @keyframes sfPfxFloat { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-7px); } }
+      .sf-overlay-rain, .sf-overlay-snow, .sf-overlay-vhs { /* animated above */ }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .sf-overlay-rain, .sf-overlay-snow, .sf-overlay-vhs { animation:none; }
+      .sf-pfx-glow { box-shadow:0 0 24px color-mix(in srgb, var(--accent) 32%, transparent); }
+    }
     .sf-mode-dark {
       --bg:#121316; --surface:#1b1c20; --surface-alt:#24262b;
       --text:#f2f0ea; --text-secondary:#b6b3ab; --text-muted:#85817a;

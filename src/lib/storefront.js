@@ -10,10 +10,11 @@ export const DEFAULT_THEME = {
   socials: [],
   // ── Deeper theming (guns.lol-style) ──
   mode: 'light',            // 'light' | 'dark' — drives surface/text palette
-  bg: 'canvas',             // 'canvas' | 'solid' | 'gradient' | 'image'
+  bg: 'canvas',             // 'canvas' | 'solid' | 'gradient' | 'image' | 'video'
   bg_color: '#FBF8F2',      // solid fill / gradient start
   bg_color2: '#E0F8F1',     // gradient end
   bg_image: '',             // full-page background image url
+  bg_video: '',             // full-page background video url (bg === 'video')
   button_style: 'rounded',  // 'rounded' | 'pill' | 'sharp'
   // ── Studio: glass + effects ──
   text_color: '',           // '' = palette default; else overrides body text
@@ -29,6 +30,11 @@ export const DEFAULT_THEME = {
   bio_size: 15,             // px — bio font size
   bio_weight: 400,          // 300–800 — bio font weight
   bio_glow: 0,              // 0–20 px — accent drop-shadow glow on the bio
+  // ── Phase 2: guns.lol effects ──
+  overlay: 'none',          // 'none' | 'rain' | 'snow' | 'vhs' — full-page overlay effect
+  audio_url: '',            // site audio url — play/mute pill on the storefront
+  cursor_fx: 'none',        // 'none' | 'trail' | 'sparkle' — pointer particle effect
+  profile_fx: 'none',       // 'none' | 'glow' | 'float' — profile panel animation
 };
 
 export const SOCIAL_TYPES = [

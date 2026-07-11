@@ -33,6 +33,29 @@ export async function uploadBanner(creatorId, file) {
   return data.publicUrl;
 }
 
+/** Upload a storefront background video to the public bucket. Returns public URL.
+ *  NOTE: the skill-covers bucket must allow video/* MIME types + a large-enough
+ *  file size limit (Supabase dashboard config). */
+export async function uploadBgVideo(creatorId, file) {
+  const path = safePath(creatorId, 'bgvideo', file.name);
+  const { error } = await supabase.storage.from(COVERS)
+    .upload(path, file, { cacheControl: '3600', upsert: false });
+  if (error) throw error;
+  const { data } = supabase.storage.from(COVERS).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+/** Upload storefront audio to the public bucket. Returns public URL.
+ *  NOTE: bucket must allow audio/* MIME types (Supabase dashboard config). */
+export async function uploadAudio(creatorId, file) {
+  const path = safePath(creatorId, 'audio', file.name);
+  const { error } = await supabase.storage.from(COVERS)
+    .upload(path, file, { cacheControl: '3600', upsert: false });
+  if (error) throw error;
+  const { data } = supabase.storage.from(COVERS).getPublicUrl(path);
+  return data.publicUrl;
+}
+
 /**
  * Upload a gated asset to the PRIVATE bucket. Returns the storage KEY (path) —
  * store it in content_blocks.file_key, NOT a URL. The buyer's download link is
