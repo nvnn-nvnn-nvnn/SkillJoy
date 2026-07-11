@@ -42,7 +42,7 @@ social links, external/affiliate link buttons, and reorder their Skills.
 - Banner reuses the public `skill-covers` bucket under `{creatorId}/banner/…`
   (folder-owner RLS still scopes it). No new bucket.
 
-## Action required (Devan)
+## Action required (owner)
 - Run **`migrations/006_storefront_editor.sql`** (now 6 migrations: 001–006).
 
 ## Next

@@ -9,6 +9,7 @@ import AnalyticsCards from '@/components/AnalyticsCards';
 import AvailabilityEditor from '@/components/AvailabilityEditor';
 import AudiencePanel from '@/components/AudiencePanel';
 import DiscountsPanel from '@/components/DiscountsPanel';
+import TrialBanner from '@/components/TrialBanner';
 
 // Phase 5 — creator dashboard: revenue, transparent payouts, analytics funnel,
 // and an exportable buyer list. See docs/v3-skill-platform/06.
@@ -82,6 +83,9 @@ export default function Dashboard() {
           <Link to="/build/new" className="btn btn-primary btn-sm">+ New product</Link>
         </div>
       </div>
+
+      {/* Platform-subscription state: trial countdown / paused / manage billing */}
+      <TrialBanner />
 
       {/* Top stats */}
       <div className="db-top">

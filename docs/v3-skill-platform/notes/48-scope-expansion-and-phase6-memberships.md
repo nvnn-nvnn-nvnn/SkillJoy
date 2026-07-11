@@ -4,7 +4,7 @@
 
 ## Scope decision
 
-Devan confirmed via AskUserQuestion: **expand v3 from the MVP to full
+The owner confirmed via AskUserQuestion: **expand v3 from the MVP to full
 stan.store parity + differentiators**, and **keep the transaction-fee pricing
 model** (~5% per sale; no creator-facing subscription billing — the platform
 earns via the Stripe `application_fee`, including on recurring memberships).
@@ -46,7 +46,7 @@ Subscriptions** with our app fee. `vite build` + eslint + `node --check` pass.
   subs flip to `expired` and drop out of the Locker list.
 - Expired-membership "renew" CTA in the Locker is **not** built yet (minor).
 
-## Action required (Devan)
+## Action required (owner)
 - Run **`migrations/005_memberships.sql`** (after 001–004 → now 5 migrations).
 - Stripe webhook must subscribe to `checkout.session.completed`,
   `customer.subscription.updated`, `customer.subscription.deleted` (plus the

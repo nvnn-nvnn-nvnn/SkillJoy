@@ -192,10 +192,17 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
             .single();
 
         if (order) {
-            await supabase
+            const { data: flagged } = await supabase
                 .from('gig_requests')
                 .update({ payment_status: 'chargebacked' })
-                .eq('id', order.id);
+                .eq('id', order.id)
+                .neq('payment_status', 'chargebacked') // idempotency guard — Stripe may redeliver
+                .select('id');
+
+            if (!flagged || flagged.length === 0) {
+                console.log(`⚠️ dispute ${dispute.id} already recorded for order ${order.id} — skipping duplicate notifications`);
+                break;
+            }
 
             const {data: adminProfile} = await supabase
                 .from('profiles')
@@ -275,10 +282,16 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
             }
 
             if (dispute.status === 'won') {
-                await supabase
+                const { data: settled } = await supabase
                     .from('gig_requests')
                     .update({ payment_status: 'chargeback_won' })
-                    .eq('id', order.id);
+                    .eq('id', order.id)
+                    .neq('payment_status', 'chargeback_won') // idempotency guard — Stripe may redeliver
+                    .select('id');
+                if (!settled || settled.length === 0) {
+                    console.log(`⚠️ dispute ${dispute.id} (won) already recorded — skipping duplicate notifications`);
+                    break;
+                }
 
                 const wonNotifications = [
                     {
@@ -309,10 +322,16 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
                 await supabase.from('notifications').insert(wonNotifications);
 
             } else if (dispute.status === 'lost') {
-                await supabase
+                const { data: settled } = await supabase
                     .from('gig_requests')
                     .update({ payment_status: 'chargeback_lost' })
-                    .eq('id', order.id);
+                    .eq('id', order.id)
+                    .neq('payment_status', 'chargeback_lost') // idempotency guard — Stripe may redeliver
+                    .select('id');
+                if (!settled || settled.length === 0) {
+                    console.log(`⚠️ dispute ${dispute.id} (lost) already recorded — skipping duplicate notifications`);
+                    break;
+                }
 
                 const lostNotifications = [
                     {
@@ -356,10 +375,42 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
 
         
 
-        // ── v3 Membership: subscription lifecycle ──
+        // ── Subscription starts: platform paywall OR creator membership ──
         case 'checkout.session.completed': {
             const session = event.data.object;
-            if (session.mode !== 'subscription' || session.metadata?.kind !== 'skill_sub') break;
+            if (session.mode !== 'subscription') break;
+
+            // ── PLATFORM SUB (creator → SkillJoy, no Connect) ──
+            // Kept strictly apart from skill_sub below via the metadata kind.
+            if (session.metadata?.kind === 'platform_sub') {
+                const userId = session.metadata.user_id;
+                if (!userId) { console.warn('platform_sub session missing user_id'); break; }
+                console.log(`💳 Platform subscription started: user ${userId}, sub ${session.subscription}`);
+
+                // Pull the authoritative status/trial dates from the subscription.
+                let status = 'trialing', trialEndsAt = null, periodEnd = null;
+                try {
+                    const sub = await stripe.subscriptions.retrieve(session.subscription);
+                    status = sub.status;
+                    trialEndsAt = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
+                    periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null;
+                } catch (e) { console.warn('platform_sub retrieve failed, defaulting to trialing:', e.message); }
+
+                // Upsert = naturally idempotent on Stripe redelivery.
+                const { error } = await supabase.from('platform_subscriptions').upsert({
+                    user_id: userId,
+                    stripe_customer_id: session.customer,
+                    stripe_subscription_id: session.subscription,
+                    status, trial_ends_at: trialEndsAt, current_period_end: periodEnd,
+                    updated_at: new Date().toISOString(),
+                }, { onConflict: 'user_id' });
+                if (error) console.error('❌ platform_sub upsert failed:', error.message);
+                else console.log(`✅ Platform sub recorded (user ${userId}, status ${status})`);
+                break;
+            }
+
+            // ── v3 Membership (fan → creator via Connect) ──
+            if (session.metadata?.kind !== 'skill_sub') break;
             const { skill_id, buyer_id } = session.metadata;
             console.log(`🔁 Membership started: skill ${skill_id}, buyer ${buyer_id}`);
 
@@ -418,6 +469,25 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
         case 'customer.subscription.updated':
         case 'customer.subscription.deleted': {
             const sub = event.data.object;
+
+            // ── PLATFORM SUB lifecycle (creator → SkillJoy) ──
+            if (sub.metadata?.kind === 'platform_sub') {
+                const status = event.type === 'customer.subscription.deleted' ? 'canceled' : sub.status;
+                const periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null;
+                const trialEndsAt = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
+                console.log(`💳 Platform sub ${sub.id} → ${status}`);
+                // Same-value update = idempotent on redelivery. A lapse
+                // (canceled/unpaid/past_due) darkens the storefront via the
+                // skills RLS gate — no cron, no extra write needed.
+                const { error } = await supabase
+                    .from('platform_subscriptions')
+                    .update({ status, current_period_end: periodEnd, trial_ends_at: trialEndsAt, updated_at: new Date().toISOString() })
+                    .eq('stripe_subscription_id', sub.id);
+                if (error) console.error('❌ platform_sub status update failed:', error.message);
+                break;
+            }
+
+            // ── v3 Membership (fan → creator) ──
             if (sub.metadata?.kind !== 'skill_sub') break;
             // active/trialing → access on; anything else → access off.
             const active = ['active', 'trialing'].includes(sub.status);
@@ -427,6 +497,67 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
                 .from('purchases')
                 .update({ status: active ? 'paid' : 'expired', current_period_end: periodEnd })
                 .eq('stripe_subscription_id', sub.id);
+            break;
+        }
+
+        // ── PLATFORM SUB dunning: card failed on a SkillJoy invoice ──
+        case 'invoice.payment_failed': {
+            const invoice = event.data.object;
+            const subId = invoice.subscription;
+            if (!subId) break;
+
+            // Discriminator: only platform subs have a row keyed by this sub id
+            // (memberships store their sub id on `purchases`) — a skill_sub
+            // invoice matches nothing and falls through untouched.
+            const { data: rows } = await supabase
+                .from('platform_subscriptions')
+                .select('user_id, last_dunned_invoice_id')
+                .eq('stripe_subscription_id', subId);
+            if (!rows || rows.length === 0) break; // not a platform sub
+
+            const userId = rows[0].user_id;
+            // Idempotency is keyed on the INVOICE, not the status field: a
+            // concurrent customer.subscription.updated may set past_due first,
+            // so gating on status would swallow the dunning email. Set past_due
+            // + claim this invoice unconditionally; only notify if we hadn't
+            // already dunned THIS invoice (i.e. not a Stripe redelivery).
+            const alreadyDunned = rows[0].last_dunned_invoice_id === invoice.id;
+            await supabase
+                .from('platform_subscriptions')
+                .update({ status: 'past_due', last_dunned_invoice_id: invoice.id, updated_at: new Date().toISOString() })
+                .eq('stripe_subscription_id', subId);
+            if (alreadyDunned) break;
+
+            console.log(`⚠️ Platform sub payment failed: user ${userId}, sub ${subId}, invoice ${invoice.id}`);
+
+            await supabase.from('notifications').insert({
+                user_id: userId, type: 'order_update',
+                title: 'Payment failed — storefront paused',
+                message: 'Your SkillJoy subscription payment didn’t go through. Update your card to bring your storefront back online.',
+                related_type: null,
+            });
+
+            try {
+                const email = await getUserEmail(userId);
+                if (email) {
+                    await sendEmail({
+                        to: email,
+                        subject: 'Action needed: your SkillJoy payment failed',
+                        html: `
+                            <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
+                                <h2>Your storefront is paused</h2>
+                                <p>We couldn’t charge your card for your SkillJoy subscription, so your
+                                storefront is hidden from the public until it’s sorted. Your products,
+                                customizations, and your buyers’ access are all safe.</p>
+                                <p><a href="${process.env.FRONTEND_URL}/dashboard"
+                                      style="display:inline-block;padding:12px 20px;background:#00CC99;color:#fff;border-radius:8px;text-decoration:none">
+                                    Update payment method</a></p>
+                                <p style="color:#888;font-size:13px">Stripe will retry automatically —
+                                updating your card usually fixes it right away.</p>
+                            </div>`,
+                    });
+                }
+            } catch (e) { console.warn('dunning email failed:', e.message); }
             break;
         }
 

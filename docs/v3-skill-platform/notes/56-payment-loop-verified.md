@@ -69,7 +69,7 @@ deleted the two test users (`buyer+1783485596@`, `seller2+1783487100@`) + profil
 is ON DELETE RESTRICT, so those rows had to go before the profile/auth user.)
 
 ## Onboarding cleanup — already done
-The "legacy teach/learn steps" flagged earlier were already removed by Devan:
+The "legacy teach/learn steps" flagged earlier were already removed by the owner:
 onboarding is now a lean 2-step flow (name + username + bio, then optional
 availability). No action needed.
 

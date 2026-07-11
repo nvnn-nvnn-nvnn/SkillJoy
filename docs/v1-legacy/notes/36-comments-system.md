@@ -66,5 +66,5 @@ Backend blocks: reporting yourself (user), reporting your own gig, reporting you
 
 - **Edit comments** — no `edited_at` column or update policy. Add later if needed.
 - **Threaded replies** — flat list only. Adding parent_id is straightforward later.
-- **Notifications** — commenters don't get notified when someone replies. Could wire into the existing notifications table if Devan wants.
+- **Notifications** — commenters don't get notified when someone replies. Could wire into the existing notifications table if the owner wants.
 - **Pagination** — loads all comments. Fine until any single gig/profile crosses ~200 comments.

@@ -5,7 +5,7 @@
 ## Overview
 
 Built **Phase 4 — versioning + the per-Skill community space**. `vite build` +
-eslint clean; backend passes `node --check`. Devan reiterated the goal: **parity
+eslint clean; backend passes `node --check`. The owner reiterated the goal: **parity
 with stan.store** (see parity map at the bottom).
 
 ## Versioning
@@ -36,7 +36,7 @@ with stan.store** (see parity map at the bottom).
 ## Verify
 - `vite build` ✅ · eslint ✅ on changed files · `node --check backend/routes/skills.js` ✅.
 
-## Action required (Devan)
+## Action required (owner)
 - No new migration. (`skill_update` / `community_reply` notification types were
   already added in migration 001.) Still need 001/002/003 applied from prior
   phases.

@@ -38,7 +38,7 @@ eslint + `node --check` clean. This is the last parity phase — 0–12 now buil
   affiliate *links* (creator promoting others) already exist from Phase 7
   (`store_links.is_affiliate`). A referrer-payout program is a future phase.
 
-## Action required (Devan)
+## Action required (owner)
 - Run **`migrations/010_growth.sql`** (now 10 migrations: 001–010).
 - Pixels/webhook are opt-in per creator (Storefront editor → Tracking & automation).
 
@@ -56,5 +56,5 @@ share cards, native AutoDM, affiliate-payout program, lifecycle email automation
 physical products.
 
 ## Next — strongly recommended
-**Verify the payment loop end-to-end with Stripe test keys** (Devan said they'll
+**Verify the payment loop end-to-end with Stripe test keys** (the owner said they'll
 set up a test space). It underpins phases 3/6/10/11 and has never run live.

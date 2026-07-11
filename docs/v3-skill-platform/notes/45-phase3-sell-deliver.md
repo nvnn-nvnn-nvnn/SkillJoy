@@ -67,7 +67,7 @@ and login so the app reads as a creator storefront, not a campus swap app.
   `/matches`), sends users without a `username` to onboarding, v3 copy + generic
   email placeholder.
 
-## Action required (Devan)
+## Action required (owner)
 - Run **`migrations/003_public_outline.sql`** in Supabase (after 001/002).
 - Stripe: ensure `VITE_STRIPE_PUBLISHABLE_KEY` (frontend) + `STRIPE_SECRET_KEY` /
   `STRIPE_WEBHOOK_SECRET` (backend) are set; test the full buy → webhook → access

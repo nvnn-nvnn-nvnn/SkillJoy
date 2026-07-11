@@ -322,3 +322,36 @@ CREATE TABLE IF NOT EXISTS lesson_progress (
 );
 ALTER TABLE lesson_progress ENABLE ROW LEVEL SECURITY;
 -- Full RLS policies in migrations/018_course_lessons.sql.
+
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- 021 — Platform subscription (paywall). Creator pays SkillJoy directly (no
+-- Connect). Publish-gated: storefront goes live only while status is
+-- trialing|active. Full policies + publish trigger in
+-- migrations/021_platform_subscriptions.sql.
+-- ═════════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS platform_subscriptions (
+    user_id                UUID PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+    stripe_customer_id     TEXT,
+    stripe_subscription_id TEXT,
+    status                 TEXT NOT NULL DEFAULT 'none',  -- none|trialing|active|past_due|canceled|unpaid|incomplete
+    trial_ends_at          TIMESTAMPTZ,
+    current_period_end     TIMESTAMPTZ,
+    last_dunned_invoice_id TEXT,                          -- dedupes the dunning email
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE platform_subscriptions ENABLE ROW LEVEL SECURITY;
+-- Owner-read only; writes are service-role only (billing route + webhook).
+-- skills SELECT policy replaced: public read of a published skill now also
+-- requires the creator's platform sub to be trialing|active (buyers who own
+-- the skill keep read access regardless). Publishing is blocked client-side by
+-- the skills_enforce_server_publish trigger — server publish endpoint only.
+--
+-- ⚠️ The two cross-table checks in that policy use SECURITY DEFINER helpers
+-- (public.creator_is_live / public.has_paid_purchase), NOT inline sub-SELECTs.
+-- An inline EXISTS on platform_subscriptions (owner-read RLS) is false for
+-- public viewers → storefront invisible; and an inline EXISTS on purchases
+-- forms a mutual-recursion cycle with the purchases→skills policy. The definer
+-- functions bypass the referenced table's RLS to avoid both. Full DDL in
+-- migrations/021_platform_subscriptions.sql.

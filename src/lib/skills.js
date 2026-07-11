@@ -153,10 +153,20 @@ export async function reorderBlocks(ordered) {
 
 // ── Backend-brokered (Phase 2/3 — endpoints not built yet) ──────────────────
 
-/** Publish a skill (and any future side effects). */
+/** Publish a skill — server-brokered (the paywall gate). The backend requires
+ *  a complete profile + a live platform subscription; a DB trigger blocks the
+ *  old direct status flip. On failure the thrown Error carries `.code`
+ *  ('SUBSCRIPTION_REQUIRED' | 'PROFILE_INCOMPLETE') so the UI can react. */
 export async function publishSkill(skillId) {
-  // TODO(Phase 2): POST /api/skills/:id/publish. For now flip status directly.
-  return updateSkill(skillId, { status: 'published' });
+  const res = await apiFetch(`/api/skills/${skillId}/publish`, { method: 'POST' });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(body.error || 'Couldn’t publish.');
+    err.code = body.code;
+    err.missing = body.missing;
+    throw err;
+  }
+  return { status: body.status };
 }
 
 /** Bump version + notify existing buyers. */

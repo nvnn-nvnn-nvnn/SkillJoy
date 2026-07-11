@@ -38,7 +38,7 @@ Resend. `vite build` + eslint + `node --check` clean.
 - One email per recipient (privacy); no unsubscribe link yet (add before real
   sending for compliance — noted).
 
-## Action required (Devan)
+## Action required (owner)
 - Run **`migrations/008_email_marketing.sql`** (now 8 migrations: 001–008).
 - To actually send broadcasts: set `RESEND_API_KEY` (and verify a domain +
   `RESEND_FROM`) in the backend env.

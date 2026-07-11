@@ -44,7 +44,7 @@ registration config). `vite build` + eslint + `node --check` clean.
 - Receipts + refund-notify require `RESEND_API_KEY` to actually send (refund
   itself works regardless; only the email is best-effort).
 
-## Action required (Devan)
+## Action required (owner)
 - Run **`migrations/009_commerce.sql`** (now 9 migrations: 001–009).
 
 ## Not verified

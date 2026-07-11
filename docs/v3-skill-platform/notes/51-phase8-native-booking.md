@@ -43,7 +43,7 @@ eslint + `node --check` all clean.
 - Native coaching bookings are **included with the Skill purchase** (no separate
   per-session charge at MVP) — buyer must own the Skill to book (RLS-enforced).
 
-## Action required (Devan)
+## Action required (owner)
 - Run **`migrations/007_booking.sql`** in Supabase (now 7 migrations: 001–007).
   Booking is unusable until this is applied.
 

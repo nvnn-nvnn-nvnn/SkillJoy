@@ -5,7 +5,7 @@
 ## Overview
 
 First implementation session for the v3 Skill platform (follows the docs-only
-[42](42-v3-skill-platform-spec.md)). Devan said "build everything" and chose
+[42](42-v3-skill-platform-spec.md)). The owner said "build everything" and chose
 **full-build mode** (I write the code) for this build — a deliberate override of
 his usual "teach, I'll code it myself" preference, scoped to this build. Started
 **Phase 0 → Phase 1** in order, per `07-roadmap-and-implementation.md`.
@@ -72,7 +72,7 @@ reliably match a literal-`@`-prefixed segment. The URL is `/@username`, so
   (`set-state-in-effect` on the profile-load effect, missing `navigate` dep,
   unused `toggleTeach`) — predate this work, left untouched.
 
-## Action required (Devan)
+## Action required (owner)
 1. **Run `migrations/001_skill_platform.sql` in Supabase** before the v3 data
    layer works.
 2. Sanity-check: with `LEGACY_MODE` off, the v1 nav/routes are gone but still

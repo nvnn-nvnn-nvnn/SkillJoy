@@ -20,6 +20,7 @@ const googleRoutes = require('./routes/google.js');
 const lockerRoutes = require('./routes/locker.js');
 const skillRoutes = require('./routes/skills.js');
 const marketingRoutes = require('./routes/marketing.js');
+const billingRoutes = require('./routes/billing.js');
 const publicRoutes = require('./routes/public.js');
 const rateLimit = require('express-rate-limit');
 const { sendEmail, getUserEmail, templates } = require('./lib/email');
@@ -79,6 +80,9 @@ app.use('/api/google', googleRoutes);
 app.use('/api/locker', authMiddleware, lockerRoutes);
 app.use('/api/skills', authMiddleware, skillRoutes);
 app.use('/api/marketing', strictLimiter, authMiddleware, marketingRoutes);
+// Platform billing — the creator's subscription TO SkillJoy (paywall). Direct
+// charges on SkillJoy's own Stripe account; never touches Connect.
+app.use('/api/billing', strictLimiter, authMiddleware, billingRoutes);
 
 
 // Health check

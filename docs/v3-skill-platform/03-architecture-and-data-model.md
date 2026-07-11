@@ -17,7 +17,7 @@ already runs on:
 Stripe Connect + Supabase Auth into Next.js is a large, risky cost with no MVP
 payoff. We adapt the spec to this stack.
 
-> **Open question (Devan to confirm):** the only thing Next.js buys here is SSR
+> **Open question (owner to confirm):** the only thing Next.js buys here is SSR
 > for storefront SEO/social-share previews. For a link-in-bio shared directly to
 > an audience, client-rendered + good Open Graph meta tags is enough at MVP. If
 > SEO becomes a priority later, revisit. **No rewrite for MVP.**

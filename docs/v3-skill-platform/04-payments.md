@@ -20,7 +20,7 @@
 > work. v3 Skills are commodity digital goods sold many times; a **percentage**
 > fee fits better. Add a separate constant, e.g.
 > `SKILL_PLATFORM_FEE_BPS = 500` (5%), rather than overloading the $6 flat fee.
-> **(Open question: confirm the exact percentage with Devan.)**
+> **(Open question: confirm the exact percentage with the owner.)**
 
 ## What's already wired (reuse)
 

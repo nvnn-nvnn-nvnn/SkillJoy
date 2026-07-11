@@ -6,6 +6,7 @@ const supabase = require('../config/supabase');
 const { skillFeeCents } = require('../config/fees');
 const { fulfillGuestPurchase } = require('../lib/guestFulfillment');
 const { isStaleDestinationError, clearStaleAccount } = require('../lib/connectGuard');
+const { isPlatformLive, paywallEnabled } = require('../lib/platformSub');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GUEST CHECKOUT — buy without an account (one-time PAID products only).
@@ -45,6 +46,16 @@ router.post('/:skillId/intent', async (req, res) => {
         if (!skill || skill.status !== 'published') return res.status(404).json({ error: 'This product isn’t available.' });
         if (skill.pricing_type !== 'onetime' || !skill.price_cents) {
             return res.status(400).json({ error: 'Guest checkout is only available for one-time products.' });
+        }
+
+        // Paywall: service-key read bypasses RLS, so re-check the creator's
+        // platform sub here. Skipped while the paywall is dormant (no Stripe
+        // price). NOTE this endpoint only ever creates one-time PaymentIntents
+        // (kind:'skill_guest') — it can never create a platform subscription
+        // (kind:'platform_sub'), which lives in /api/billing behind auth. See
+        // backend/lib/platformSub.js for the isolation guard.
+        if (paywallEnabled() && !(await isPlatformLive(skill.creator_id))) {
+            return res.status(403).json({ error: 'This storefront is currently unavailable.' });
         }
 
         // Don't let a guest pay again for something this email already owns.

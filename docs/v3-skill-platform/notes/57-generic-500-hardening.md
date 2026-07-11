@@ -4,7 +4,7 @@
 
 ## Why
 Every backend catch block returned `res.status(500).json({ error: err.message })`,
-leaking internal DB/Stripe/stack details to clients. Pre-launch fix (Devan is
+leaking internal DB/Stripe/stack details to clients. Pre-launch fix (the owner is
 flipping Stripe test→live).
 
 ## What changed
@@ -27,4 +27,4 @@ only unexpected **500s** were genericized.
 
 ## Action
 Redeploy the backend to pick this up (live). No frontend/DB changes.
-No Sentry (per Devan) — errors go to server logs.
+No Sentry (per the owner) — errors go to server logs.

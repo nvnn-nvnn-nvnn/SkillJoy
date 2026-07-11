@@ -51,7 +51,7 @@ intentionally skipped.
 - Workflow text-vs-file mode is **inferred** from whether `file_key` is set;
   switching modes clears the other field.
 
-## Action required (Devan)
+## Action required (owner)
 - Run **`migrations/002_storage_buckets.sql`** in Supabase (after 001) — uploads
   fail without the buckets + policies.
 - (Still pending from 43) run **001** if not done yet.

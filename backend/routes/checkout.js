@@ -6,6 +6,7 @@ const supabase = require('../config/supabase');
 const { skillFeeCents, SKILL_PLATFORM_FEE_BPS } = require('../config/fees');
 const { sendEmail, getUserEmail } = require('../lib/email');
 const { isStaleDestinationError, clearStaleAccount } = require('../lib/connectGuard');
+const { isPlatformLive, paywallEnabled } = require('../lib/platformSub');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // v3 SKILL CHECKOUT — instant digital-goods purchase via a destination charge.
@@ -42,6 +43,13 @@ router.post('/:skillId/intent', async (req, res) => {
         if (skillErr || !skill) return res.status(404).json({ error: 'Skill not found' });
         if (skill.status !== 'published') return res.status(400).json({ error: 'This Skill is not available for purchase.' });
         if (skill.creator_id === buyerId) return res.status(400).json({ error: 'You cannot buy your own Skill.' });
+
+        // Paywall: this route reads with the service key (RLS bypassed), so the
+        // lapsed-storefront gate must be re-checked here, not just in RLS.
+        // Skipped entirely while the paywall is dormant (no Stripe price).
+        if (paywallEnabled() && !(await isPlatformLive(skill.creator_id))) {
+            return res.status(403).json({ error: 'This storefront is currently unavailable.' });
+        }
 
         // Already owned?
         const { data: existing } = await supabase

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useUser, useProfile } from '@/lib/stores';
 import { useDialog } from '@/components/Dialog';
 import { listMySkills, updateSkill, deleteSkill, publishSkill } from '@/lib/skills';
+import { startSubscription } from '@/lib/billing';
 import { listCreatorSales } from '@/lib/purchases';
 import { getCreatorEvents } from '@/lib/metrics';
 import {
@@ -152,7 +153,17 @@ export default function ServicesDashboard() {
       if (s.status === 'active') await updateSkill(s.id, { status: 'draft' });
       else await publishSkill(s.id);
       setSkills(prev => prev.map(x => x.id === s.id ? { ...x, status: s.status === 'active' ? 'draft' : 'published' } : x));
-    } catch (e) { ping(e.message); }
+    } catch (e) {
+      // The paywall: publishing needs a live platform subscription.
+      if (e.code === 'SUBSCRIPTION_REQUIRED') {
+        const go = await confirm({
+          title: 'Start your free trial to go live',
+          message: 'Publishing starts a free 14-day trial — add a card now, first charge when the trial ends.',
+          confirmLabel: 'Start free trial',
+        });
+        if (go) { try { await startSubscription(); } catch (se) { ping(se.message); } }
+      } else { ping(e.message); }
+    }
   }
 
   async function remove(id) {

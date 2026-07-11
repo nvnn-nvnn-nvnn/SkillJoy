@@ -42,7 +42,7 @@ After fixing the stale-closure issue in note 34, gigs from "recent users" still 
 
 ### Root cause A — `active` column nullable, query strict
 
-Devan added the `active` column to the `gigs` table but the original SQL didn't include `NOT NULL DEFAULT true`. So:
+The owner added the `active` column to the `gigs` table but the original SQL didn't include `NOT NULL DEFAULT true`. So:
 - Rows that existed before the column was added had `active = null`
 - Rows inserted via UI paths that didn't include `active` in the payload also had `active = null`
 - The frontend filter `.eq('active', true)` excludes nulls (Postgres `null = true` evaluates to `null`, not `true`)
@@ -66,7 +66,7 @@ This was almost certainly the dominant cause for "recent users" — they sign up
 
 ## How
 
-**Active fix** is purely frontend-side and doesn't require an immediate DB change — `.neq('active', false)` matches both `true` and `null`. Devan can still run the `ALTER TABLE ... NOT NULL DEFAULT true` for cleanliness, but it's no longer urgent.
+**Active fix** is purely frontend-side and doesn't require an immediate DB change — `.neq('active', false)` matches both `true` and `null`. The owner can still run the `ALTER TABLE ... NOT NULL DEFAULT true` for cleanliness, but it's no longer urgent.
 
 **University domain fix** is two-part: the backend handler now does a follow-up `UPDATE` scoped to that user's gigs after a successful verification (only touches rows where `university_domain IS NULL` so it never overwrites a user who somehow set it manually). The one-time SQL patches existing data.
 

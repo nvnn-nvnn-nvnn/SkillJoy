@@ -48,7 +48,7 @@ migration. `vite build` + eslint + `node --check` clean.
 - **Outbound integrations** (Zapier / webhooks-out), physical products, richer
   attribution.
 - **Server-side prerender** for social share cards (the real SEO completion).
-- Phase **11** (pixels / AutoDM / affiliate program) — skipped per Devan; can
+- Phase **11** (pixels / AutoDM / affiliate program) — skipped per the owner; can
   return to it.
 
 ## Verify

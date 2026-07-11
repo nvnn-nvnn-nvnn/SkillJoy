@@ -32,7 +32,7 @@ Definition of Done (doc 02) now exists in code.
 ## Verify
 - `vite build` ✅ · eslint ✅ on all Phase 5 files.
 
-## Action required (Devan)
+## Action required (owner)
 - Run **`migrations/004_payout_trust.sql`** in Supabase. (All four migrations
   001–004 now needed.)
 - Analytics only populate once real events fire (views/checkouts/purchases) — a

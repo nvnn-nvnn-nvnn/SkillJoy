@@ -47,9 +47,8 @@ destination." Verified all **8/8** profiles with a `stripe_account_id` were
 stale.
 
 **Fix:** nulled `stripe_account_id` + set `stripe_onboarded=false` for all 8
-profiles (the old ids are dead — not recoverable or reusable). Affected:
-devancheck, raysarchive, fergu730, 7devanl, devvstorage, officialphatkidd,
-fakeemail2341, techkage.
+profiles (the old ids are dead — not recoverable or reusable). Affected: all 8
+accounts with a stored `stripe_account_id` (usernames redacted).
 
 Note: `stripe-connect.js` `/onboard` already auto-detects a stale account and
 resets it (lines ~56-68), so re-onboarding also self-heals one at a time. The

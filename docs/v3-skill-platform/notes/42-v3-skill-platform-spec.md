@@ -4,7 +4,7 @@
 
 ## Overview
 
-Devan handed over the **SkillJoy MVP Build Spec** — a "Stan Store for skills"
+The owner handed over the **SkillJoy MVP Build Spec** — a "Stan Store for skills"
 vision built around a single unified **Skill** primitive — and asked to "add
 notes for everything." This session was **documentation only; no app code
 changed.**
@@ -22,7 +22,7 @@ This spec is a **different vision** from the v2 docs locked the day before
 | Extras | — | versioning, per-Skill community, trust layer |
 | Stack hint | keep Vite/React/Express | spec said Next.js (we kept Vite) |
 
-## Decisions locked (confirmed with Devan via AskUserQuestion)
+## Decisions locked (confirmed with the owner via AskUserQuestion)
 
 1. **v3 supersedes v2.** This Skill-primitive spec is the new source of truth;
    the Gumroad-style v2 vision is **deprecated** (v2 README banner added).
@@ -62,7 +62,7 @@ This spec is a **different vision** from the v2 docs locked the day before
 - v3 Skill purchases are **instant destination charges — no escrow.** The v1
   escrow/clearance/dispute machinery + auto-release cron stays parked with legacy.
 
-## Open questions for Devan
+## Open questions for the owner
 
 - Exact **platform fee %** (doc 04 assumes ~5% via a new `SKILL_PLATFORM_FEE_BPS`,
   separate from the v1 $6 flat service fee).

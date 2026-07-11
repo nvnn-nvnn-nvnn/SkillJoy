@@ -7,6 +7,7 @@ import {
 } from '@/lib/skills';
 import { Trash2, Send, EyeOff, Puzzle } from 'lucide-react';
 import { uploadCover } from '@/lib/storage';
+import { startSubscription } from '@/lib/billing';
 import { BLOCK_TYPES } from '@/lib/blockTypes';
 import { PRODUCT_TYPES, TYPE_BY_ID } from '@/lib/productTypes';
 import BlockEditor from '@/components/BlockEditor';
@@ -307,7 +308,25 @@ function SkillEditor({ skillId, userId }) {
       await alert(publishing
         ? { title: 'You’re live! 🎉', message: `“${skill.title || 'Your product'}” is now on your storefront.` }
         : { title: 'Unpublished', message: `“${skill.title || 'Your product'}” is hidden from your storefront.`, tone: 'warning' });
-    } catch (e) { alert({ title: 'Couldn’t publish', message: e.message, tone: 'danger' }); }
+    } catch (e) {
+      // The paywall: publishing needs a live platform subscription. Offer to
+      // start the free trial (card captured now, first charge on day 14).
+      if (e.code === 'SUBSCRIPTION_REQUIRED') {
+        const go = await confirm({
+          title: 'Start your free trial to go live',
+          message: 'Publishing your storefront starts a free 14-day trial — add a card now, and you won’t be charged until the trial ends. Building and customizing stay free.',
+          confirmLabel: 'Start free trial',
+        });
+        if (go) {
+          try { await startSubscription(); }
+          catch (se) { alert({ title: 'Couldn’t start trial', message: se.message, tone: 'danger' }); }
+        }
+      } else if (e.code === 'PROFILE_INCOMPLETE') {
+        alert({ title: 'Finish your profile first', message: e.message, tone: 'warning' });
+      } else {
+        alert({ title: 'Couldn’t publish', message: e.message, tone: 'danger' });
+      }
+    }
     finally { setBusy(false); }
   }
 
