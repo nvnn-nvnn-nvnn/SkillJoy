@@ -11,6 +11,7 @@ import { startSubscription } from '@/lib/billing';
 import { BLOCK_TYPES } from '@/lib/blockTypes';
 import { PRODUCT_TYPES, TYPE_BY_ID } from '@/lib/productTypes';
 import BlockEditor from '@/components/BlockEditor';
+import MarkdownEditor from '@/components/MarkdownEditor';
 import CourseStructure from '@/components/CourseStructure';
 import BackLink from '@/components/BackLink';
 import { useDialog } from '@/components/Dialog';
@@ -421,9 +422,10 @@ function SkillEditor({ skillId, userId }) {
 
           <div className="sb-typefield">
             <span className="sb-fieldlabel">Description</span>
-            <textarea className="sb-field sb-textarea" rows={5} value={skill.description ?? ''}
-              onChange={e => patchSkill({ description: e.target.value })}
+            <MarkdownEditor rows={10} value={skill.description ?? ''}
+              onChange={v => patchSkill({ description: v })}
               placeholder="Tell buyers what this is, who it’s for, and what they’ll get. This is your pitch on the sales page." />
+            <p className="sb-fieldhint">Supports markdown — **bold**, - lists, ## headings, [links](url).</p>
           </div>
 
           {/* Read-only display of the chosen product type (set on /build/new). */}
@@ -770,6 +772,7 @@ function BuilderStyles() {
     /* Type selector — tile grid (same language as the block picker + /build/new). */
     .sb-typefield { display:flex; flex-direction:column; gap:10px; min-height:100px }
     .sb-fieldlabel { font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); }
+    .sb-fieldhint { font-size:12px; color:var(--text-muted); margin:7px 0 0; }
     .sb-typegrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
     .sb-typetile { display:flex; align-items:center; gap:9px; text-align:left; white-space:normal; padding:10px 12px; border:1.5px solid var(--border); border-radius:var(--r); background:var(--surface); color:var(--text-secondary); font-size:13px; font-weight:600; cursor:pointer; transition:border-color .1s ease, background .1s ease, color .1s ease; }
     .sb-typetile:hover { border-color:var(--accent-mid); }

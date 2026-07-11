@@ -10,6 +10,7 @@ import { BLOCK_META } from '@/lib/blockTypes';
 import { toEmbed } from '@/lib/embed';
 import Seo from '@/components/Seo';
 import BackLink from '@/components/BackLink';
+import Markdown from '@/components/Markdown';
 import { injectPixels } from '@/lib/pixels';
 
 // Star row — filled to `value` (rounded), out of 5.
@@ -83,7 +84,7 @@ export default function SkillPublic() {
 
       <h1 className="sp-title">{skill.title}</h1>
       {skill.outcome && <p className="sp-outcome">{skill.outcome}</p>}
-      {skill.description && <p className="sp-desc">{skill.description}</p>}
+      {skill.description && <Markdown className="sp-desc">{skill.description}</Markdown>}
 
       {rev.count > 0 && (
         <div className="sp-ratingline">
@@ -156,7 +157,7 @@ function SkillStyles() {
     .sp-cover { aspect-ratio:16/9; border-radius:var(--r-lg); background:var(--surface-alt) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-size:44px; margin-bottom:18px; }
     .sp-title { font-size:28px; font-weight:700; font-family:var(--font-display); line-height:1.15; }
     .sp-outcome { font-size:16px; color:var(--text-secondary); margin-top:8px; line-height:1.5; }
-    .sp-desc { font-size:15px; color:var(--text-secondary); margin-top:14px; line-height:1.6; white-space:pre-wrap; }
+    .sp-desc { font-size:15px; color:var(--text-secondary); margin-top:14px; line-height:1.6; }
 
     .sp-stars { color:var(--accent); letter-spacing:1px; font-size:15px; }
     .sp-stars-off { color:var(--border-strong); }

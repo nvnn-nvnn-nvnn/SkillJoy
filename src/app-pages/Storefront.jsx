@@ -180,28 +180,56 @@ export default function Storefront() {
   );
 }
 
-// ── Site audio: small fixed play/mute pill. Autoplay is browser-blocked, so we
-// start paused and require a tap; own component so the hook lives outside the
-// page's early returns.
+// ── Site audio: plays automatically (unmuted) where the browser allows it.
+// React owns ONE <audio> element (no hand-rolled `new Audio()` → no StrictMode
+// double-instance leaks). The icon tracks the element's REAL play/pause events,
+// so it can never desync. Autoplay is attempted on mount; if the browser blocks
+// it (policy for first-time visitors), we start on the first interaction —
+// UNLESS the user has already taken manual control (`interacted`), so pausing
+// never gets undone by the auto-starter.
 function AudioPill({ url }) {
-  const [playing, setPlaying] = useState(false);
   const audioRef = useRef(null);
+  const interacted = useRef(false);
+  const [playing, setPlaying] = useState(false);
+
   useEffect(() => {
-    const a = new Audio(url);
-    a.loop = true;
-    audioRef.current = a;
-    return () => { a.pause(); audioRef.current = null; };
+    const a = audioRef.current;
+    if (!a) return undefined;
+    let cancelled = false;
+    const start = () => {
+      removeListeners();
+      if (!interacted.current) a.play().catch(() => {});
+    };
+    function removeListeners() {
+      window.removeEventListener('pointerdown', start);
+      window.removeEventListener('keydown', start);
+    }
+    a.play().catch(() => {
+      if (cancelled || interacted.current) return;   // blocked → wait for a gesture
+      window.addEventListener('pointerdown', start);
+      window.addEventListener('keydown', start);
+    });
+    return () => { cancelled = true; removeListeners(); a.pause(); };
   }, [url]);
+
+  // pointerdown fires before the window auto-starter sees this same click, so
+  // flagging here means clicking the pill is treated as manual control.
+  const markInteracted = () => { interacted.current = true; };
   function toggle() {
+    interacted.current = true;
     const a = audioRef.current;
     if (!a) return;
-    if (playing) { a.pause(); setPlaying(false); }
-    else { a.play().then(() => setPlaying(true)).catch(() => {}); }
+    if (a.paused) a.play().catch(() => {}); else a.pause();
   }
+
   return (
-    <button className="sf-audiopill" onClick={toggle} aria-label={playing ? 'Mute music' : 'Play music'}>
-      {playing ? <Volume2 size={16} /> : <VolumeX size={16} />}
-    </button>
+    <>
+      <audio ref={audioRef} src={url} loop onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} />
+      <button className="sf-audiopill" onPointerDown={markInteracted} onClick={toggle}
+        aria-label={playing ? 'Pause music' : 'Play music'}>
+        {playing ? <Volume2 size={16} /> : <VolumeX size={16} />}
+      </button>
+    </>
   );
 }
 
