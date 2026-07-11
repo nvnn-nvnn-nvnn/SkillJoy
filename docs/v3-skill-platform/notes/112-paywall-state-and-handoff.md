@@ -80,19 +80,39 @@ RLS sub-SELECTs as recursion/visibility hazards — use SECURITY DEFINER fns.**
 3. **Webhook:** confirm the Stripe endpoint subscribes to `invoice.payment_failed`
    (`checkout.session.completed` + `customer.subscription.*` are already on from
    memberships).
-4. **Backfill + re-arm SQL** (write as `migrations/023_arm_paywall.sql`):
-   - grandfather existing published creators so they don't go instantly dark:
-     `INSERT INTO platform_subscriptions (user_id, status, trial_ends_at)
-      SELECT DISTINCT creator_id, 'trialing', now() + interval '14 days'
-      FROM skills WHERE status='published' ON CONFLICT (user_id) DO NOTHING;`
-     (consider a longer/`'active'` grandfather if you don't want them lapsing in
-     14 days.)
-   - re-apply the GATED "Published skills are public" policy + the
-     `skills_enforce_server_publish` trigger from 021 (its fixed version).
+4. **Backfill + re-arm SQL — ALREADY WRITTEN: `migrations/023_arm_paywall.sql`**
+   (Opus, 2026-07-10). Self-contained + idempotent: recreates both SECURITY
+   DEFINER helpers, grandfathers published creators, re-applies the gated policy
+   + publish trigger, and ends with post-run verification SELECTs. Just run it
+   (in the same window as env+deploy). Read its ZOMBIE-ROW CAVEAT first (below).
 5. **Deploy the app (backend + frontend) BEFORE re-adding the trigger** — the
    trigger blocks client publishing, so the server publish endpoint must be live
    first. Order: deploy code → run 023.
 6. Sandbox-test the 4 acceptance flows in note 111 with Stripe test keys.
+
+## Opus code review — SIGN-OFF (2026-07-10)
+
+Full re-read of the implemented path (platformSub.js → billing.js → skills.js
+publish → webhooks.js platform branches → 021/022). `node --check` clean on all 6
+touched backend files; `/api/billing` confirmed mounted behind `strictLimiter +
+authMiddleware` (index.js:85), `/api/skills` behind auth (81). **Verdict: strong,
+safe as deferred.** Isolation guard, SECURITY DEFINER RLS fix, and idempotency all
+verified correct. Three ARM-TIME risks to respect (not bugs now):
+
+1. **The DB trigger is the ONLY real paywall enforcement — the `/publish` endpoint
+   is UX.** A creator with the anon key can `update({status:'published'})` directly;
+   only `skills_enforce_server_publish` stops it, and 022 has it DROPPED. So the
+   moment `STRIPE_PLATFORM_PRICE_ID` is set, code 402s but a direct anon update
+   bypasses until 023 re-adds the trigger. **Env var + trigger must arm in the same
+   window; the trigger must be present whenever the env var is set.**
+2. **Verify `sub.current_period_end` against the pinned Stripe API version.** Recent
+   API versions moved `current_period_start/end` onto subscription *items*; if the
+   pin is new, `sub.current_period_end` is undefined → stored null → blank renewal
+   date in the trial banner. Not money-critical (gating is on `status`). Confirm in
+   sandbox.
+3. **Trial-end is the untested moment** — run a real day-14 trial with a failing
+   test card: assert `invoice.payment_failed` fires → `past_due` → storefront dark →
+   dunning email + notification exactly once.
 
 ## Known issues / follow-ups
 
@@ -102,6 +122,14 @@ RLS sub-SELECTs as recursion/visibility hazards — use SECURITY DEFINER fns.**
   the creator currently re-clicks Publish.
 - **Lapsed storefront shell:** only products/sales pages go dark on lapse; the
   `/@handle` bio + links still render. Decide if full-dark is wanted.
+- **Grandfather comp never expires (zombie rows).** 023's backfill inserts
+  `platform_subscriptions` rows with NO `stripe_subscription_id`, so no webhook
+  ever transitions them and there's no cron → a comped `trialing` creator stays
+  live free forever until they voluntarily subscribe. Effectively a permanent
+  founder comp. If you want it to EXPIRE, build a scheduled job that at
+  `trial_ends_at` flips no-Stripe rows to a darkening status (or nudges them to
+  subscribe). 023 sets `trial_ends_at` so that job has a key. Documented inline
+  in 023's Step 1 caveat.
 - **Stripe Tax + receipts** and a **trial-reminder email** (day ~11) not built.
 - **Migrations are loose .sql, manually applied** (note 108 finding #3) — still
   unverified against prod; adopting Supabase CLI would prevent incidents like

@@ -5,7 +5,7 @@ import SkillJoyGreenWhite from "../assets/skilljoy-green-White.svg"
 
 export default function Footer() {
     const { pathname } = useLocation();
-    if (pathname === '/chat') return null;
+    if (pathname === '/chat' || pathname === '/onboarding') return null;
 
     return (
         <footer style={{

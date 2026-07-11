@@ -108,7 +108,16 @@ _2026-07-09. Prioritized, phased checklist. Audit findings up top._
       (Stan does this; it drives clicks).
 - [ ] **Creator analytics** — views, clicks, conversion, revenue per product (extend existing metrics).
 - [ ] **Legal** — Terms, Privacy, Refund pages exist as reserved routes; confirm real content + a
-      terms-acceptance checkbox at signup.
+      terms-acceptance checkbox at signup. ✅ TOS checkbox now enforced in onboarding (note 115) —
+      still need to (a) persist the acceptance (timestamp + version) not just gate on it, and (b)
+      confirm the legal page bodies are real.
+- [ ] **Email verification (PLACEHOLDER — make real eventually).** Current state: Supabase sends a
+      confirmation email at email/password signup ("confirm your account, then sign in"), so email
+      IS loosely verified for that path — BUT **Google-OAuth users are auto-verified by Google** and
+      never prove control of the address in our flow, and we never *gate* anything on verified
+      status. "Real" version: (a) block publish / payouts until `email_confirmed_at` is set, (b) a
+      resend-verification UI + a "verify your email" banner, (c) re-verify on email change (already
+      partially handled by Supabase's confirm-change flow in Settings). Placeholder only for now.
 - [ ] **Email deliverability** — domain verified in Resend (done for skilljoy.me); add abandoned-cart
       / receipt / trial-reminder templates.
 - [ ] **Observability** — error monitoring (Sentry), uptime ping, rate-limiting on

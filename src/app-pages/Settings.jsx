@@ -11,6 +11,7 @@ export default function SettingsPage() {
     const navigate = useNavigate();
 
     const [email, setEmail] = useState('');
+    const [phone, setPhone] = useState('');
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -33,6 +34,7 @@ export default function SettingsPage() {
         if (!user) { navigate('/login'); return; }
         setEmail(user.email || '');
         if (profile) {
+            setPhone(profile.phone ?? '');
             setOffersGigs(profile.offers_gigs || false);
             if (profile.notification_prefs) setNotificationPrefs(profile.notification_prefs);
             if (profile.privacy_settings) setPrivacySettings(profile.privacy_settings);
@@ -58,6 +60,16 @@ export default function SettingsPage() {
         const { error } = await supabase.auth.updateUser({ email });
         setSaving(false);
         error ? showToast(error.message, 'error') : showToast('Check your inbox to confirm the change.', 'success');
+    }
+
+    async function savePhone() {
+        setSaving(true);
+        const { error } = await supabase.from('profiles').update({ phone: phone.trim() || null }).eq('id', user.id);
+        setSaving(false);
+        if (error) { showToast(error.message, 'error'); return; }
+        const { data: updated } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        if (updated) setProfile(updated);
+        showToast('Phone number saved!', 'success');
     }
 
     async function updatePassword() {
@@ -157,6 +169,17 @@ export default function SettingsPage() {
                         </button>
                     </div>
                     <span className="sj-hint">You'll receive a confirmation email to verify the change.</span>
+                </div>
+
+                <div className="sj-divider" />
+
+                <div className="sj-field">
+                    <label className="sj-label">Phone number</label>
+                    <div className="sj-row">
+                        <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="e.g. +1 555 123 4567" className="sj-input" autoComplete="tel" />
+                        <button className="sj-btn sj-btn-ghost" onClick={savePhone} disabled={saving}>Save</button>
+                    </div>
+                    <span className="sj-hint">Private — required to publish your storefront, used for account verification. Never shown publicly.</span>
                 </div>
 
                 <div className="sj-divider" />

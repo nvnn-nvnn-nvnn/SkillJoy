@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth } from '@/lib/stores';
-import ProfileView from '@/components/Profileview';
+import SkillJoyGreen from '../../assets/skilljoy-green.svg';
 
 const TOTAL_STEPS = 1;
 
@@ -40,27 +40,25 @@ export default function OnboardingPage() {
     const [usernameStatus, setUsernameStatus] = useState(null); // null | 'checking' | 'available' | 'taken'
     const [bio, setBio] = useState('');
     const [phone, setPhone] = useState(''); // captured at account creation, persisted here
+    const [agreedTos, setAgreedTos] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
-    const [viewMode, setViewMode] = useState(false);
 
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
-        if (profile) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            setFullName(profile.full_name ?? '');
-            setUsername(profile.username ?? '');
-            setBio(profile.bio ?? '');
-            setPhone(profile.phone ?? '');
-            if (profile.full_name) setViewMode(true);
-        } else {
-            // New user — prefill the name + phone captured at account creation
-            // (email signup metadata, or the name Google gave us).
-            const meta = user.user_metadata || {};
-            const signupName = meta.full_name || meta.name;
-            if (signupName) setFullName(signupName);
-            if (meta.phone) setPhone(meta.phone);
-        }
+        // Already onboarded (has a handle) → they don't belong here anymore.
+        if (profile?.username) { navigate('/build', { replace: true }); return; }
+        // Prefill from the profile row when present, else from the name/phone
+        // captured at account creation (email signup metadata, or Google). The
+        // metadata fallback ALSO applies when a profile row exists but its
+        // full_name/phone are null (e.g. a Google row) — otherwise the name field
+        // would render empty (or hidden) and validation would dead-end.
+        const meta = user.user_metadata || {};
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setFullName(profile?.full_name || meta.full_name || meta.name || '');
+        setUsername(profile?.username ?? '');
+        setBio(profile?.bio ?? '');
+        setPhone(profile?.phone || meta.phone || '');
     }, [user, profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Username availability (debounced) ────────────────────────────────────
@@ -89,9 +87,11 @@ export default function OnboardingPage() {
 
     async function save() {
         if (!fullName.trim()) { setError('Please enter your name.'); return; }
+        if (!phone.trim()) { setError('Please enter your phone number.'); return; }
         const uErr = usernameError(username);
         if (uErr) { setError(uErr); return; }
         if (usernameStatus === 'taken') { setError('That username is taken — try another.'); return; }
+        if (!agreedTos) { setError('Please agree to the Terms of Service to continue.'); return; }
 
         setError(''); setBusy(true);
         const { error: e } = await supabase.from('profiles').upsert({
@@ -116,24 +116,18 @@ export default function OnboardingPage() {
     // ── Render ───────────────────────────────────────────────────────────────
 
     const handleValid = username && !usernameError(username);
-    // Name is captured at account creation (email signup metadata / Google). Only
-    // show the name field when editing an existing profile, or as a fallback if no
-    // name came through — so a fresh signup goes straight to claiming the handle.
-    const nameFromAccount = !!(user?.user_metadata?.full_name || user?.user_metadata?.name);
-    const showNameField = !!profile?.full_name || !nameFromAccount;
 
     return (
         <>
             <title>Set up your profile — SkillJoy</title>
 
             <div className="onb">
-                <div className={`onb-shell fade-up${viewMode ? ' onb-shell-solo' : ''}`}>
+                <div className="onb-shell fade-up">
 
                     {/* ── Left: brand / value panel ── */}
-                    {!viewMode && (
-                        <aside className="onb-brand">
+                    <aside className="onb-brand">
                             <div>
-                                <div className="onb-logo">SkillJoy</div>
+                                <img className="onb-logo-img" src={SkillJoyGreen} alt="SkillJoy" />
                                 <h2 className="onb-brand-h">Your link in bio,<br />built to sell.</h2>
                                 <p className="onb-brand-sub">A customizable page for all your links, socials &amp; everything you sell — one link in your bio.</p>
                             </div>
@@ -149,27 +143,11 @@ export default function OnboardingPage() {
                                 <span className="onb-linkcard-url">skilljoy.me/@<b>{username || 'yourname'}</b></span>
                             </div>
                         </aside>
-                    )}
 
                     {/* ── Right: form card ── */}
                     <div className="onb-card">
-                        {viewMode && profile ? (
-                            <ProfileView
-                                profile={profile}
-                                acceptedSwapsCount={0}
-                                onEdit={() => setViewMode(false)}
-                            />
-                        ) : (
-                            <>
                                 <div className="onb-top">
                                     <span className="onb-step-label">Step 1 of {TOTAL_STEPS} · {STEP_LABELS[0]}</span>
-                                    <button
-                                        type="button"
-                                        className="onb-exit"
-                                        onClick={() => profile?.full_name ? setViewMode(true) : navigate('/')}
-                                    >
-                                        {profile?.full_name ? 'Cancel' : 'Exit'}
-                                    </button>
                                 </div>
 
                                 <div className="onb-progress">
@@ -183,12 +161,16 @@ export default function OnboardingPage() {
                                     <h1 className="onb-h1">Let’s set up your page</h1>
                                             <p className="onb-p">Tell your audience who you are and claim your link.</p>
 
-                                            {showNameField && (
-                                                <div className="onb-field">
-                                                    <label htmlFor="name">Your name</label>
-                                                    <input id="name" type="text" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="e.g. Maya Chen" autoComplete="name" />
-                                                </div>
-                                            )}
+                                            <div className="onb-field">
+                                                <label htmlFor="name">Your name</label>
+                                                <input id="name" type="text" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="e.g. Maya Chen" autoComplete="name" />
+                                            </div>
+
+                                            <div className="onb-field">
+                                                <label htmlFor="phone">Confirm your phone number</label>
+                                                <input id="phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="e.g. +1 555 123 4567" autoComplete="tel" />
+                                                <p className="onb-hint">Pulled from sign-up — double-check it's correct. Used for account verification, never shown on your page.</p>
+                                            </div>
 
                                             <div className="onb-field">
                                                 <label htmlFor="username">Your page link</label>
@@ -219,19 +201,22 @@ export default function OnboardingPage() {
                                                 <label htmlFor="bio">Short bio <span className="onb-opt">(optional)</span></label>
                                                 <textarea id="bio" value={bio} onChange={e => setBio(e.target.value)} placeholder="e.g. CS junior who loves code and music." rows={3} style={{ resize: 'vertical' }} />
                                             </div>
+
+                                            <label className="onb-tos">
+                                                <input type="checkbox" checked={agreedTos} onChange={e => setAgreedTos(e.target.checked)} />
+                                                <span>I agree to the <a href="/terms" target="_blank" rel="noreferrer">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
+                                            </label>
                                 </div>
 
                                 {error && <p className="form-error onb-err">{error}</p>}
 
                                 <div className="onb-nav">
                                     <div />
-                                    <button className="btn btn-primary" onClick={save} disabled={busy}>
+                                    <button className="btn btn-primary" onClick={save} disabled={busy || !agreedTos}>
                                         {busy && <span className="spinner" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white', width: 16, height: 16 }} />}
                                         Save &amp; start building
                                     </button>
                                 </div>
-                            </>
-                        )}
                     </div>
                 </div>
             </div>
@@ -287,6 +272,11 @@ export default function OnboardingPage() {
             font-size: 20px;
             letter-spacing: -0.02em;
             color: var(--text);
+        }
+        .onb-logo-img {
+            height: 30px;
+            width: auto;
+            display: block;
         }
         .onb-brand-h {
             font-size: 30px;
@@ -479,6 +469,28 @@ export default function OnboardingPage() {
         .onb-hint { font-size: 13px; font-weight: 500; margin-top: 7px; }
         .onb-hint.ok { color: var(--accent); }
         .onb-hint.bad { color: #dc2626; }
+
+        /* ── Terms of Service agreement ── */
+        .onb-tos {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-top: 20px;
+            font-size: 13.5px;
+            line-height: 1.5;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+        .onb-tos input {
+            width: 18px;
+            height: 18px;
+            margin-top: 1px;
+            flex-shrink: 0;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+        .onb-tos a { color: var(--accent); font-weight: 600; text-decoration: none; }
+        .onb-tos a:hover { text-decoration: underline; }
 
         /* ── Nav + error ── */
         .onb-nav {

@@ -1,4 +1,4 @@
-import { StrictMode, Component } from 'react'
+import { StrictMode, Component, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 
 class ErrorBoundary extends Component {
@@ -26,8 +26,8 @@ class ErrorBoundary extends Component {
     return this.props.children;
   }
 }
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider } from './lib/stores'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { AuthProvider, useUser, useProfile, useAuth } from './lib/stores'
 import { DialogProvider } from './components/Dialog'
 import './index.css'
 import './App.css'
@@ -65,9 +65,30 @@ import Checkout from './app-pages/Checkout'
 import Unsubscribe from './app-pages/Unsubscribe'
 import AdminPayouts from './app-pages/AdminPayouts'
 
+// Force a logged-in creator to finish onboarding before using the app. Fires only
+// on the authenticated app surfaces (not public/marketing/storefront pages), so an
+// incomplete user can't slip into /build etc. mid-onboarding and break the flow.
+const ONBOARDING_PROTECTED = ['/build', '/dashboard', '/storefront', '/locker', '/discover', '/settings'];
+
+function OnboardingGate() {
+  const user = useUser();
+  const profile = useProfile();
+  const { loading } = useAuth();
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (loading || !user) return;
+    const incomplete = !profile || !profile.username;
+    const onProtected = ONBOARDING_PROTECTED.some(p => pathname === p || pathname.startsWith(p + '/'));
+    if (incomplete && onProtected) navigate('/onboarding', { replace: true });
+  }, [loading, user, profile, pathname, navigate]);
+  return null;
+}
+
 function AppRoutes() {
   return (
     <div className="app-shell" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <OnboardingGate />
       <Header />
       <div style={{ flex: 1 }}>
         <Routes>

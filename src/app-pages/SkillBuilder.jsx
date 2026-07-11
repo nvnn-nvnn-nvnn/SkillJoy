@@ -322,7 +322,12 @@ function SkillEditor({ skillId, userId }) {
           catch (se) { alert({ title: 'Couldn’t start trial', message: se.message, tone: 'danger' }); }
         }
       } else if (e.code === 'PROFILE_INCOMPLETE') {
-        alert({ title: 'Finish your profile first', message: e.message, tone: 'warning' });
+        const go = await confirm({
+          title: 'Finish your profile first',
+          message: e.message,
+          confirmLabel: 'Go to settings',
+        });
+        if (go) navigate('/settings');
       } else {
         alert({ title: 'Couldn’t publish', message: e.message, tone: 'danger' });
       }

@@ -30,7 +30,9 @@ export default function Header() {
   const currentPath = location.pathname;
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const showSidebar = !(loading || !user || currentPath === '/login');
+  // Onboarding is a locked, chrome-free flow — the user must finish setup before
+  // any nav is available (they can't escape mid-onboarding and break the process).
+  const showSidebar = !(loading || !user || currentPath === '/login' || currentPath === '/onboarding');
 
   // Toggle a body flag so the app shell can offset its content for the fixed rail.
   useEffect(() => {
@@ -69,8 +71,9 @@ export default function Header() {
 
         <nav className="sb-nav">
           <span className="sb-group">Create</span>
+          {/* Link-in-bio first: the customizable page is the hook, products live on it. */}
+          <NavItem to="/storefront/edit" icon={Store} label="My Page" active={on('/storefront')} onClick={close} />
           <NavItem to="/build" icon={Package} label="Products" active={on('/build')} onClick={close} />
-          <NavItem to="/storefront/edit" icon={Store} label="Storefront" active={on('/storefront')} onClick={close} />
 
           <span className="sb-group">Grow</span>
           <NavItem to="/dashboard" icon={BarChart3} label="Dashboard" active={on('/dashboard')} onClick={close} />

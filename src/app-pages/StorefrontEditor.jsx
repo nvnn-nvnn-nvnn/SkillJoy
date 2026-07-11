@@ -215,7 +215,7 @@ export default function StorefrontEditor() {
         <div className="std-top-tabs">
           <div className="std-tabwrap">
             <button className="std-tab on" onClick={() => setDropOpen(o => !o)}>
-              Storefront <ChevronDown size={15} className={`std-caret${dropOpen ? ' open' : ''}`} />
+              My Page <ChevronDown size={15} className={`std-caret${dropOpen ? ' open' : ''}`} />
             </button>
             {dropOpen && (
               <>

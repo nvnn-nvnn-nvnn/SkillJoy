@@ -162,6 +162,9 @@ export default function ServicesDashboard() {
           confirmLabel: 'Start free trial',
         });
         if (go) { try { await startSubscription(); } catch (se) { ping(se.message); } }
+      } else if (e.code === 'PROFILE_INCOMPLETE') {
+        const go = await confirm({ title: 'Finish your profile first', message: e.message, confirmLabel: 'Go to settings' });
+        if (go) navigate('/settings');
       } else { ping(e.message); }
     }
   }
