@@ -75,4 +75,74 @@ router.delete('/account', async (req, res) => {
     }
 });
 
+// ── Username change (15-day cooldown) ───────────────────────────────────────
+// POST /api/users/username { username }
+// Server-authoritative: normalization, reserved names, case-insensitive
+// uniqueness, and the cooldown are ALL enforced here (never trust the client).
+// Mirrors Onboarding.jsx's RESERVED_USERNAMES — keep the two lists in sync.
+const RESERVED_USERNAMES = new Set([
+    'build', 'locker', 'dashboard', 'login', 'onboarding', 'about', 'contact',
+    'profile', 'settings', 'admin', 'terms', 'privacy', 'how-it-works',
+    'refund-policy', 'gigs', 'swaps', 'matches', 'chat', 'disputes', 'my-orders',
+    'my-listings', 'my-swaps', 'verify-college', 'main-search', 'api', 'health',
+]);
+const USERNAME_COOLDOWN_DAYS = 15;
+
+router.post('/username', async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const normalized = (req.body?.username || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+
+        if (normalized.length < 3) return res.status(400).json({ error: 'Usernames need at least 3 characters (a–z, 0–9, _).' });
+        if (RESERVED_USERNAMES.has(normalized)) return res.status(400).json({ error: 'That handle is reserved — try another.' });
+
+        const { data: me, error: meErr } = await supabase
+            .from('profiles')
+            .select('id, username, username_changed_at')
+            .eq('id', userId)
+            .single();
+        if (meErr || !me) return res.status(404).json({ error: 'Profile not found.' });
+
+        // Same handle → no-op; don't burn the cooldown.
+        if ((me.username || '').toLowerCase() === normalized) {
+            return res.json({ username: me.username, nextChangeAt: null, unchanged: true });
+        }
+
+        // Cooldown: only when a previous change is on record (null = never changed).
+        if (me.username_changed_at) {
+            const nextAllowed = new Date(new Date(me.username_changed_at).getTime() + USERNAME_COOLDOWN_DAYS * 86400000);
+            if (Date.now() < nextAllowed.getTime()) {
+                return res.status(429).json({
+                    error: `You can change your username again on ${nextAllowed.toLocaleDateString()}.`,
+                    nextChangeAt: nextAllowed.toISOString(),
+                });
+            }
+        }
+
+        // Case-insensitive uniqueness against everyone else.
+        const { data: taken } = await supabase
+            .from('profiles').select('id').ilike('username', normalized).neq('id', userId).maybeSingle();
+        if (taken) return res.status(409).json({ error: 'That handle is taken — try another.' });
+
+        const changedAt = new Date().toISOString();
+        const { error: upErr } = await supabase
+            .from('profiles')
+            .update({ username: normalized, username_changed_at: changedAt })
+            .eq('id', userId);
+        if (upErr) {
+            // Unique-index race past the live check.
+            if (/duplicate|unique|23505/i.test(upErr.message)) {
+                return res.status(409).json({ error: 'That handle was just taken — try another.' });
+            }
+            return serverError(res, upErr);
+        }
+
+        const nextChangeAt = new Date(Date.now() + USERNAME_COOLDOWN_DAYS * 86400000).toISOString();
+        res.json({ username: normalized, nextChangeAt });
+    } catch (err) {
+        console.error('Username change error:', err);
+        serverError(res, err);
+    }
+});
+
 module.exports = router;

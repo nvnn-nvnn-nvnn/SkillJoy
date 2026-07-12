@@ -26,4 +26,37 @@ router.post('/unsubscribe', async (req, res) => {
     }
 });
 
+// POST /api/public/subscribe { creatorId, email, name?, source? }
+// Storefront email capture. Runs on the SERVICE ROLE (not the visitor's anon
+// key) so it can't be broken by RLS drift, and the email is validated +
+// rate-limited (strictLimiter upstream) server-side. Idempotent per
+// (creator, email) — a duplicate subscribe returns ok, not an error.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+router.post('/subscribe', async (req, res) => {
+    try {
+        const { creatorId, email, name, source } = req.body || {};
+        const clean = (email || '').trim().toLowerCase();
+        if (!creatorId) return res.status(400).json({ error: 'Missing creator.' });
+        if (!EMAIL_RE.test(clean)) return res.status(400).json({ error: 'Enter a valid email.' });
+
+        // Confirm the creator exists (avoids orphan rows / FK error noise).
+        const { data: creator } = await supabase
+            .from('profiles').select('id').eq('id', creatorId).maybeSingle();
+        if (!creator) return res.status(404).json({ error: 'Creator not found.' });
+
+        const { error } = await supabase
+            .from('subscribers')
+            .upsert(
+                { creator_id: creatorId, email: clean, name: (name || '').trim() || null, source: source || 'storefront' },
+                { onConflict: 'creator_id,email', ignoreDuplicates: true },
+            );
+        if (error) return serverError(res, error);
+
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('Public subscribe error:', err);
+        serverError(res, err);
+    }
+});
+
 module.exports = router;

@@ -245,8 +245,56 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
             await supabase.from('notifications').insert(createdNotifications);
         }
 
+        // ── v3 skill purchase (storefront sale) — notify creator + admin ──
+        // Additive only: no money moved, no purchase-status change (flipping
+        // status would alter buyer access / RLS — out of scope). Idempotency:
+        // no flag column on purchases, so we gate on an existing-notification
+        // check keyed by the purchase id (Stripe may redeliver this event).
+        if (!order) {
+            const { data: purchase } = await supabase
+                .from('purchases')
+                .select('id, buyer_id, skill_id, skill:skills(title, creator_id)')
+                .eq('stripe_payment_id', dispute.payment_intent)
+                .maybeSingle();
 
-      
+            if (purchase?.skill?.creator_id) {
+                const { data: already } = await supabase
+                    .from('notifications')
+                    .select('id')
+                    .eq('type', 'chargeback')
+                    .eq('related_id', purchase.id)
+                    .eq('title', 'Chargeback opened on your sale')
+                    .maybeSingle();
+                if (already) {
+                    console.log(`⚠️ dispute ${dispute.id} already notified for purchase ${purchase.id} — skipping`);
+                    break;
+                }
+
+                const { data: adminProfile } = await supabase
+                    .from('profiles').select('id').eq('email', process.env.ADMIN_EMAIL).single();
+
+                const skillNotifications = [{
+                    user_id: purchase.skill.creator_id,
+                    type: 'chargeback',
+                    title: 'Chargeback opened on your sale',
+                    message: `A buyer filed a chargeback on "${purchase.skill.title ?? 'your product'}". Stripe will ask for evidence — check your email/dashboard. Reason: ${dispute.reason}.`,
+                    related_id: purchase.id,
+                    related_type: null,
+                }];
+                if (adminProfile) {
+                    skillNotifications.push({
+                        user_id: adminProfile.id,
+                        type: 'chargeback',
+                        title: 'Chargeback on a skill sale',
+                        message: `Purchase ${purchase.id} ("${purchase.skill.title ?? '?'}") chargebacked. Reason: ${dispute.reason}.`,
+                        related_id: purchase.id,
+                        related_type: null,
+                    });
+                }
+                await supabase.from('notifications').insert(skillNotifications);
+                console.log(`🚨 skill-sale chargeback recorded for purchase ${purchase.id}`);
+            }
+        }
 
         break;
     }
@@ -267,7 +315,40 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
                 .single()
 
             if (!order) {
-                console.log('⚠️ Unable to fetch order metadata');
+                // ── v3 skill purchase — tell the creator the outcome. Additive
+                // only; idempotency via existing-notification check (title is
+                // outcome-specific so won/lost each fire once).
+                const { data: purchase } = await supabase
+                    .from('purchases')
+                    .select('id, skill:skills(title, creator_id)')
+                    .eq('stripe_payment_id', dispute.payment_intent)
+                    .maybeSingle();
+                if (purchase?.skill?.creator_id && ['won', 'lost'].includes(dispute.status)) {
+                    const won = dispute.status === 'won';
+                    const title = won ? 'Chargeback resolved in your favor' : 'Chargeback lost';
+                    const { data: already } = await supabase
+                        .from('notifications')
+                        .select('id')
+                        .eq('type', 'chargeback')
+                        .eq('related_id', purchase.id)
+                        .eq('title', title)
+                        .maybeSingle();
+                    if (!already) {
+                        await supabase.from('notifications').insert({
+                            user_id: purchase.skill.creator_id,
+                            type: 'chargeback',
+                            title,
+                            message: won
+                                ? `The chargeback on "${purchase.skill.title ?? 'your product'}" was resolved in your favor.`
+                                : `The chargeback on "${purchase.skill.title ?? 'your product'}" was lost — the buyer's bank reversed the payment.`,
+                            related_id: purchase.id,
+                            related_type: null,
+                        });
+                        console.log(`⚖️ skill-sale dispute ${dispute.id} closed (${dispute.status}) — creator notified`);
+                    }
+                } else {
+                    console.log('⚠️ Unable to fetch order metadata');
+                }
                 break;
             }
 

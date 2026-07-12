@@ -312,6 +312,15 @@ router.get('/reports', async (req, res) => {
                     comment_target_type: comment?.target_type ?? null,
                     comment_target_id: comment?.target_id ?? null,
                 };
+            } else if (r.reported_type === 'skill') {
+                const { data: skill } = await supabase.from('skills').select('id, title, status, creator_id, creator:profiles!creator_id(full_name, username)').eq('id', r.reported_id).single();
+                return {
+                    ...r,
+                    reported_name: skill?.title ?? 'Product deleted',
+                    reported_owner: skill?.creator?.full_name ?? null,
+                    skill_status: skill?.status ?? null,
+                    skill_url: skill?.creator?.username ? `/@${skill.creator.username}/${skill.id}` : null,
+                };
             } else {
                 const { data: profile } = await supabase.from('profiles').select('id, full_name').eq('id', r.reported_id).single();
                 return { ...r, reported_name: profile?.full_name ?? 'Unknown user' };
@@ -346,6 +355,51 @@ router.post('/remove-comment', async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Remove comment error:', err);
+        serverError(res, err);
+    }
+});
+
+// ── Content moderation: take a reported product down (unpublish, reversible) ──
+// POST /api/admin/takedown-skill { skillId }
+// Sets status='draft' (NOT delete — a report may be bogus; the creator can appeal
+// and we can restore). Resolves pending skill reports + notifies the creator.
+router.post('/takedown-skill', async (req, res) => {
+    try {
+        if (req.user.email !== ADMIN_EMAIL) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        const { skillId } = req.body;
+        if (!skillId) return res.status(400).json({ error: 'Missing skillId' });
+
+        const { data: skill, error: skillErr } = await supabase
+            .from('skills').select('id, title, creator_id, status').eq('id', skillId).single();
+        if (skillErr || !skill) return res.status(404).json({ error: 'Product not found' });
+
+        const { error: upErr } = await supabase
+            .from('skills')
+            .update({ status: 'draft', updated_at: new Date().toISOString() })
+            .eq('id', skillId);
+        if (upErr) return serverError(res, upErr);
+
+        await supabase.from('reports')
+            .update({ status: 'resolved' })
+            .eq('reported_type', 'skill')
+            .eq('reported_id', skillId)
+            .eq('status', 'pending');
+
+        await supabase.from('notifications').insert({
+            user_id: skill.creator_id,
+            type: 'order_update',
+            title: 'Product removed pending review',
+            message: `Your product "${skill.title ?? 'Untitled'}" was unpublished by our team pending a review of a report. Reply to support if you believe this is a mistake.`,
+            related_id: skillId,
+            related_type: null,
+        });
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Takedown skill error:', err);
         serverError(res, err);
     }
 });

@@ -483,7 +483,7 @@ export default function Swaps() {
                 }
                 .sj-clear-filters-btn:hover {
                     border-color: var(--text-secondary);
-                    color: var(--text-primary);
+                    color: var(--text);
                 }
 
                 /* ── Recent searches ── */
@@ -508,7 +508,7 @@ export default function Swaps() {
                     color: var(--text-muted);
                     font-family: inherit;
                 }
-                .sj-clear-btn:hover { color: var(--text-primary); }
+                .sj-clear-btn:hover { color: var(--text); }
 
                 /* ── Favorite button ── */
                 .sj-fav-btn {
@@ -539,7 +539,7 @@ export default function Swaps() {
                     font-size: 14px;
                     font-family: inherit;
                     background: var(--surface-alt);
-                    color: var(--text-primary);
+                    color: var(--text);
                     box-sizing: border-box;
                 }
                 .sj-filter-input:focus {

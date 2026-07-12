@@ -11,6 +11,8 @@ import { toEmbed } from '@/lib/embed';
 import Seo from '@/components/Seo';
 import BackLink from '@/components/BackLink';
 import Markdown from '@/components/Markdown';
+import ReportModal from '@/components/ReportModal';
+import { Flag } from 'lucide-react';
 import { injectPixels } from '@/lib/pixels';
 
 // Star row — filled to `value` (rounded), out of 5.
@@ -32,6 +34,7 @@ export default function SkillPublic() {
   const [owned, setOwned] = useState(false);
   const [reviews, setReviews] = useState([]);
   const [status, setStatus] = useState('loading');
+  const [reportOpen, setReportOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -127,6 +130,22 @@ export default function SkillPublic() {
         </div>
       )}
 
+      {/* Report — hidden for the product's own creator */}
+      {!isOwn && (
+        <p className="sp-reportline">
+          <button type="button" className="sp-reportbtn" onClick={() => setReportOpen(true)}>
+            <Flag size={12} /> Report this product
+          </button>
+        </p>
+      )}
+      <ReportModal
+        isOpen={reportOpen}
+        onClose={() => setReportOpen(false)}
+        reportedType="skill"
+        reportedId={skill.id}
+        reportedName={skill.title}
+      />
+
       {/* Sticky buy bar */}
       <div className="sp-buybar">
         <div className="sp-buybar-inner">
@@ -158,6 +177,9 @@ function SkillStyles() {
     .sp-title { font-size:28px; font-weight:700; font-family:var(--font-display); line-height:1.15; }
     .sp-outcome { font-size:16px; color:var(--text-secondary); margin-top:8px; line-height:1.5; }
     .sp-desc { font-size:15px; color:var(--text-secondary); margin-top:14px; line-height:1.6; }
+    .sp-reportline { margin:26px 0 0; text-align:center; }
+    .sp-reportbtn { display:inline-flex; align-items:center; gap:5px; min-width:0; width:auto; padding:4px 8px; border:none; background:none; font-size:12px; font-weight:600; color:var(--text-muted); cursor:pointer; }
+    .sp-reportbtn:hover { color:#dc2626; }
 
     .sp-stars { color:var(--accent); letter-spacing:1px; font-size:15px; }
     .sp-stars-off { color:var(--border-strong); }

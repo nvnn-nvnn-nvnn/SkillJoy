@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth } from '@/lib/stores';
 import { apiFetch } from '@/lib/api';
+import { getBillingStatus, openBillingPortal, trialDaysLeft } from '@/lib/billing';
+import { getTheme, setTheme } from '@/lib/theme';
 
 export default function SettingsPage() {
     const user = useUser();
@@ -29,6 +31,9 @@ export default function SettingsPage() {
     const [deleteInput, setDeleteInput] = useState('');
     const [blockedUsers, setBlockedUsers] = useState([]);
     const [unblockingId, setUnblockingId] = useState(null);
+    const [billing, setBilling] = useState(null);      // null = loading, {status:'none'|...}
+    const [billingBusy, setBillingBusy] = useState(false);
+    const [theme, setThemeState] = useState(getTheme());
 
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
@@ -40,7 +45,14 @@ export default function SettingsPage() {
             if (profile.privacy_settings) setPrivacySettings(profile.privacy_settings);
         }
         loadBlockedUsers();
+        getBillingStatus().then(setBilling).catch(() => setBilling({ status: 'error' }));
     }, [user, profile]);
+
+    async function manageSubscription() {
+        setBillingBusy(true);
+        try { await openBillingPortal(); } // redirects on success
+        catch (err) { showToast(err.message, 'error'); setBillingBusy(false); }
+    }
 
     async function loadBlockedUsers() {
         const res = await apiFetch('/api/blocks');
@@ -147,13 +159,7 @@ export default function SettingsPage() {
         <div className="sj-settings-page">
             <div className="sj-settings-header">
                 <h1>Settings</h1>
-                <p
-                style={
-                    {
-                        color: '#fff'
-                    }
-                }
-                >Manage your account preferences</p>
+                <p style={{ color: 'var(--text-muted)' }}>Manage your account preferences</p>
             </div>
 
             {/* Account */}
@@ -193,6 +199,72 @@ export default function SettingsPage() {
                         Update password
                     </button>
                 </div>
+            </section>
+
+            {/* Appearance — site-wide light/dark */}
+            <section className="sj-card">
+                <h2 className="sj-section-title">Appearance</h2>
+                <div className="sj-toggle-row" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+                    <div>
+                        <p className="sj-toggle-label">Theme</p>
+                        <p className="sj-hint">Choose light or dark for your dashboard.</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        {['light', 'dark'].map(t => (
+                            <button
+                                key={t}
+                                className={`sj-btn ${theme === t ? 'sj-btn-primary' : 'sj-btn-ghost'}`}
+                                onClick={() => { setTheme(t); setThemeState(t); }}
+                                style={{ textTransform: 'capitalize', minWidth: 74 }}
+                            >
+                                {t}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* Subscription (platform billing — manage/cancel via Stripe portal) */}
+            <section className="sj-card">
+                <h2 className="sj-section-title">Subscription</h2>
+                {billing === null ? (
+                    <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>Loading…</p>
+                ) : billing.status === 'error' ? (
+                    <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>Couldn't load your subscription right now.</p>
+                ) : billing.status === 'none' ? (
+                    <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>
+                        You're not subscribed. Your free trial starts when you publish your storefront.
+                    </p>
+                ) : (
+                    <>
+                        <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 14 }}>
+                            {billing.status === 'trialing' && (
+                                <p style={{ margin: 0 }}>
+                                    <strong style={{ color: 'var(--text)' }}>Free trial</strong>
+                                    {billing.trial_ends_at ? ` — ${trialDaysLeft(billing.trial_ends_at)} day${trialDaysLeft(billing.trial_ends_at) === 1 ? '' : 's'} left` : ''}
+                                </p>
+                            )}
+                            {billing.status === 'active' && (
+                                <p style={{ margin: 0 }}>
+                                    <strong style={{ color: 'var(--text)' }}>Active</strong>
+                                    {billing.current_period_end ? ` — renews ${new Date(billing.current_period_end).toLocaleDateString()}` : ''}
+                                </p>
+                            )}
+                            {billing.status === 'past_due' && (
+                                <p style={{ margin: 0, color: '#dc2626' }}>
+                                    <strong>Payment issue</strong> — your storefront is paused. Update your card to bring it back.
+                                </p>
+                            )}
+                            {!['trialing', 'active', 'past_due'].includes(billing.status) && (
+                                <p style={{ margin: 0 }}>Status: {billing.status}</p>
+                            )}
+                        </div>
+                        <button className="sj-btn sj-btn-ghost" onClick={manageSubscription} disabled={billingBusy}>
+                            {billingBusy ? 'Opening…' : 'Manage / cancel subscription'}
+                        </button>
+                        <p className="sj-hint" style={{ marginTop: 8 }}>Opens Stripe's secure billing portal — update your card, view invoices, or cancel.</p>
+                    </>
+                )}
             </section>
 
             {/* Selling */}
@@ -290,7 +362,7 @@ export default function SettingsPage() {
                                             {b.blocked?.full_name?.[0]?.toUpperCase() ?? '?'}
                                           </div>
                                     }
-                                    <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>{b.blocked?.full_name ?? 'Unknown user'}</span>
+                                    <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)' }}>{b.blocked?.full_name ?? 'Unknown user'}</span>
                                 </div>
                                 <button
                                     className="sj-btn"
@@ -361,7 +433,7 @@ export default function SettingsPage() {
                 .sj-settings-header h1 {
                     font-size: 26px;
                     font-weight: 600;
-                    color: var(--text-primary);
+                    color: var(--text);
                     margin: 0 0 4px;
                 }
                 .sj-settings-header p {
@@ -381,7 +453,7 @@ export default function SettingsPage() {
                 .sj-section-title {
                     font-size: 15px;
                     font-weight: 600;
-                    color: var(--text-primary);
+                    color: var(--text);
                     margin: 0 0 20px;
                     letter-spacing: -0.01em;
                 }
@@ -412,7 +484,7 @@ export default function SettingsPage() {
                     border: 1px solid var(--border);
                     border-radius: 9px;
                     background: var(--surface-alt, #f9f8f5);
-                    color: var(--text-primary);
+                    color: var(--text);
                     font-size: 14px;
                     font-family: inherit;
                     transition: border-color 0.15s;
@@ -455,15 +527,15 @@ export default function SettingsPage() {
                 .sj-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
                 .sj-btn-primary {
-                    background: var(--primary);
-                    color: #fff;
-                    border-color: var(--primary);
+                    background: var(--accent);
+                    color: var(--accent-foreground);
+                    border-color: var(--accent);
                 }
                 .sj-btn-primary:hover:not(:disabled) { opacity: 0.88; }
 
                 .sj-btn-ghost {
                     background: transparent;
-                    color: var(--text-primary);
+                    color: var(--text);
                     border-color: var(--border);
                 }
                 .sj-btn-ghost:hover:not(:disabled) {
@@ -484,7 +556,7 @@ export default function SettingsPage() {
                 .sj-toggle-label {
                     font-size: 14px;
                     font-weight: 500;
-                    color: var(--text-primary);
+                    color: var(--text);
                     margin: 0 0 2px;
                 }
 
@@ -516,7 +588,7 @@ export default function SettingsPage() {
                     transition: transform 0.2s;
                     box-shadow: 0 1px 3px rgba(0,0,0,0.15);
                 }
-                .sj-switch input:checked + .sj-slider { background: var(--primary); }
+                .sj-switch input:checked + .sj-slider { background: var(--accent); }
                 .sj-switch input:checked + .sj-slider:before { transform: translateX(18px); }
 
                 .sj-toast {

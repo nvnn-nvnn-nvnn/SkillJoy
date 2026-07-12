@@ -6,13 +6,16 @@ import { apiFetch } from './api';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const isEmail = (e) => EMAIL_RE.test((e || '').trim());
 
-/** Public storefront subscribe. Idempotent on (creator, email). */
+/** Public storefront subscribe. Idempotent on (creator, email).
+ *  Goes through the backend (service role) — a direct anon-key upsert is
+ *  RLS-fragile and unvalidated; this matches the guest-checkout pattern. */
 export async function subscribe(creatorId, email, name = null, source = 'storefront') {
-  const { error } = await supabase
-    .from('subscribers')
-    .upsert({ creator_id: creatorId, email: email.trim().toLowerCase(), name, source },
-            { onConflict: 'creator_id,email', ignoreDuplicates: true });
-  if (error) throw error;
+  const res = await apiFetch('/api/public/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({ creatorId, email: email.trim().toLowerCase(), name, source }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Could not subscribe — try again.');
 }
 
 export async function listSubscribers(creatorId) {

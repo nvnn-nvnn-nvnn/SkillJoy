@@ -6,8 +6,10 @@ const supabase = require('../config/supabase');
 const GIG_REASONS     = ['Spam or misleading', 'Inappropriate content', 'Scam or fraud', 'Copyright violation', 'Other'];
 const USER_REASONS    = ['Harassment', 'Spam or misleading', 'Fake profile', 'Scam or fraud', 'Inappropriate behavior', 'Other'];
 const COMMENT_REASONS = ['Spam or misleading', 'Harassment', 'Hate speech', 'Inappropriate content', 'Illegal activity', 'Other'];
+// v3 products ("skills") — the storefront moderation surface.
+const SKILL_REASONS   = ['Scam or fraud', 'Stolen or pirated content', 'Sexual or explicit content', 'Illegal activity', 'Spam or misleading', 'Other'];
 
-const REASONS_BY_TYPE = { gig: GIG_REASONS, user: USER_REASONS, comment: COMMENT_REASONS };
+const REASONS_BY_TYPE = { gig: GIG_REASONS, user: USER_REASONS, comment: COMMENT_REASONS, skill: SKILL_REASONS };
 
 // POST /api/reports
 router.post('/', async (req, res) => {
@@ -18,7 +20,7 @@ router.post('/', async (req, res) => {
         if (!reportedType || !reportedId || !reason) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
-        if (!['gig', 'user', 'comment'].includes(reportedType)) {
+        if (!['gig', 'user', 'comment', 'skill'].includes(reportedType)) {
             return res.status(400).json({ error: 'Invalid report type' });
         }
 
@@ -39,6 +41,12 @@ router.post('/', async (req, res) => {
             const { data: gig } = await supabase.from('gigs').select('user_id').eq('id', reportedId).single();
             if (!gig) return res.status(404).json({ error: 'Gig not found' });
             if (gig.user_id === reporterId) return res.status(400).json({ error: 'Cannot report your own gig' });
+        }
+
+        if (reportedType === 'skill') {
+            const { data: skill } = await supabase.from('skills').select('creator_id').eq('id', reportedId).single();
+            if (!skill) return res.status(404).json({ error: 'Product not found' });
+            if (skill.creator_id === reporterId) return res.status(400).json({ error: 'Cannot report your own product' });
         }
 
         if (reportedType === 'comment') {

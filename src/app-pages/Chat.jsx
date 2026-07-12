@@ -1091,7 +1091,7 @@ export default function ChatPage() {
                                             <p style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', margin: '0 0 4px' }}>
                                                 Order Status
                                             </p>
-                                            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: 0, textTransform: 'capitalize' }}>
+                                            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0, textTransform: 'capitalize' }}>
                                                 {activeConvo.status?.replace(/_/g, ' ') ?? '—'}
                                             </p>
                                         </div>
@@ -1104,7 +1104,7 @@ export default function ChatPage() {
                                             <p style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', margin: '0 0 4px' }}>
                                                 Payment Status
                                             </p>
-                                            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: 0, textTransform: 'capitalize' }}>
+                                            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0, textTransform: 'capitalize' }}>
                                                 {activeConvo.payment_status?.replace(/_/g, ' ') ?? '—'}
                                             </p>
                                         </div>
@@ -1411,7 +1411,7 @@ export default function ChatPage() {
                             <strong>Before filing:</strong> Have you tried resolving this with the seller via chat? Most issues can be resolved directly without a dispute.
                         </div>
 
-                        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: 'var(--text-primary)' }}>
+                        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: 'var(--text)' }}>
                             Describe the issue <span style={{ color: '#ef4444' }}>*</span>
                         </label>
                         <textarea
@@ -1424,7 +1424,7 @@ export default function ChatPage() {
                                 border: '1.5px solid var(--border)', borderRadius: 8,
                                 fontSize: 14, fontFamily: 'inherit', resize: 'vertical',
                                 outline: 'none', lineHeight: 1.5,
-                                color: 'var(--text-primary)', background: 'var(--surface)',
+                                color: 'var(--text)', background: 'var(--surface)',
                             }}
                         />
 

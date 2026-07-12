@@ -67,6 +67,34 @@
   --shadow-accent-lg: 0 12px 30px rgb(var(--accent-rgb) / 0.28);
 }
 
+/* ── Site-wide DARK MODE ──────────────────────────────────────────────
+   Toggled by `data-theme="dark"` on <html> (see src/lib/theme.js). Only
+   the neutral system + shadows flip; --accent (brand green) stays. The
+   public storefront pins its OWN palette via .sf-mode-* so a visitor's
+   site theme never bleeds into a creator's page. */
+:root[data-theme="dark"] {
+  --bg: #101114;
+  --surface: #191B1F;
+  --surface-alt: #212329;
+  --border: #2B2E35;
+  --border-strong: #3B3F48;
+
+  --text: #F1EFEA;
+  --text-secondary: #B0ABA2;
+  --text-muted: #83807A;
+
+  --primary: #F1EFEA;          /* ink flips light so `color:var(--primary)` stays readable */
+  --primary-light: #0E2E27;
+  --accent-light: #0E2E27;     /* dark-tinted green fill instead of bright mint */
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.40), 0 1px 3px rgba(0,0,0,0.30);
+  --shadow: 0 2px 8px rgba(0,0,0,0.45), 0 1px 3px rgba(0,0,0,0.35);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.50), 0 2px 6px rgba(0,0,0,0.40);
+  --shadow-xl: 0 18px 44px rgba(0,0,0,0.55), 0 6px 14px rgba(0,0,0,0.45);
+
+  color-scheme: dark;          /* native controls, scrollbars, form fields go dark too */
+}
+
 *,
 *::before,
 *::after {

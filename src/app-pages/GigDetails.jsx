@@ -430,7 +430,7 @@ export default function GigDetailsPage() {
                     font-family: inherit;
                     transition: border-color 0.14s, color 0.14s;
                 }
-                .gd-back:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+                .gd-back:hover { border-color: var(--text-secondary); color: var(--text); }
 
                 /* Layout */
                 .gd-layout {
@@ -470,7 +470,7 @@ export default function GigDetailsPage() {
                     letter-spacing: -0.02em;
                     margin: 0 0 16px;
                     line-height: 1.2;
-                    color: var(--text-primary);
+                    color: var(--text);
                 }
                 .gd-meta {
                     display: flex;
@@ -482,7 +482,7 @@ export default function GigDetailsPage() {
                     font-size: 32px;
                     font-weight: 700;
                     letter-spacing: -0.02em;
-                    color: var(--text-primary);
+                    color: var(--text);
                 }
                 .gd-rating-pill {
                     display: inline-flex;
@@ -598,7 +598,7 @@ export default function GigDetailsPage() {
                     font-weight: 700;
                     letter-spacing: -0.03em;
                     line-height: 1;
-                    color: var(--text-primary);
+                    color: var(--text);
                 }
                 .gd-score-stars { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
                 .gd-score-label { font-size: 13px; color: var(--text-muted); margin-left: 6px; }
@@ -618,7 +618,7 @@ export default function GigDetailsPage() {
                     display: flex; align-items: center; justify-content: center;
                     font-size: 11px; font-weight: 700; flex-shrink: 0;
                 }
-                .gd-review-name { font-size: 13px; font-weight: 600; margin: 0 0 2px; color: var(--text-primary); }
+                .gd-review-name { font-size: 13px; font-weight: 600; margin: 0 0 2px; color: var(--text); }
                 .gd-review-date { font-size: 11px; color: var(--text-muted); white-space: nowrap; align-self: flex-start; }
                 .gd-review-body { font-size: 14px; color: var(--text-secondary); line-height: 1.5; margin: 0; }
 
@@ -643,11 +643,11 @@ export default function GigDetailsPage() {
                 }
                 .gd-provider-name {
                     font-size: 15px; font-weight: 600;
-                    color: var(--text-primary); text-decoration: none;
+                    color: var(--text); text-decoration: none;
                     display: block; margin-bottom: 3px;
                 }
                 .gd-provider-name:hover { text-decoration: underline; }
-                .gd-provider-rating { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+                .gd-provider-rating { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: var(--text); }
                 .gd-rating-muted { font-weight: 400; color: var(--text-muted); font-size: 12px; }
                 .gd-provider-bio { font-size: 13px; line-height: 1.5; color: var(--text-secondary); margin: 0 0 16px; }
                 .gd-avail { padding-top: 14px; border-top: 1px solid var(--border); }
@@ -668,8 +668,8 @@ export default function GigDetailsPage() {
                 .gd-offer-label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 8px; }
                 .gd-offer-input { display: flex; align-items: center; border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); transition: border-color 0.15s; }
                 .gd-offer-input:focus-within { border-color: var(--primary); }
-                .gd-offer-currency { padding: 12px 14px; font-size: 18px; font-weight: 700; color: var(--text-primary); background: var(--color-background-tertiary); border-right: 1px solid var(--border); }
-                .gd-offer-field { flex: 1; border: none; outline: none; padding: 12px 14px; font-size: 20px; font-weight: 700; font-family: inherit; color: var(--text-primary); background: transparent; }
+                .gd-offer-currency { padding: 12px 14px; font-size: 18px; font-weight: 700; color: var(--text); background: var(--color-background-tertiary); border-right: 1px solid var(--border); }
+                .gd-offer-field { flex: 1; border: none; outline: none; padding: 12px 14px; font-size: 20px; font-weight: 700; font-family: inherit; color: var(--text); background: transparent; }
                 .gd-offer-field::placeholder { color: var(--text-muted); font-weight: 400; font-size: 16px; }
                 .gd-offer-hint { font-size: 12px; color: var(--text-muted); margin: 6px 0 0; }
 
@@ -710,7 +710,7 @@ export default function GigDetailsPage() {
                 .gd-faq-question {
                     font-size: 15px;
                     font-weight: 600;
-                    color: var(--text-primary);
+                    color: var(--text);
                     margin-bottom: 8px;
                     line-height: 1.4;
                 }

@@ -27,6 +27,7 @@ export const DEFAULT_THEME = {
   product_glow: 'soft',     // 'none' | 'soft' | 'strong' — accent glow on product cards
   product_opacity: 100,     // 40–100 — product/link fill opacity (glass)
   product_blur: 0,          // 0–24 px — backdrop blur behind products/links (glass)
+  avatar_size: 96,          // px — profile picture diameter on the public page
   bio_size: 15,             // px — bio font size
   bio_weight: 400,          // 300–800 — bio font weight
   bio_glow: 0,              // 0–20 px — accent drop-shadow glow on the bio

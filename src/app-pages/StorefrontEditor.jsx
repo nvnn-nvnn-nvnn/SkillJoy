@@ -10,7 +10,7 @@ import {
 import { uploadBanner, uploadBgVideo, uploadAudio } from '@/lib/storage';
 import {
   Palette, Link2, LayoutTemplate, Eye, ImagePlus, X, Plus, ChevronUp, ChevronDown,
-  ExternalLink, Check, Upload, MousePointer2, Type, Video, Music, Wand2, SlidersHorizontal,
+  ExternalLink, Check, MousePointer2, Type, Video, Music, Wand2, SlidersHorizontal,
   Image as ImageIcon, Camera, AtSign, User,
 } from 'lucide-react';
 import { BrandIcon } from '@/lib/brandIcons';
@@ -76,6 +76,7 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
     '--lp-card-blur': `${theme.card_blur ?? 0}px`,
     '--lp-item-bg': `color-mix(in srgb, var(--lp-surface) ${theme.product_opacity ?? 100}%, transparent)`,
     '--lp-item-blur': `${theme.product_blur ?? 0}px`,
+    '--lp-avatar-size': `${Math.round((theme.avatar_size ?? 96) * 0.7)}px`, // preview is ~70% scale
     '--lp-bio-size': `${theme.bio_size ?? 15}px`,
     '--lp-bio-weight': theme.bio_weight ?? 400,
     '--lp-bio-glow': `${theme.bio_glow ?? 0}px`,
@@ -146,6 +147,8 @@ export default function StorefrontEditor() {
   const [subTab, setSubTab] = useState('customize');
   const [dropOpen, setDropOpen] = useState(false);
   const [toast, setToast] = useState('');
+  const [dragIdx, setDragIdx] = useState(null);   // product-order drag source
+  const [dragOver, setDragOver] = useState(null); // product-order drop target
 
   useEffect(() => {
     if (!profile) return;
@@ -215,6 +218,17 @@ export default function StorefrontEditor() {
     try { await reorderSkills(next.map(s => s.id)); } catch (e) { setErr(e.message); }
   }
 
+  // Drag-and-drop reorder (native HTML5). ADDITIVE — the up/down buttons stay
+  // as the accessible/touch fallback; both paths persist via reorderSkills.
+  async function dropSkill(from, to) {
+    if (from === to || from == null || to == null) return;
+    const next = [...skills];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setSkills(next);
+    try { await reorderSkills(next.map(s => s.id)); } catch (e) { setErr(e.message); }
+  }
+
   return (
     <div className="std">
       <title>Customize — SkillJoy</title>
@@ -265,6 +279,7 @@ export default function StorefrontEditor() {
                     {avatarUrl && <button className="std-removebtn" onClick={() => setAvatarUrl('')}><X size={13} /> Remove</button>}
                   </div>
                 </Field>
+                <Field label="Profile picture size"><Slider value={theme.avatar_size ?? 96} min={64} max={160} suffix="px" onChange={v => set({ avatar_size: v })} /></Field>
                 <Field label="Display name">
                   <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" />
                 </Field>
@@ -396,7 +411,17 @@ export default function StorefrontEditor() {
               <Panel icon={Wand2} title="Product order">
                 {skills.length === 0 && <p className="std-note">No published products yet.</p>}
                 {skills.map((s, i) => (
-                  <div key={s.id} className="std-orderrow">
+                  <div
+                    key={s.id}
+                    className={`std-orderrow${dragIdx === i ? ' dragging' : ''}${dragOver === i ? ' dragover' : ''}`}
+                    draggable
+                    onDragStart={() => setDragIdx(i)}
+                    onDragOver={e => { e.preventDefault(); if (dragOver !== i) setDragOver(i); }}
+                    onDragLeave={() => setDragOver(o => (o === i ? null : o))}
+                    onDrop={e => { e.preventDefault(); dropSkill(dragIdx, i); setDragIdx(null); setDragOver(null); }}
+                    onDragEnd={() => { setDragIdx(null); setDragOver(null); }}
+                  >
+                    <span className="std-grip" aria-hidden="true">⠿</span>
                     <span className="std-ordername">{s.title || 'Untitled'}</span>
                     <div className="std-orderbtns">
                       <button className="std-icobtn" disabled={i === 0} onClick={() => moveSkill(i, -1)}><ChevronUp size={16} /></button>
@@ -404,7 +429,7 @@ export default function StorefrontEditor() {
                     </div>
                   </div>
                 ))}
-                <p className="std-note"><Upload size={13} /> Drag-and-drop reordering — coming soon.</p>
+                {skills.length > 1 && <p className="std-note">Drag to reorder — or use the arrows.</p>}
               </Panel>
             </>
           )}
@@ -577,7 +602,11 @@ function Styles() {
     .std-toggle-row.on .std-toggle { background:var(--accent); }
     .std-toggle-row.on .std-toggle-knob { transform:translateX(18px); }
 
-    .std-orderrow { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-top:1px solid var(--border); }
+    .std-orderrow { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 6px; border-top:1px solid var(--border); cursor:grab; border-radius:8px; }
+    .std-orderrow:active { cursor:grabbing; }
+    .std-orderrow.dragging { opacity:.45; }
+    .std-orderrow.dragover { background:color-mix(in srgb, var(--accent) 9%, transparent); outline:1.5px dashed color-mix(in srgb, var(--accent) 45%, transparent); outline-offset:-1.5px; }
+    .std-grip { color:var(--text-muted); font-size:13px; cursor:grab; user-select:none; flex-shrink:0; }
     .std-orderrow:first-of-type { border-top:none; }
     .std-ordername { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .std-orderbtns { display:flex; gap:6px; }
@@ -634,8 +663,8 @@ function Styles() {
       display:flex; flex-direction:column; align-items:center; }
     .lp-panelbanner { height:78px; margin:-24px -16px 12px; background:var(--surface-alt) center/cover no-repeat; align-self:stretch; }
     .lp-hasbanner .lp-avatar { margin-top:-42px; position:relative; z-index:1; }
-    .lp-avatar { width:74px; height:74px; border-radius:50%; background:color-mix(in srgb, var(--accent) 16%, #fff) center/cover no-repeat;
-      display:flex; align-items:center; justify-content:center; font-weight:800; font-size:26px; color:var(--accent); border:3px solid var(--lp-surface); box-shadow:var(--shadow); }
+    .lp-avatar { width:var(--lp-avatar-size, 67px); height:var(--lp-avatar-size, 67px); border-radius:50%; background:color-mix(in srgb, var(--accent) 16%, #fff) center/cover no-repeat;
+      display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(var(--lp-avatar-size, 67px) * 0.35); color:var(--accent); border:3px solid var(--lp-surface); box-shadow:var(--shadow); }
     .lp-name { font-size:20px; font-weight:800; letter-spacing:-.01em; margin-top:12px; color:var(--lp-title, inherit); }
     .lp-anim .lp-name { animation:sfNameGlow 2.6s ease-in-out infinite; }
     .lp-handle { font-size:13px; font-weight:600; color:var(--accent); margin-top:2px; }

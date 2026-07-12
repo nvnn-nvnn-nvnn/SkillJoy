@@ -1308,7 +1308,7 @@ export default function MyOrders() {
                     font-size: 17px;
                     font-weight: 600;
                     margin: 0 0 4px;
-                    color: var(--text-primary);
+                    color: var(--text);
                     white-space: nowrap;
                     overflow: hidden;
                     text-overflow: ellipsis;
@@ -1343,7 +1343,7 @@ export default function MyOrders() {
                     justify-content: space-between;
                 }
                 .mo-detail-row span:first-child { color: var(--text-muted); }
-                .mo-detail-row span:last-child { font-weight: 500; color: var(--text-primary); }
+                .mo-detail-row span:last-child { font-weight: 500; color: var(--text); }
 
                 .mo-actions {
                     display: flex;

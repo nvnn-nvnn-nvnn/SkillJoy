@@ -5,8 +5,10 @@ const GIG_REASONS     = ['Spam or misleading', 'Inappropriate content', 'Scam or
 const USER_REASONS    = ['Harassment', 'Spam or misleading', 'Fake profile', 'Scam or fraud', 'Inappropriate behavior', 'Other'];
 const COMMENT_REASONS = ['Spam or misleading', 'Harassment', 'Hate speech', 'Inappropriate content', 'Illegal activity', 'Other'];
 
-const REASONS_BY_TYPE = { gig: GIG_REASONS, user: USER_REASONS, comment: COMMENT_REASONS };
-const TYPE_LABEL = { gig: 'gig', user: 'user', comment: 'comment' };
+const SKILL_REASONS   = ['Scam or fraud', 'Stolen or pirated content', 'Sexual or explicit content', 'Illegal activity', 'Spam or misleading', 'Other'];
+
+const REASONS_BY_TYPE = { gig: GIG_REASONS, user: USER_REASONS, comment: COMMENT_REASONS, skill: SKILL_REASONS };
+const TYPE_LABEL = { gig: 'gig', user: 'user', comment: 'comment', skill: 'product' };
 
 export default function ReportModal({ isOpen, onClose, reportedType, reportedId, reportedName }) {
     const [reason, setReason] = useState('');
@@ -67,7 +69,7 @@ export default function ReportModal({ isOpen, onClose, reportedType, reportedId,
                             Report {TYPE_LABEL[reportedType] ?? 'item'}
                         </h2>
                         <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--text-muted)' }}>
-                            Reporting: <strong style={{ color: 'var(--text-primary)' }}>{reportedName}</strong>
+                            Reporting: <strong style={{ color: 'var(--text)' }}>{reportedName}</strong>
                         </p>
 
                         <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>
@@ -80,7 +82,7 @@ export default function ReportModal({ isOpen, onClose, reportedType, reportedId,
                                 width: '100%', padding: '9px 12px', borderRadius: 8,
                                 border: '1px solid var(--border)', fontSize: 14,
                                 fontFamily: 'inherit', background: 'var(--surface)',
-                                color: 'var(--text-primary)', marginBottom: 14,
+                                color: 'var(--text)', marginBottom: 14,
                                 boxSizing: 'border-box',
                             }}
                         >

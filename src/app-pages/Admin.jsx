@@ -275,7 +275,7 @@ export default function AdminPage() {
                     </button>
                     <div style={{ textAlign: 'right' }}>
                         <p style={{ margin: 0, fontSize: 12, color: '#000' }}>Signed in as</p>
-                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)' }}>{ADMIN_EMAIL}</p>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, fontFamily: 'monospace', color: 'var(--text)' }}>{ADMIN_EMAIL}</p>
                     </div>
                     <div style={{ width: 38, height: 38, borderRadius: '50%', background: '#1a1a1a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700 }}>A</div>
                 </div>
@@ -353,11 +353,11 @@ export default function AdminPage() {
                                         <div>
                                             <p style={{ fontWeight: 700, fontSize: 16, margin: '0 0 4px' }}>{d.gig?.title ?? '—'}</p>
                                             <div style={{ display: 'flex', gap: 16, fontSize: 13, color: 'var(--text-muted)' }}>
-                                                <span>Buyer: <strong style={{ color: 'var(--text-primary)' }}>{d.requester?.full_name ?? '—'}</strong></span>
+                                                <span>Buyer: <strong style={{ color: 'var(--text)' }}>{d.requester?.full_name ?? '—'}</strong></span>
                                                 <span>·</span>
-                                                <span>Seller: <strong style={{ color: 'var(--text-primary)' }}>{d.provider?.full_name ?? '—'}</strong></span>
+                                                <span>Seller: <strong style={{ color: 'var(--text)' }}>{d.provider?.full_name ?? '—'}</strong></span>
                                                 <span>·</span>
-                                                <span>Amount: <strong style={{ color: 'var(--text-primary)' }}>${d.payment_amount?.toFixed(2) ?? '—'}</strong></span>
+                                                <span>Amount: <strong style={{ color: 'var(--text)' }}>${d.payment_amount?.toFixed(2) ?? '—'}</strong></span>
                                             </div>
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
@@ -507,8 +507,8 @@ export default function AdminPage() {
                                     </div>
 
                                     {/* How this works explanation */}
-                                    <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 18px', marginBottom: 24, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                                        <strong style={{ color: 'var(--text-primary)' }}>How to read this:</strong> Your Stripe balance holds both your profit ($3.50 flat service fees) and funds reserved for sellers. <strong style={{ color: '#92400e' }}>Owed to Sellers</strong> is money that must go out once clearance windows expire. <strong style={{ color: '#15803d' }}>Actual Profit</strong> is what's truly yours right now.
+                                    <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 18px', marginBottom: 24, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                                        <strong style={{ color: 'var(--text)' }}>How to read this:</strong> Your Stripe balance holds both your profit ($3.50 flat service fees) and funds reserved for sellers. <strong style={{ color: '#92400e' }}>Owed to Sellers</strong> is money that must go out once clearance windows expire. <strong style={{ color: '#15803d' }}>Actual Profit</strong> is what's truly yours right now.
                                     </div>
 
                                     {/* Pending transfers list */}
@@ -636,7 +636,7 @@ export default function AdminPage() {
                                 <div key={r.id} style={{
                                     background: 'var(--surface)', border: '1px solid var(--border)',
                                     borderRadius: 14, padding: '18px 20px',
-                                    borderLeft: `4px solid ${r.status === 'dismissed' ? '#d1d5db' : '#f97316'}`,
+                                    borderLeft: `4px solid ${r.status === 'dismissed' ? 'var(--border-strong)' : '#f97316'}`,
                                     opacity: r.status === 'dismissed' ? 0.6 : 1,
                                 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
@@ -644,17 +644,17 @@ export default function AdminPage() {
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                                                 <span style={{
                                                     fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase',
-                                                    background: r.reported_type === 'gig' ? '#eff6ff' : r.reported_type === 'comment' ? '#fef3c7' : '#faf5ff',
-                                                    color: r.reported_type === 'gig' ? '#1e40af' : r.reported_type === 'comment' ? '#92400e' : '#6b21a8',
-                                                    border: `1px solid ${r.reported_type === 'gig' ? '#bfdbfe' : r.reported_type === 'comment' ? '#fde68a' : '#d8b4fe'}`,
+                                                    background: r.reported_type === 'gig' ? '#eff6ff' : r.reported_type === 'comment' ? '#fef3c7' : r.reported_type === 'skill' ? '#ecfdf5' : '#faf5ff',
+                                                    color: r.reported_type === 'gig' ? '#1e40af' : r.reported_type === 'comment' ? '#92400e' : r.reported_type === 'skill' ? '#047857' : '#6b21a8',
+                                                    border: `1px solid ${r.reported_type === 'gig' ? '#bfdbfe' : r.reported_type === 'comment' ? '#fde68a' : r.reported_type === 'skill' ? '#a7f3d0' : '#d8b4fe'}`,
                                                 }}>
-                                                    {r.reported_type}
+                                                    {r.reported_type === 'skill' ? 'product' : r.reported_type}
                                                 </span>
                                                 <span style={{
                                                     fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase',
-                                                    background: r.status === 'dismissed' ? '#f3f4f6' : '#fff7ed',
-                                                    color: r.status === 'dismissed' ? '#6b7280' : '#c2410c',
-                                                    border: `1px solid ${r.status === 'dismissed' ? '#e5e7eb' : '#fdba74'}`,
+                                                    background: r.status === 'dismissed' ? 'var(--surface-alt)' : '#fff7ed',
+                                                    color: r.status === 'dismissed' ? 'var(--text-muted)' : '#c2410c',
+                                                    border: `1px solid ${r.status === 'dismissed' ? 'var(--border)' : '#fdba74'}`,
                                                 }}>
                                                     {r.status}
                                                 </span>
@@ -662,6 +662,7 @@ export default function AdminPage() {
                                             <Link
                                                 to={
                                                     r.reported_type === 'gig' ? `/gigs/${r.reported_id}`
+                                                    : r.reported_type === 'skill' ? (r.skill_url || '#')
                                                     : r.reported_type === 'comment'
                                                         ? (r.comment_target_type === 'gig' ? `/gigs/${r.comment_target_id}` : `/profile/${r.comment_target_id}`)
                                                     : `/profile/${r.reported_id}`
@@ -687,7 +688,7 @@ export default function AdminPage() {
                                                     to={`/profile/${r.reporter?.id}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    style={{ fontWeight: 600, color: 'var(--text-primary)', textDecoration: 'none' }}
+                                                    style={{ fontWeight: 600, color: 'var(--text)', textDecoration: 'none' }}
                                                     onMouseOver={e => e.currentTarget.style.textDecoration = 'underline'}
                                                     onMouseOut={e => e.currentTarget.style.textDecoration = 'none'}
                                                 >
@@ -706,6 +707,24 @@ export default function AdminPage() {
                                                         fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
                                                     }}>
                                                     🗑 Remove Gig
+                                                </button>
+                                            )}
+                                            {r.reported_type === 'skill' && r.status === 'pending' && r.skill_status === 'published' && (
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!(await confirm({ title: 'Take this product down?', message: 'It will be unpublished (reversible) and the creator notified.', confirmLabel: 'Take down', danger: true }))) return;
+                                                        const res = await apiFetch('/api/admin/takedown-skill', { method: 'POST', body: JSON.stringify({ skillId: r.reported_id }) });
+                                                        const data = await res.json();
+                                                        if (!res.ok) { showToast('Failed: ' + (data.error || 'unknown'), 'error'); return; }
+                                                        showToast('Product taken down', 'success');
+                                                        loadReports();
+                                                    }}
+                                                    style={{
+                                                        background: '#fff5f5', border: '1.5px solid #fca5a5',
+                                                        color: '#dc2626', padding: '6px 14px', borderRadius: 8,
+                                                        fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                                                    }}>
+                                                    🚫 Take down
                                                 </button>
                                             )}
                                             {r.reported_type === 'comment' && r.status === 'pending' && (
@@ -730,8 +749,8 @@ export default function AdminPage() {
                                                 <button
                                                     onClick={() => dismissReport(r.id)}
                                                     style={{
-                                                        background: '#f3f4f6', border: '1px solid #e5e7eb',
-                                                        color: '#6b7280', padding: '6px 14px', borderRadius: 8,
+                                                        background: 'var(--surface-alt)', border: '1px solid var(--border)',
+                                                        color: 'var(--text-muted)', padding: '6px 14px', borderRadius: 8,
                                                         fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
                                                     }}>
                                                     Dismiss

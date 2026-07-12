@@ -109,7 +109,7 @@ export default function GigModalInfo({ order, isOpen, onClose, isBuyer, onWithdr
                         padding: 2px 9px; border-radius: 100px; border: 1px solid #e2d9ce;
                     }
                     .gmi-order-id { font-size: 11px; color: var(--text-muted); font-family: monospace; }
-                    .gmi-title { font-size: 20px; font-weight: 700; margin: 0 0 4px; color: var(--text-primary); }
+                    .gmi-title { font-size: 20px; font-weight: 700; margin: 0 0 4px; color: var(--text); }
                     .gmi-subtitle { font-size: 13px; color: var(--text-muted); margin: 0; }
 
                     .gmi-status-row {
@@ -121,12 +121,12 @@ export default function GigModalInfo({ order, isOpen, onClose, isBuyer, onWithdr
                         border-radius: 10px; padding: 10px 12px;
                     }
                     .gmi-status-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
-                    .gmi-status-value { font-size: 13px; font-weight: 600; color: var(--text-primary); text-transform: capitalize; }
+                    .gmi-status-value { font-size: 13px; font-weight: 600; color: var(--text); text-transform: capitalize; }
                     .gmi-amount { color: #111; }
 
                     .gmi-section { margin-bottom: 16px; }
                     .gmi-section h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin: 0 0 6px; }
-                    .gmi-body-text { font-size: 14px; color: var(--text-primary); line-height: 1.6; margin: 0; }
+                    .gmi-body-text { font-size: 14px; color: var(--text); line-height: 1.6; margin: 0; }
 
                     .gmi-actions { display: flex; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
                     .gmi-actions .btn { flex: 1; min-width: 130px; }

@@ -29,8 +29,12 @@ class ErrorBoundary extends Component {
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider, useUser, useProfile, useAuth } from './lib/stores'
 import { DialogProvider } from './components/Dialog'
+import { getTheme, applyTheme } from './lib/theme'
 import './index.css'
 import './App.css'
+
+// Apply the saved/OS theme before first paint to avoid a light→dark flash.
+applyTheme(getTheme())
 
 // Layout
 import Header from './components/Header'

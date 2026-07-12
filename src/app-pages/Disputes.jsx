@@ -428,7 +428,7 @@ export default function Disputes() {
                     font-size: 18px;
                     font-weight: 600;
                     margin: 0 0 4px 0;
-                    color: var(--text-primary);
+                    color: var(--text);
                 }
 
                 .dispute-meta {
@@ -468,7 +468,7 @@ export default function Disputes() {
 
                 .dispute-value {
                     font-weight: 500;
-                    color: var(--text-primary);
+                    color: var(--text);
                 }
 
                 .dispute-reason-box {

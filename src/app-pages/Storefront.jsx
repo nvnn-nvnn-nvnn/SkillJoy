@@ -78,6 +78,7 @@ export default function Storefront() {
     '--sf-panel-blur': `${theme.card_blur ?? 0}px`,
     '--sf-item-bg': `color-mix(in srgb, var(--surface) ${theme.product_opacity ?? 100}%, transparent)`,
     '--sf-item-blur': `${theme.product_blur ?? 0}px`,
+    '--sf-avatar-size': `${theme.avatar_size ?? 96}px`,
     '--sf-bio-size': `${theme.bio_size ?? 15}px`,
     '--sf-bio-weight': theme.bio_weight ?? 400,
     '--sf-bio-glow': `${theme.bio_glow ?? 0}px`,
@@ -338,6 +339,14 @@ function StoreStyles() {
       .sf-overlay-rain, .sf-overlay-snow, .sf-overlay-vhs { animation:none; }
       .sf-pfx-glow { box-shadow:0 0 24px color-mix(in srgb, var(--accent) 32%, transparent); }
     }
+    /* The storefront pins BOTH palettes explicitly so a visitor's site-wide
+       dark mode (data-theme on <html>) can never override a creator's chosen
+       page mode — the public page always reflects the creator's setting. */
+    .sf-mode-light {
+      --bg:#FBF8F2; --surface:#ffffff; --surface-alt:#F4F1EA;
+      --text:#1A1916; --text-secondary:#5B574E; --text-muted:#97917F;
+      --border:#ECE6DB; --border-strong:#DCD4C6;
+    }
     .sf-mode-dark {
       --bg:#121316; --surface:#1b1c20; --surface-alt:#24262b;
       --text:#f2f0ea; --text-secondary:#b6b3ab; --text-muted:#85817a;
@@ -381,7 +390,7 @@ function StoreStyles() {
 
     /* Header / hero — sits inside the glass panel */
     .sf-head { text-align:center; margin:0 0 22px; }
-    .sf-avatar { width:100px; height:100px; border-radius:50%; margin:0 auto 14px; background:color-mix(in srgb, var(--accent) 14%, white) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:34px; color:var(--accent); border:4px solid var(--surface); box-shadow:var(--shadow-lg); }
+    .sf-avatar { width:var(--sf-avatar-size, 96px); height:var(--sf-avatar-size, 96px); border-radius:50%; margin:0 auto 14px; background:color-mix(in srgb, var(--accent) 14%, white) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(var(--sf-avatar-size, 96px) * 0.34); color:var(--accent); border:4px solid var(--surface); box-shadow:var(--shadow-lg); }
     .sf-name { font-size:27px; font-weight:800; font-family:var(--font-display); letter-spacing:-.02em; line-height:1.15; color:var(--sf-title, inherit); }
     .sf-handle { color:var(--accent); font-size:14px; font-weight:600; margin-top:3px; }
     .sf-bio { color:var(--text-secondary); font-size:var(--sf-bio-size, 15px); font-weight:var(--sf-bio-weight, 400); margin:12px auto 0; line-height:1.55; max-width:42ch;
@@ -389,10 +398,16 @@ function StoreStyles() {
     .sf-socials { display:flex; gap:16px; justify-content:center; margin-top:20px; }
     /* Bare icons (no circle) with a shape-hugging glow via filter:drop-shadow. */
     .sf-social { display:inline-flex; align-items:center; justify-content:center; padding:5px; color:var(--text); text-decoration:none;
-      transition:transform .16s cubic-bezier(.34,1.4,.64,1), color .14s ease, filter .16s ease;
-      filter:drop-shadow(0 0 7px color-mix(in srgb, var(--accent) 55%, transparent)); }
-    .sf-social:hover { transform:translateY(-2px) scale(1.12); color:var(--accent);
-      filter:drop-shadow(0 0 5px var(--accent)) drop-shadow(0 0 14px var(--accent)); }
+      transition:transform .18s cubic-bezier(.34,1.4,.64,1), color .14s ease, filter .18s ease;
+      /* Layered bloom: tight core + soft halo, both tracking the accent. */
+      filter:
+        drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 75%, transparent))
+        drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 45%, transparent)); }
+    .sf-social:hover { transform:translateY(-3px) scale(1.14); color:var(--accent);
+      filter:
+        drop-shadow(0 0 4px var(--accent))
+        drop-shadow(0 0 12px color-mix(in srgb, var(--accent) 80%, transparent))
+        drop-shadow(0 0 24px color-mix(in srgb, var(--accent) 55%, transparent)); }
 
     /* Product cards + link buttons — a separate section below the profile panel */
     .sf-list { display:flex; flex-direction:column; gap:14px; margin-top:18px; }

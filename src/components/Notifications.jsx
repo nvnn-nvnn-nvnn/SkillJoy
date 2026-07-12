@@ -397,7 +397,7 @@ export default function Notifications() {
 
                 .notif-expand-btn:hover {
                     background: var(--surface-alt);
-                    color: var(--text-primary);
+                    color: var(--text);
                 }
 
                 .notification-icon {
@@ -413,7 +413,7 @@ export default function Notifications() {
                 .notification-title {
                     font-size: 14px;
                     font-weight: 600;
-                    color: var(--text-primary);
+                    color: var(--text);
                     margin: 0 0 4px 0;
                 }
 

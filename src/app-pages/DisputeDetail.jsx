@@ -362,7 +362,7 @@ export default function DisputeDetail() {
                     color: var(--text-secondary); cursor: pointer; font-family: inherit;
                     transition: border-color 0.14s, color 0.14s;
                 }
-                .dd-back:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+                .dd-back:hover { border-color: var(--text-secondary); color: var(--text); }
 
                 .dd-header {
                     display: flex; justify-content: space-between; align-items: flex-start;
@@ -380,7 +380,7 @@ export default function DisputeDetail() {
                 .dd-title { font-size: 22px; font-weight: 700; margin: 0 0 10px; letter-spacing: -0.02em; }
                 .dd-parties { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-muted); flex-wrap: wrap; }
                 .dd-dot { color: var(--border); }
-                .dd-amount { font-weight: 700; color: var(--text-primary); }
+                .dd-amount { font-weight: 700; color: var(--text); }
                 .dd-status-block { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
                 .dd-badge {
                     padding: 5px 14px; border-radius: 100px;
@@ -432,7 +432,7 @@ export default function DisputeDetail() {
                     display: flex; align-items: center; gap: 8px;
                     margin-bottom: 8px; flex-wrap: wrap;
                 }
-                .dd-evidence-meta strong { font-size: 13px; color: var(--text-primary); }
+                .dd-evidence-meta strong { font-size: 13px; color: var(--text); }
                 .dd-evidence-tag {
                     font-size: 10px; font-weight: 600; text-transform: uppercase;
                     letter-spacing: 0.04em; padding: 1px 7px; border-radius: 100px;
@@ -440,13 +440,13 @@ export default function DisputeDetail() {
                 }
                 .dd-tag-seller { background: #f0fdf4; color: #166534; border-color: #86efac; }
                 .dd-evidence-time { font-size: 11px; color: var(--text-muted); margin-left: auto; }
-                .dd-evidence-text { font-size: 14px; color: var(--text-primary); line-height: 1.6; margin: 0; white-space: pre-wrap; }
+                .dd-evidence-text { font-size: 14px; color: var(--text); line-height: 1.6; margin: 0; white-space: pre-wrap; }
 
                 .dd-textarea {
                     width: 100%; padding: 12px 14px; border: 1.5px solid var(--border);
                     border-radius: 10px; font-family: inherit; font-size: 14px;
                     line-height: 1.6; resize: vertical; box-sizing: border-box;
-                    color: var(--text-primary); background: var(--surface);
+                    color: var(--text); background: var(--surface);
                     transition: border-color 0.15s; margin-bottom: 12px; display: block;
                 }
                 .dd-textarea:focus { outline: none; border-color: var(--primary); }
@@ -468,7 +468,7 @@ export default function DisputeDetail() {
                     font-size: 13px; color: var(--text-muted);
                 }
                 .dd-detail-row:last-child { border-bottom: none; }
-                .dd-detail-row span:last-child { font-weight: 500; color: var(--text-primary); }
+                .dd-detail-row span:last-child { font-weight: 500; color: var(--text); }
                 .dd-mono { font-family: monospace; font-size: 12px; }
                 .dd-chip {
                     font-size: 11px; font-weight: 600; text-transform: capitalize;

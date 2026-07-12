@@ -281,7 +281,7 @@ export default function GigsPage() {
             <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
                 <div style={{ background: '#fff', borderRadius: 20, padding: '48px 40px', textAlign: 'center', maxWidth: 400, boxShadow: '0 2px 16px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
                     <div style={{ fontSize: 48 }}>🎓</div>
-                    <h2 style={{ fontWeight: 700, fontSize: 22, margin: 0, color: 'var(--text-primary)' }}>Verify your university email to browse Gigs</h2>
+                    <h2 style={{ fontWeight: 700, fontSize: 22, margin: 0, color: 'var(--text)' }}>Verify your university email to browse Gigs</h2>
                     <p style={{ color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
                         Gigs are only available to verified university members. Skill Swaps are always open to you.
                     </p>
@@ -921,7 +921,7 @@ export default function GigsPage() {
         }
         .sj-clear-filters-btn:hover {
             border-color: var(--text-secondary);
-            color: var(--text-primary);
+            color: var(--text);
         }
 
         /* ── Recent searches ── */
@@ -946,7 +946,7 @@ export default function GigsPage() {
             color: var(--text-muted);
             font-family: inherit;
         }
-        .sj-clear-btn:hover { color: var(--text-primary); }
+        .sj-clear-btn:hover { color: var(--text); }
 
         /* ── Favorite button ── */
         .sj-fav-btn {
