@@ -61,6 +61,7 @@ import AddProduct from './app-pages/AddProduct'
 import LessonEditor from './app-pages/LessonEditor'
 import Locker from './app-pages/Locker'
 import Dashboard from './app-pages/Dashboard'
+import Analytics from './app-pages/Analytics'
 import ServicesDashboard from './app-pages/ServicesDashboard'
 import Storefront from './app-pages/Storefront'
 import StorefrontEditor from './app-pages/StorefrontEditor'
@@ -110,6 +111,7 @@ function AppRoutes() {
           <Route path="/locker" element={<Locker />} />
           <Route path="/locker/:skillId" element={<Locker />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/analytics" element={<Analytics />} />
           {/* Old /services route folded into the products hub. */}
           <Route path="/services" element={<Navigate to="/build" replace />} />
           <Route path="/discover" element={<Discover />} />

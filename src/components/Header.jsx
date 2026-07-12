@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useUser, useProfile, useAuth } from '@/lib/stores';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  Package, Store, BarChart3, Compass, Lock, ExternalLink, User, Settings,
+  Package, Store, BarChart3, Compass, Lock, ExternalLink, User, Settings, TrendingUp,
 } from 'lucide-react';
 import Notifications from './Notifications';
 import SkillJoyGreen from '../assets/skilljoy-green.svg';
@@ -77,7 +77,10 @@ export default function Header() {
 
           <span className="sb-group">Grow</span>
           <NavItem to="/dashboard" icon={BarChart3} label="Dashboard" active={on('/dashboard')} onClick={close} />
-          <NavItem to="/discover" icon={Compass} label="Discover" active={on('/discover')} onClick={close} />
+          <NavItem to="/analytics" icon={TrendingUp} label="Analytics" active={on('/analytics')} onClick={close} />
+          {isAdmin && (
+            <NavItem to="/discover" icon={Compass} label="Discover" active={on('/discover')} onClick={close} />
+          )}
           <NavItem to="/locker" icon={Lock} label="Locker" active={on('/locker')} onClick={close} />
 
           {isAdmin && <NavItem to="/admin" icon={Settings} label="Admin" active={currentPath === '/admin'} onClick={close} />}

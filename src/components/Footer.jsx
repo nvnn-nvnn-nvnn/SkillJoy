@@ -3,9 +3,13 @@ import { LEGACY_MODE } from '@/lib/config';
 import SkillJoyLogo from '../assets/skilljoy-logo3.svg'
 import SkillJoyGreenWhite from "../assets/skilljoy-green-White.svg"
 
+// The big marketing footer only belongs on the public marketing pages — the
+// app, storefront /@handle, product, checkout, etc. all render without it.
+const MARKETING_PATHS = ['/', '/about', '/contact', '/how-it-works', '/terms', '/privacy', '/refund-policy'];
+
 export default function Footer() {
     const { pathname } = useLocation();
-    if (pathname === '/chat' || pathname === '/onboarding') return null;
+    if (!MARKETING_PATHS.includes(pathname)) return null;
 
     return (
         <footer style={{

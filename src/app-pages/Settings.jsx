@@ -199,6 +199,16 @@ export default function SettingsPage() {
                         Update password
                     </button>
                 </div>
+
+                {profile?.tos_accepted_at && (
+                    <>
+                        <div className="sj-divider" />
+                        <p className="sj-hint" style={{ margin: 0 }}>
+                            Terms accepted on {new Date(profile.tos_accepted_at).toLocaleDateString()}
+                            {profile.tos_version ? ` (v${profile.tos_version})` : ''}
+                        </p>
+                    </>
+                )}
             </section>
 
             {/* Appearance — site-wide light/dark */}

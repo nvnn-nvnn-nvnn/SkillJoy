@@ -7,6 +7,7 @@ export const DEFAULT_THEME = {
   accent: '#00CC99',
   layout: 'list',           // 'list' | 'grid'
   banner_url: '',
+  show_avatar: true,        // false → hide the profile picture on the storefront
   socials: [],
   // ── Deeper theming (guns.lol-style) ──
   mode: 'light',            // 'light' | 'dark' — drives surface/text palette
@@ -32,6 +33,7 @@ export const DEFAULT_THEME = {
   bio_weight: 400,          // 300–800 — bio font weight
   bio_glow: 0,              // 0–20 px — accent drop-shadow glow on the bio
   // ── Phase 2: guns.lol effects ──
+  glow_intensity: 0,        // 0–40 px — master accent glow across name/avatar/panel/links
   overlay: 'none',          // 'none' | 'rain' | 'snow' | 'vhs' — full-page overlay effect
   audio_url: '',            // site audio url — play/mute pill on the storefront
   cursor_fx: 'none',        // 'none' | 'trail' | 'sparkle' — pointer particle effect
@@ -43,6 +45,12 @@ export const SOCIAL_TYPES = [
   { type: 'tiktok',    label: 'TikTok',    icon: '🎵' },
   { type: 'youtube',   label: 'YouTube',   icon: '▶️' },
   { type: 'x',         label: 'X',         icon: '𝕏' },
+  { type: 'bluesky',   label: 'Bluesky',   icon: '🦋' },
+  { type: 'snapchat',  label: 'Snapchat',  icon: '👻' },
+  { type: 'onlyfans',  label: 'OnlyFans',  icon: '🔵' },
+  { type: 'roblox',    label: 'Roblox',    icon: '🎮' },
+  { type: 'bitcoin',   label: 'Bitcoin',   icon: '₿' },
+  { type: 'ethereum',  label: 'Ethereum',  icon: 'Ξ' },
   { type: 'website',   label: 'Website',   icon: '🌐' },
 ];
 

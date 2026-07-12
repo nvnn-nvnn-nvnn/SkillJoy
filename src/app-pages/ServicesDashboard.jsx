@@ -101,6 +101,7 @@ export default function ServicesDashboard() {
       id: s.id,
       kind: TYPE_BY_ID[s.kind] ? s.kind : 'digital',
       title: s.title || 'Untitled Skill',
+      cover: s.cover_url || null,
       status: statusOf(s),
       price: s.price_cents ?? 0,
       recurring: s.pricing_type === 'membership',
@@ -248,7 +249,12 @@ export default function ServicesDashboard() {
                   <span className={`sv-status ${st.cls}`}>{st.label}</span>
                 </div>
 
-                <h3 className="sv-title">{s.title}</h3>
+                <div className="sv-title-row">
+                  {s.cover
+                    ? <img className="sv-thumb" src={s.cover} alt="" />
+                    : <div className="sv-thumb sv-thumb-ph" aria-hidden="true">🖼️</div>}
+                  <h3 className="sv-title">{s.title}</h3>
+                </div>
                 <div className="sv-price">
                   {s.price === 0 ? <span className="sv-free">Free</span> : money(s.price)}
                   {s.recurring && <span className="sv-per">/mo</span>}
@@ -361,6 +367,10 @@ function Styles() {
     .sv-st-active { background: #dcfce7; color: #15803d; }
     .sv-st-draft { background: #f3f4f6; color: #6b7280; }
     .sv-st-sched { background: #FEF3C7; color: #92400E; }
+    .sv-title-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .sv-thumb { width: 48px; height: 48px; border-radius: 10px; object-fit: cover; flex: 0 0 auto;
+      border: 1px solid var(--border); background: var(--surface-alt); }
+    .sv-thumb-ph { display: flex; align-items: center; justify-content: center; font-size: 20px; }
     .sv-title { font-size: 16px; font-weight: 700; margin: 0; line-height: 1.3; }
     .sv-price { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
     .sv-per { font-size: 13px; font-weight: 600; color: var(--text-muted); }

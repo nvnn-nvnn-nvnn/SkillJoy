@@ -17,3 +17,9 @@ export const SKILL_PLATFORM_FEE_BPS = 500;
 export function estimateSkillFeeCents(priceCents) {
   return Math.round((priceCents * SKILL_PLATFORM_FEE_BPS) / 10000);
 }
+
+// Current Terms-of-Service version. Recorded on profiles.tos_version when a
+// user accepts at onboarding (proof of consent — migration 025). Bump this
+// when the ToS text materially changes; NOTE: re-acceptance prompting for
+// existing users on a version bump is not implemented yet.
+export const TOS_VERSION = '2026-07-11';

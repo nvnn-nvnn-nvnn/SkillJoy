@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth } from '@/lib/stores';
+import { TOS_VERSION } from '@/lib/config';
 import SkillJoyGreen from '../../assets/skilljoy-green.svg';
 
 const TOTAL_STEPS = 1;
@@ -101,6 +102,10 @@ export default function OnboardingPage() {
             username,
             bio: bio.trim(),
             phone: phone.trim() || null,
+            // Proof of consent — agreedTos is required by the validation above,
+            // so acceptance is always recorded with the save (migration 025).
+            tos_accepted_at: new Date().toISOString(),
+            tos_version: TOS_VERSION,
         });
         setBusy(false);
         if (e) {

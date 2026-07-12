@@ -5,7 +5,6 @@ import { useDialog } from '@/components/Dialog';
 import { listCreatorSales, refundPurchase } from '@/lib/purchases';
 import { listCreatorBookings } from '@/lib/booking';
 import PayoutStatus from '@/components/PayoutStatus';
-import AnalyticsCards from '@/components/AnalyticsCards';
 import AvailabilityEditor from '@/components/AvailabilityEditor';
 import AudiencePanel from '@/components/AudiencePanel';
 import DiscountsPanel from '@/components/DiscountsPanel';
@@ -114,11 +113,13 @@ export default function Dashboard() {
       {tab === 'overview' && (
         <div className="db-panel db-grid">
           <section className="db-col">
-            <h2 className="db-h2">Analytics</h2>
-            <AnalyticsCards creatorId={user.id} />
+            <PayoutStatus />
           </section>
           <section className="db-col">
-            <PayoutStatus />
+            <Link to="/analytics" className="db-analytics-cta">
+              <span className="db-cta-h">📈 Analytics</span>
+              <span className="db-cta-sub">See your views, conversion funnel, and daily trends →</span>
+            </Link>
           </section>
         </div>
       )}
@@ -233,6 +234,11 @@ function DashStyles() {
     .db-panel { animation:db-fade .16s ease; }
     .db-panel.db-grid { margin-bottom:0; }
     @keyframes db-fade { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:none; } }
+
+    .db-analytics-cta { display:flex; flex-direction:column; gap:4px; padding:20px; border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); text-decoration:none; transition:border-color .14s ease, transform .14s ease; }
+    .db-analytics-cta:hover { border-color:var(--accent); transform:translateY(-2px); }
+    .db-cta-h { font-size:16px; font-weight:800; color:var(--text); }
+    .db-cta-sub { font-size:13px; color:var(--text-secondary); }
 
     @media (max-width:720px) {
       .db-top { grid-template-columns:1fr 1fr; }

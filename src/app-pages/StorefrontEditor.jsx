@@ -80,6 +80,8 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
     '--lp-bio-size': `${theme.bio_size ?? 15}px`,
     '--lp-bio-weight': theme.bio_weight ?? 400,
     '--lp-bio-glow': `${theme.bio_glow ?? 0}px`,
+    '--lp-glow': `${(theme.glow_intensity ?? 0) * 0.6}px`,
+    '--lp-glow-strong': `${(theme.glow_intensity ?? 0) * 1.0}px`,
   };
   if (theme.text_color) style['--lp-text'] = theme.text_color;
   if (theme.title_color) style['--lp-title'] = theme.title_color;
@@ -96,7 +98,7 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
       {theme.audio_url && <span className="lp-audiopill" aria-hidden="true"><Music size={11} /></span>}
       <div className={`lp-inner${theme.banner_url ? ' lp-hasbanner' : ''}${theme.card_opacity === 0 ? ' lp-ghost' : ''}${theme.profile_fx && theme.profile_fx !== 'none' ? ` lp-pfx-${theme.profile_fx}` : ''}`}>
         {theme.banner_url && <div className="lp-panelbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} />}
-        <div className="lp-avatar" style={avatar ? { backgroundImage: `url(${avatar})` } : {}}>{!avatar && initials(name)}</div>
+        {theme.show_avatar !== false && <div className="lp-avatar" style={avatar ? { backgroundImage: `url(${avatar})` } : {}}>{!avatar && initials(name)}</div>}
         <div className="lp-name">{name}</div>
         <div className="lp-handle">@{handle}</div>
         {bio && <div className="lp-bio">{bio}</div>}
@@ -279,7 +281,10 @@ export default function StorefrontEditor() {
                     {avatarUrl && <button className="std-removebtn" onClick={() => setAvatarUrl('')}><X size={13} /> Remove</button>}
                   </div>
                 </Field>
-                <Field label="Profile picture size"><Slider value={theme.avatar_size ?? 96} min={64} max={160} suffix="px" onChange={v => set({ avatar_size: v })} /></Field>
+                <Toggle on={theme.show_avatar !== false} onChange={v => set({ show_avatar: v })} label="Show profile picture" hint="Hide it to lead with your name" />
+                {theme.show_avatar !== false && (
+                  <Field label="Profile picture size"><Slider value={theme.avatar_size ?? 96} min={64} max={160} suffix="px" onChange={v => set({ avatar_size: v })} /></Field>
+                )}
                 <Field label="Display name">
                   <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" />
                 </Field>
@@ -398,6 +403,7 @@ export default function StorefrontEditor() {
                 <Field label="Product glow"><Seg value={theme.product_glow || 'none'} onChange={v => set({ product_glow: v })} options={[{ v: 'none', label: 'None' }, { v: 'soft', label: 'Soft' }, { v: 'strong', label: 'Strong' }]} /></Field>
                 <Field label="Product opacity (glass)"><Slider value={theme.product_opacity ?? 100} min={40} max={100} suffix="%" onChange={v => set({ product_opacity: v })} /></Field>
                 <Field label="Product blur (glass)"><Slider value={theme.product_blur ?? 0} min={0} max={24} suffix="px" onChange={v => set({ product_blur: v })} /></Field>
+                <Field label="Glow intensity"><Slider value={theme.glow_intensity ?? 0} min={0} max={40} suffix="px" onChange={v => set({ glow_intensity: v })} /></Field>
                 <Field label="Overlay effect"><Seg value={theme.overlay || 'none'} onChange={v => set({ overlay: v })} options={[{ v: 'none', label: 'None' }, { v: 'rain', label: 'Rain' }, { v: 'snow', label: 'Snow' }, { v: 'vhs', label: 'VHS' }]} /></Field>
                 <Field label="Cursor effect"><Seg value={theme.cursor_fx || 'none'} onChange={v => set({ cursor_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'trail', label: 'Trail' }, { v: 'sparkle', label: 'Sparkle' }]} /></Field>
                 <Field label="Profile effect"><Seg value={theme.profile_fx || 'none'} onChange={v => set({ profile_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'glow', label: 'Glow' }, { v: 'float', label: 'Float' }]} /></Field>
@@ -659,13 +665,14 @@ function Styles() {
     @keyframes lpPfxFloat { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-4px); } }
     .lp-inner { position:relative; z-index:1; margin:20px 14px; padding:24px 16px 22px; border-radius:20px; overflow:hidden;
       background:var(--lp-card-bg, var(--lp-surface)); -webkit-backdrop-filter:blur(var(--lp-card-blur,0px)); backdrop-filter:blur(var(--lp-card-blur,0px));
-      border:1px solid color-mix(in srgb, var(--lp-text,#000) 12%, transparent); box-shadow:var(--shadow-lg);
+      border:1px solid color-mix(in srgb, var(--lp-text,#000) 12%, transparent);
+      box-shadow:var(--shadow-lg), 0 0 var(--lp-glow-strong, 0px) color-mix(in srgb, var(--accent) 42%, transparent);
       display:flex; flex-direction:column; align-items:center; }
     .lp-panelbanner { height:78px; margin:-24px -16px 12px; background:var(--surface-alt) center/cover no-repeat; align-self:stretch; }
     .lp-hasbanner .lp-avatar { margin-top:-42px; position:relative; z-index:1; }
     .lp-avatar { width:var(--lp-avatar-size, 67px); height:var(--lp-avatar-size, 67px); border-radius:50%; background:color-mix(in srgb, var(--accent) 16%, #fff) center/cover no-repeat;
-      display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(var(--lp-avatar-size, 67px) * 0.35); color:var(--accent); border:3px solid var(--lp-surface); box-shadow:var(--shadow); }
-    .lp-name { font-size:20px; font-weight:800; letter-spacing:-.01em; margin-top:12px; color:var(--lp-title, inherit); }
+      display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(var(--lp-avatar-size, 67px) * 0.35); color:var(--accent); border:3px solid var(--lp-surface); box-shadow:var(--shadow), 0 0 var(--lp-glow-strong, 0px) color-mix(in srgb, var(--accent) 60%, transparent); }
+    .lp-name { font-size:20px; font-weight:800; letter-spacing:-.01em; margin-top:12px; color:var(--lp-title, inherit); filter:drop-shadow(0 0 var(--lp-glow, 0px) color-mix(in srgb, var(--accent) 85%, transparent)); }
     .lp-anim .lp-name { animation:sfNameGlow 2.6s ease-in-out infinite; }
     .lp-handle { font-size:13px; font-weight:600; color:var(--accent); margin-top:2px; }
     .lp-bio { font-size:var(--lp-bio-size, 15px); font-weight:var(--lp-bio-weight, 400); color:color-mix(in srgb, var(--lp-text, #5b574e) 75%, transparent); margin-top:10px; max-width:34ch; line-height:1.5;
@@ -691,7 +698,8 @@ function Styles() {
     .lp-price { font-size:13px; font-weight:800; margin-top:3px; }
     .lp-linkbtn { display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-radius:999px; font-size:13px; font-weight:700;
       backdrop-filter:blur(var(--lp-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--lp-item-blur, 0px));
-      background:color-mix(in srgb, var(--accent) 12%, var(--lp-item-bg, transparent)); border:1.5px solid color-mix(in srgb, var(--accent) 32%, transparent); }
+      background:color-mix(in srgb, var(--accent) 12%, var(--lp-item-bg, transparent)); border:1.5px solid color-mix(in srgb, var(--accent) 32%, transparent);
+      box-shadow:0 0 var(--lp-glow, 0px) color-mix(in srgb, var(--accent) 55%, transparent); }
     .lp-btn-pill .lp-card, .lp-btn-pill .lp-cover { border-radius:999px; }
     .lp-btn-sharp .lp-card, .lp-btn-sharp .lp-cover { border-radius:5px; }
 

@@ -82,6 +82,8 @@ export default function Storefront() {
     '--sf-bio-size': `${theme.bio_size ?? 15}px`,
     '--sf-bio-weight': theme.bio_weight ?? 400,
     '--sf-bio-glow': `${theme.bio_glow ?? 0}px`,
+    '--sf-glow': `${theme.glow_intensity ?? 0}px`,
+    '--sf-glow-strong': `${(theme.glow_intensity ?? 0) * 1.6}px`,
   };
   if (theme.text_color) {
     wrapStyle['--text'] = theme.text_color;
@@ -123,9 +125,11 @@ export default function Storefront() {
       <div className={`sf-panel${theme.banner_url ? ' sf-panel-hasbanner' : ''}${theme.card_opacity === 0 ? ' sf-panel-ghost' : ''}${theme.profile_fx && theme.profile_fx !== 'none' ? ` sf-pfx-${theme.profile_fx}` : ''}`}>
       {theme.banner_url && <div className="sf-panelbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} />}
       <header className="sf-head">
-        <div className="sf-avatar" style={profile.avatar_url ? { backgroundImage: `url(${profile.avatar_url})` } : {}}>
-          {!profile.avatar_url && initials(profile.full_name)}
-        </div>
+        {theme.show_avatar !== false && (
+          <div className="sf-avatar" style={profile.avatar_url ? { backgroundImage: `url(${profile.avatar_url})` } : {}}>
+            {!profile.avatar_url && initials(profile.full_name)}
+          </div>
+        )}
         <h1 className="sf-name">{profile.full_name || `@${profile.username}`}</h1>
         <p className="sf-handle">@{profile.username}</p>
         {profile.bio && <p className="sf-bio">{profile.bio}</p>}
@@ -365,7 +369,8 @@ function StoreStyles() {
       background:var(--sf-panel-bg, var(--surface));
       -webkit-backdrop-filter:blur(var(--sf-panel-blur, 0px)); backdrop-filter:blur(var(--sf-panel-blur, 0px));
       border:1px solid color-mix(in srgb, var(--border-strong) 55%, transparent);
-      box-shadow:var(--shadow-xl), inset 0 1px 0 color-mix(in srgb, #fff 30%, transparent); }
+      box-shadow:var(--shadow-xl), inset 0 1px 0 color-mix(in srgb, #fff 30%, transparent),
+        0 0 var(--sf-glow-strong, 0px) color-mix(in srgb, var(--accent) 42%, transparent); }
     /* Banner lives inside the panel — negative margins pull it edge-to-edge, the
        panel's overflow:hidden rounds its top corners to match. */
     .sf-panelbanner { height:150px; margin:-32px -22px 16px; background:var(--surface-alt) center/cover no-repeat; position:relative; }
@@ -390,8 +395,8 @@ function StoreStyles() {
 
     /* Header / hero — sits inside the glass panel */
     .sf-head { text-align:center; margin:0 0 22px; }
-    .sf-avatar { width:var(--sf-avatar-size, 96px); height:var(--sf-avatar-size, 96px); border-radius:50%; margin:0 auto 14px; background:color-mix(in srgb, var(--accent) 14%, white) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(var(--sf-avatar-size, 96px) * 0.34); color:var(--accent); border:4px solid var(--surface); box-shadow:var(--shadow-lg); }
-    .sf-name { font-size:27px; font-weight:800; font-family:var(--font-display); letter-spacing:-.02em; line-height:1.15; color:var(--sf-title, inherit); }
+    .sf-avatar { width:var(--sf-avatar-size, 96px); height:var(--sf-avatar-size, 96px); border-radius:50%; margin:0 auto 14px; background:color-mix(in srgb, var(--accent) 14%, white) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(var(--sf-avatar-size, 96px) * 0.34); color:var(--accent); border:4px solid var(--surface); box-shadow:var(--shadow-lg), 0 0 var(--sf-glow-strong, 0px) color-mix(in srgb, var(--accent) 60%, transparent); }
+    .sf-name { font-size:27px; font-weight:800; font-family:var(--font-display); letter-spacing:-.02em; line-height:1.15; color:var(--sf-title, inherit); filter:drop-shadow(0 0 var(--sf-glow, 0px) color-mix(in srgb, var(--accent) 85%, transparent)); }
     .sf-handle { color:var(--accent); font-size:14px; font-weight:600; margin-top:3px; }
     .sf-bio { color:var(--text-secondary); font-size:var(--sf-bio-size, 15px); font-weight:var(--sf-bio-weight, 400); margin:12px auto 0; line-height:1.55; max-width:42ch;
       filter:drop-shadow(0 0 var(--sf-bio-glow, 0px) color-mix(in srgb, var(--accent) 70%, transparent)); }
@@ -426,8 +431,8 @@ function StoreStyles() {
 
     /* Link buttons — deliberately distinct from product cards: pill, accent-tinted,
        centered label, no cover/border-box. */
-    .sf-linkbtn { display:flex; align-items:center; justify-content:center; gap:9px; padding:14px 18px; border:1.5px solid color-mix(in srgb, var(--accent) 32%, transparent); border-radius:var(--r-full); background:color-mix(in srgb, var(--accent) 10%, var(--sf-item-bg, var(--surface))); backdrop-filter:blur(var(--sf-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--sf-item-blur, 0px)); text-decoration:none; color:var(--text); font-weight:700; transition:transform .16s cubic-bezier(.34,1.4,.64,1), background .16s ease, border-color .16s ease, box-shadow .16s ease; }
-    .sf-linkbtn:hover { transform:translateY(-2px); background:color-mix(in srgb, var(--accent) 18%, var(--surface)); border-color:var(--accent); box-shadow:0 8px 22px color-mix(in srgb, var(--accent) 22%, transparent); }
+    .sf-linkbtn { display:flex; align-items:center; justify-content:center; gap:9px; padding:14px 18px; border:1.5px solid color-mix(in srgb, var(--accent) 32%, transparent); border-radius:var(--r-full); background:color-mix(in srgb, var(--accent) 10%, var(--sf-item-bg, var(--surface))); backdrop-filter:blur(var(--sf-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--sf-item-blur, 0px)); text-decoration:none; color:var(--text); font-weight:700; box-shadow:0 0 var(--sf-glow, 0px) color-mix(in srgb, var(--accent) 55%, transparent); transition:transform .16s cubic-bezier(.34,1.4,.64,1), background .16s ease, border-color .16s ease, box-shadow .16s ease; }
+    .sf-linkbtn:hover { transform:translateY(-2px); background:color-mix(in srgb, var(--accent) 18%, var(--surface)); border-color:var(--accent); box-shadow:0 8px 22px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 var(--sf-glow, 0px) color-mix(in srgb, var(--accent) 60%, transparent); }
     .sf-linkbtn-label { display:inline-flex; align-items:center; gap:9px; }
     .sf-linkbtn-arrow { color:var(--accent); flex-shrink:0; }
 
