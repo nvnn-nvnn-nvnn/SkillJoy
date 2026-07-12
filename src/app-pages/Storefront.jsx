@@ -56,6 +56,16 @@ export default function Storefront() {
   const isOwner = user && user.id === profile.id;
   const socials = (theme.socials || []).filter(s => s.url);
 
+  // Bucket products by group_label, preserving first-seen order (= sort_order).
+  // '' (no label) is one anonymous group rendered without a heading.
+  const skillGroups = [];
+  const groupIndex = new Map();
+  for (const s of skills) {
+    const key = (s.group_label || '').trim();
+    if (!groupIndex.has(key)) { groupIndex.set(key, skillGroups.length); skillGroups.push({ label: key, items: [] }); }
+    skillGroups[groupIndex.get(key)].items.push(s);
+  }
+
   // Full-page background layer. 'canvas' falls through to the mode palette's --bg.
   // 'video' renders a separate <video> element below (bgStyle stays undefined).
   const bgStyle =
@@ -70,6 +80,7 @@ export default function Storefront() {
     (theme.bg === 'image' && theme.bg_image) || hasBgVideo ? 'sf-has-bgimg' : '',
     theme.mono_icons ? 'sf-mono' : '',
     theme.animated_name ? 'sf-anim-name' : '',
+    theme.name_fx && theme.name_fx !== 'none' ? `sf-fx-${theme.name_fx}` : '',
   ].filter(Boolean).join(' ');
 
   const wrapStyle = {
@@ -142,37 +153,46 @@ export default function Storefront() {
             ))}
           </div>
         )}
+        {/* Link buttons live INSIDE the profile space — part of "who you are",
+            visually distinct from the products section below. */}
+        {links.filter(l => l.url).length > 0 && (
+          <div className="sf-links">
+            {links.filter(l => l.url).map(l => (
+              <a key={l.id} href={l.url} target="_blank" rel={l.is_affiliate ? 'noopener noreferrer sponsored' : 'noopener noreferrer'} className="sf-linkbtn">
+                <span className="sf-linkbtn-label"><Link2 size={16} /> {l.label}</span>
+                <ArrowUpRight size={18} className="sf-linkbtn-arrow" />
+              </a>
+            ))}
+          </div>
+        )}
       </header>
       </div>
 
-      {skills.length === 0 && links.length === 0 ? (
-        <p className="sf-muted sf-center">Nothing here yet — check back soon.</p>
-      ) : (
-        <div className={`sf-list${theme.layout === 'grid' ? ' sf-grid' : ''}`}>
-          {skills.map(s => (
-            <Link key={s.id} to={`/@${profile.username}/${s.id}`} className="sf-card">
-              <div className="sf-cover" style={s.cover_url ? { backgroundImage: `url(${s.cover_url})` } : {}}>
-                {!s.cover_url && <Puzzle size={28} strokeWidth={1.5} />}
-              </div>
-              <div className="sf-card-body">
-                <p className="sf-card-title">{s.title}</p>
-                {s.outcome && <p className="sf-card-outcome">{s.outcome}</p>}
-                <div className="sf-card-foot">
-                  <span className="sf-price">{s.price_cents ? `$${(s.price_cents / 100).toFixed(2)}` : 'Free'}</span>
-                  {s.pricing_type === 'membership' && <span className="sf-tag">Membership</span>}
+      {skills.length > 0 && skillGroups.map((g, gi) => (
+        <div key={gi} className="sf-group">
+          {g.label && <h2 className="sf-grouptitle">{g.label}</h2>}
+          <div className={`sf-list${theme.layout === 'grid' ? ' sf-grid' : ''}`}>
+            {g.items.map(s => (
+              <Link key={s.id} to={`/@${profile.username}/${s.id}`} className="sf-card">
+                <div className="sf-cover" style={s.cover_url ? { backgroundImage: `url(${s.cover_url})` } : {}}>
+                  {!s.cover_url && <Puzzle size={28} strokeWidth={1.5} />}
                 </div>
-              </div>
-            </Link>
-          ))}
-
-          {/* External / affiliate link buttons */}
-          {links.filter(l => l.url).map(l => (
-            <a key={l.id} href={l.url} target="_blank" rel={l.is_affiliate ? 'noopener noreferrer sponsored' : 'noopener noreferrer'} className="sf-linkbtn">
-              <span className="sf-linkbtn-label"><Link2 size={16} /> {l.label}</span>
-              <ArrowUpRight size={18} className="sf-linkbtn-arrow" />
-            </a>
-          ))}
+                <div className="sf-card-body">
+                  <p className="sf-card-title">{s.title}</p>
+                  {s.outcome && <p className="sf-card-outcome">{s.outcome}</p>}
+                  <div className="sf-card-foot">
+                    <span className="sf-price">{s.price_cents ? `$${(s.price_cents / 100).toFixed(2)}` : 'Free'}</span>
+                    {s.pricing_type === 'membership' && <span className="sf-tag">Membership</span>}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
+      ))}
+
+      {skills.length === 0 && links.length === 0 && (
+        <p className="sf-muted sf-center">Nothing here yet — check back soon.</p>
       )}
 
       <SubscribeForm creatorId={profile.id} name={profile.full_name || `@${profile.username}`} />
@@ -280,21 +300,24 @@ function StoreStyles() {
     /* ── Overlay effects (rain / snow / vhs) — fixed, non-interactive, above bg,
        below content (content is in normal flow above the z-indexed layers). */
     .sf-overlay { position:fixed; inset:0; z-index:0; pointer-events:none; }
+    /* Rain: a single slanted streak in a 9x64 tile, scrolled by exactly one tile
+       (−9px, 64px) each cycle → perfectly seamless, thin, crisp streaks. */
     .sf-overlay-rain {
-      background:repeating-linear-gradient(100deg, transparent 0 6px, color-mix(in srgb, #9ecbff 28%, transparent) 6px 7px, transparent 7px 14px);
-      background-size:100% 200%;
-      animation:sfRain .5s linear infinite;
-      opacity:.35;
+      background-image:linear-gradient(107deg, transparent 0 45%, color-mix(in srgb, var(--text) 42%, transparent) 47% 51%, transparent 53% 100%);
+      background-size:9px 64px;
+      animation:sfRain .55s linear infinite;
+      opacity:.6;
     }
-    @keyframes sfRain { from { background-position:0 0; } to { background-position:0 200px; } }
+    @keyframes sfRain { to { background-position:-9px 64px; } }
     .sf-overlay-snow {
+      --snow:color-mix(in srgb, var(--text) 60%, transparent);
       background-image:
-        radial-gradient(2.5px 2.5px at 20% 15%, #fff 60%, transparent),
-        radial-gradient(2px 2px at 65% 40%, #fff 60%, transparent),
-        radial-gradient(3px 3px at 40% 70%, #fff 60%, transparent),
-        radial-gradient(2px 2px at 85% 20%, #fff 60%, transparent),
-        radial-gradient(2.5px 2.5px at 10% 55%, #fff 60%, transparent),
-        radial-gradient(2px 2px at 50% 10%, #fff 60%, transparent);
+        radial-gradient(2.5px 2.5px at 20% 15%, var(--snow) 60%, transparent),
+        radial-gradient(2px 2px at 65% 40%, var(--snow) 60%, transparent),
+        radial-gradient(3px 3px at 40% 70%, var(--snow) 60%, transparent),
+        radial-gradient(2px 2px at 85% 20%, var(--snow) 60%, transparent),
+        radial-gradient(2.5px 2.5px at 10% 55%, var(--snow) 60%, transparent),
+        radial-gradient(2px 2px at 50% 10%, var(--snow) 60%, transparent);
       background-size:220px 220px;
       animation:sfSnow 9s linear infinite;
       opacity:.55;
@@ -313,10 +336,13 @@ function StoreStyles() {
       width:38px; height:38px; min-width:0; padding:0;
       display:flex; align-items:center; justify-content:center;
       border-radius:50%; cursor:pointer;
-      border:1.5px solid color-mix(in srgb, var(--accent) 40%, transparent);
-      background:color-mix(in srgb, var(--accent) 14%, var(--surface));
-      color:var(--text);
-      box-shadow:0 4px 16px color-mix(in srgb, var(--accent) 25%, transparent);
+      /* Dark glass so it's visible on ANY background/theme (not a white blob on
+         a dark storefront). Accent-tinted border keeps the brand cue. */
+      border:1.5px solid color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.25));
+      background:rgba(18,18,22,0.5);
+      -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+      color:#fff;
+      box-shadow:0 4px 16px rgba(0,0,0,0.32);
       transition:transform .15s ease, box-shadow .15s ease;
     }
     .sf-audiopill:hover { transform:scale(1.08); box-shadow:0 6px 22px color-mix(in srgb, var(--accent) 40%, transparent); }
@@ -389,9 +415,34 @@ function StoreStyles() {
     @keyframes sfNameGlow { 0%,100% { text-shadow:0 0 0 transparent; } 50% { text-shadow:0 0 18px color-mix(in srgb, var(--accent) 65%, transparent); } }
     @media (prefers-reduced-motion: reduce) { .sf-anim-name .sf-name { animation:none; } }
 
+    /* ── Display-name text effects (guns.lol-style, background-clip:text) ── */
+    .sf-fx-gradient .sf-name, .sf-fx-rainbow .sf-name, .sf-fx-shimmer .sf-name {
+      color:transparent; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+    .sf-fx-gradient .sf-name { background-image:linear-gradient(92deg, var(--accent), color-mix(in srgb, var(--accent) 45%, #fff)); }
+    .sf-fx-rainbow .sf-name {
+      background-image:linear-gradient(92deg, #ff2d75, #ff8c00, #ffd400, #00cc99, #00b3ff, #7a5cff, #ff2d75);
+      background-size:220% auto; animation:sfNameRainbow 4.5s linear infinite; }
+    @keyframes sfNameRainbow { to { background-position:220% center; } }
+    .sf-fx-shimmer .sf-name {
+      background-image:linear-gradient(100deg, var(--accent) 0 42%, #fff 50%, var(--accent) 58% 100%);
+      background-size:250% auto; animation:sfNameShimmer 3.2s linear infinite; }
+    @keyframes sfNameShimmer { to { background-position:-250% center; } }
+    .sf-fx-glitch .sf-name { animation:sfNameGlitch 2.2s infinite steps(1); }
+    @keyframes sfNameGlitch {
+      0%,88%,100% { text-shadow:none; }
+      90% { text-shadow:-2px 0 #ff2d75, 2px 0 #00c8ff; }
+      93% { text-shadow:2px 0 #ff2d75, -2px 0 #00c8ff; transform:translateX(1px); }
+      96% { text-shadow:-1px 0 #ff2d75, 1px 0 #00c8ff; transform:translateX(-1px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .sf-fx-rainbow .sf-name, .sf-fx-shimmer .sf-name, .sf-fx-glitch .sf-name { animation:none; }
+    }
+
     /* Owner edit button — floats over everything. */
-    .sf-editbtn { position:fixed; top:16px; right:16px; z-index:20; display:inline-flex; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--border-strong); color:var(--text); text-decoration:none; font-size:13px; font-weight:700; padding:9px 15px; border-radius:var(--r-full); box-shadow:var(--shadow); transition:transform .14s ease, box-shadow .14s ease; }
-    .sf-editbtn:hover { transform:translateY(-1px); box-shadow:var(--shadow-lg); }
+    /* Dark glass — visible on any background/theme (was a solid white pill that
+       vanished on a dark storefront). */
+    .sf-editbtn { position:fixed; top:16px; right:16px; z-index:20; display:inline-flex; align-items:center; gap:6px; background:rgba(18,18,22,0.55); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.18); color:#fff; text-decoration:none; font-size:13px; font-weight:700; padding:9px 15px; border-radius:var(--r-full); box-shadow:0 4px 16px rgba(0,0,0,0.3); transition:transform .14s ease, box-shadow .14s ease; }
+    .sf-editbtn:hover { transform:translateY(-1px); box-shadow:0 8px 24px rgba(0,0,0,0.4); }
 
     /* Header / hero — sits inside the glass panel */
     .sf-head { text-align:center; margin:0 0 22px; }
@@ -415,7 +466,12 @@ function StoreStyles() {
         drop-shadow(0 0 24px color-mix(in srgb, var(--accent) 55%, transparent)); }
 
     /* Product cards + link buttons — a separate section below the profile panel */
-    .sf-list { display:flex; flex-direction:column; gap:14px; margin-top:18px; }
+    /* Links sit inside the profile panel — full width, stacked under the socials. */
+    .sf-links { display:flex; flex-direction:column; gap:10px; margin-top:18px; width:100%; }
+    .sf-group { margin-top:22px; }
+    .sf-grouptitle { font-size:15px; font-weight:800; letter-spacing:-.01em; color:var(--text); margin:0 4px 2px; }
+    .sf-group .sf-list { margin-top:12px; }
+    .sf-list { display:flex; flex-direction:column; gap:14px; margin-top:22px; }
     .sf-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; }
     .sf-card { display:flex; gap:14px; align-items:center; padding:12px; border:1px solid var(--border); border-radius:var(--r-lg); background:var(--sf-item-bg, var(--surface)); backdrop-filter:blur(var(--sf-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--sf-item-blur, 0px)); text-decoration:none; box-shadow:var(--shadow-sm); transition:transform .16s cubic-bezier(.34,1.4,.64,1), box-shadow .16s ease, border-color .16s ease; }
     .sf-card:hover { transform:translateY(-3px); border-color:color-mix(in srgb, var(--accent) 45%, var(--border)); box-shadow:0 12px 26px color-mix(in srgb, var(--accent) 16%, transparent), var(--shadow); }
@@ -427,7 +483,7 @@ function StoreStyles() {
     .sf-card-outcome { font-size:13px; color:var(--text-secondary); margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
     .sf-card-foot { display:flex; align-items:center; gap:8px; margin-top:10px; }
     .sf-price { font-weight:800; color:var(--text); font-size:15px; }
-    .sf-tag { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, white); padding:3px 9px; border-radius:var(--r-full); }
+    .sf-tag { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--accent); background:color-mix(in srgb, var(--accent) 16%, transparent); border:1px solid color-mix(in srgb, var(--accent) 30%, transparent); padding:3px 9px; border-radius:var(--r-full); }
 
     /* Link buttons — deliberately distinct from product cards: pill, accent-tinted,
        centered label, no cover/border-box. */

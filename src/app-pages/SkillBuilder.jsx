@@ -428,6 +428,18 @@ function SkillEditor({ skillId, userId }) {
             <p className="sb-fieldhint">Supports markdown — **bold**, - lists, ## headings, [links](url).</p>
           </div>
 
+          <div className="sb-typefield">
+            <span className="sb-fieldlabel">Group <span style={{ fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: 'var(--text-muted)' }}>(optional)</span></span>
+            <input className="sb-field" value={skill.group_label ?? ''}
+              onChange={e => patchSkill({ group_label: e.target.value })}
+              placeholder="e.g. Start here · Bookings · Digital products"
+              list="sb-group-suggestions" />
+            <datalist id="sb-group-suggestions">
+              <option value="Start here" /><option value="Bookings" /><option value="Digital products" /><option value="Coaching" /><option value="Courses" />
+            </datalist>
+            <p className="sb-fieldhint">Products with the same group are shown together on your page under this heading.</p>
+          </div>
+
           {/* Read-only display of the chosen product type (set on /build/new). */}
           <div className="sb-typefield">
             <span className="sb-fieldlabel">Type</span>

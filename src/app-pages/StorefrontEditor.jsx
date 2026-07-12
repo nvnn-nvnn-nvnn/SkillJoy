@@ -9,7 +9,7 @@ import {
 } from '@/lib/storefront';
 import { uploadBanner, uploadBgVideo, uploadAudio } from '@/lib/storage';
 import {
-  Palette, Link2, LayoutTemplate, Eye, ImagePlus, X, Plus, ChevronUp, ChevronDown,
+  Palette, Link2, Eye, ImagePlus, X, Plus, ChevronUp, ChevronDown,
   ExternalLink, Check, MousePointer2, Type, Video, Music, Wand2, SlidersHorizontal,
   Image as ImageIcon, Camera, AtSign, User,
 } from 'lucide-react';
@@ -69,6 +69,7 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
   const cls = [
     'lp', `lp-mode-${theme.mode}`, `lp-btn-${theme.button_style}`, `lp-glow-${theme.product_glow || 'none'}`,
     theme.mono_icons ? 'lp-mono' : '', theme.animated_name ? 'lp-anim' : '',
+    theme.name_fx && theme.name_fx !== 'none' ? `lp-fx-${theme.name_fx}` : '',
   ].filter(Boolean).join(' ');
   const style = {
     '--accent': theme.accent,
@@ -107,6 +108,14 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
             {(socials || []).filter(s => s.url).map((s, i) => <span key={i} className="lp-social"><BrandIcon type={s.type} size={20} /></span>)}
           </div>
         )}
+        {/* Links inside the profile panel (mirrors the live storefront) */}
+        {(links || []).filter(l => l.url).length > 0 && (
+          <div className="lp-links">
+            {(links || []).filter(l => l.url).slice(0, 3).map(l => (
+              <div key={l.id} className="lp-linkbtn"><Link2 size={14} /> {l.label || 'Link'}</div>
+            ))}
+          </div>
+        )}
       </div>
       <div className={`lp-list${theme.layout === 'grid' ? ' lp-grid' : ''}`}>
           {shown.length === 0 && <div className="lp-card lp-empty">Your products appear here</div>}
@@ -115,9 +124,6 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
               <div className="lp-cover" style={s.cover_url ? { backgroundImage: `url(${s.cover_url})` } : {}} />
               <div className="lp-card-body"><div className="lp-card-title">{s.title || 'Untitled'}</div><div className="lp-price">{s.price_cents ? `$${(s.price_cents / 100).toFixed(2)}` : 'Free'}</div></div>
             </div>
-          ))}
-          {(links || []).filter(l => l.url).slice(0, 2).map(l => (
-            <div key={l.id} className="lp-linkbtn"><Link2 size={14} /> {l.label || 'Link'}</div>
           ))}
         </div>
     </div>
@@ -147,8 +153,6 @@ export default function StorefrontEditor() {
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState('');
   const [subTab, setSubTab] = useState('customize');
-  const [dropOpen, setDropOpen] = useState(false);
-  const [toast, setToast] = useState('');
   const [dragIdx, setDragIdx] = useState(null);   // product-order drag source
   const [dragOver, setDragOver] = useState(null); // product-order drop target
 
@@ -171,7 +175,6 @@ export default function StorefrontEditor() {
   if (!user || !profile) return <div className="std-loading">Loading…<Styles /></div>;
 
   const set = (patch) => setTheme(t => ({ ...t, ...patch }));
-  const ping = (m) => { setToast(m); setTimeout(() => setToast(''), 2400); };
 
   async function save() {
     setErr('');
@@ -239,23 +242,14 @@ export default function StorefrontEditor() {
       {/* ── Top header ── */}
       <header className="std-top">
         <div className="std-top-tabs">
-          <div className="std-tabwrap">
-            <button className="std-tab on" onClick={() => setDropOpen(o => !o)}>
-              My Page <ChevronDown size={15} className={`std-caret${dropOpen ? ' open' : ''}`} />
-            </button>
-            {dropOpen && (
-              <>
-                <div className="std-dropbg" onClick={() => setDropOpen(false)} />
-                <div className="std-drop">
-                  <button className={`std-dropitem${subTab === 'customize' ? ' on' : ''}`} onClick={() => { setSubTab('customize'); setDropOpen(false); }}><Palette size={15} /> Site Customization</button>
-                  <button className={`std-dropitem${subTab === 'links' ? ' on' : ''}`} onClick={() => { setSubTab('links'); setDropOpen(false); }}><Link2 size={15} /> Links</button>
-                  <button className="std-dropitem std-dropitem-wip" onClick={() => ping('Templates — work in progress')}><LayoutTemplate size={15} /> Templates <span className="std-wip">WIP</span></button>
-                </div>
-              </>
-            )}
-          </div>
-          <button className="std-tab" onClick={() => ping('Analytics — coming soon')}>Analytics</button>
-          <button className="std-tab" onClick={() => ping('Settings — coming soon')}>Settings</button>
+          {/* Two plain, prominent tabs — no dropdown. Links is a first-class
+              destination so it's never buried. */}
+          <button className={`std-tab${subTab === 'customize' ? ' on' : ''}`} onClick={() => setSubTab('customize')}>
+            <Palette size={15} /> Customize
+          </button>
+          <button className={`std-tab${subTab === 'links' ? ' on' : ''}`} onClick={() => setSubTab('links')}>
+            <Link2 size={15} /> Links
+          </button>
         </div>
         <div className="std-top-actions">
           {profile.username && <Link to={`/@${profile.username}`} className="std-ghost"><ExternalLink size={15} /> View live</Link>}
@@ -408,8 +402,10 @@ export default function StorefrontEditor() {
                 <Field label="Cursor effect"><Seg value={theme.cursor_fx || 'none'} onChange={v => set({ cursor_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'trail', label: 'Trail' }, { v: 'sparkle', label: 'Sparkle' }]} /></Field>
                 <Field label="Profile effect"><Seg value={theme.profile_fx || 'none'} onChange={v => set({ profile_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'glow', label: 'Glow' }, { v: 'float', label: 'Float' }]} /></Field>
                 <Toggle on={!!theme.mono_icons} onChange={v => set({ mono_icons: v })} label="Monochrome icons" hint="Grayscale social icons" />
+                <Field label="Name effect"><Seg value={theme.name_fx || 'none'} onChange={v => set({ name_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'gradient', label: 'Gradient' }, { v: 'rainbow', label: 'Rainbow' }, { v: 'shimmer', label: 'Shine' }, { v: 'glitch', label: 'Glitch' }]} /></Field>
                 <Toggle on={!!theme.animated_name} onChange={v => set({ animated_name: v })} label="Animated username" hint="Subtle accent glow" />
                 <div className="std-soontiles">
+                  <div className="std-soontile"><Wand2 size={15} /> Name overlays <span className="std-soon">Soon</span></div>
                   <div className="std-soontile"><Type size={15} /> Custom fonts <span className="std-soon">Soon</span></div>
                 </div>
               </Panel>
@@ -482,7 +478,6 @@ export default function StorefrontEditor() {
         </aside>
       </div>
 
-      {toast && <div className="std-toast">{toast}</div>}
       <Styles />
     </div>
   );
@@ -591,7 +586,9 @@ function Styles() {
     .std-upload span { display:inline-flex; align-items:center; gap:7px; background:rgba(0,0,0,.6); color:#fff; padding:8px 14px; border-radius:var(--r-full); font-size:13px; font-weight:600; }
     .std-textbtn { width:auto; background:none; border:none; color:var(--text-muted); font-size:12px; cursor:pointer; margin-left:10px; padding:0; }
     .std-textbtn:hover { color:var(--accent); }
-    .std-removebtn { width:auto; display:inline-flex; align-items:center; gap:5px; margin-top:9px; padding:6px 12px; border-radius:var(--r-full); border:1px solid var(--border-strong, var(--border)); background:var(--surface); color:var(--text-secondary); font-size:12px; font-weight:700; cursor:pointer; transition:border-color .13s ease, color .13s ease, background .13s ease; }
+    /* Right-aligned + fit-content so it tucks to the end of the upload row/field
+       (margin-left:auto pushes it right in both the flex avatar row and block fields). */
+    .std-removebtn { width:fit-content; display:flex; align-items:center; gap:5px; margin:9px 0 0 auto; padding:5px 11px; border-radius:var(--r-full); border:1px solid var(--border-strong, var(--border)); background:var(--surface); color:var(--text-muted); font-size:11.5px; font-weight:700; cursor:pointer; transition:border-color .13s ease, color .13s ease, background .13s ease; }
     .std-removebtn:hover { border-color:#ef4444; color:#ef4444; background:color-mix(in srgb, #ef4444 8%, transparent); }
     .std-removebtn svg { flex-shrink:0; }
 
@@ -651,9 +648,9 @@ function Styles() {
     .lp-bgvideo { position:absolute; inset:0; z-index:0; width:100%; height:100%; object-fit:cover; }
     /* Overlay effect mirrors (scaled-down versions of the storefront's) */
     .lp-overlay { position:absolute; inset:0; z-index:1; pointer-events:none; }
-    .lp-overlay-rain { background:repeating-linear-gradient(100deg, transparent 0 5px, color-mix(in srgb, #9ecbff 28%, transparent) 5px 6px, transparent 6px 11px); animation:lpRain .5s linear infinite; opacity:.35; }
-    @keyframes lpRain { from { background-position:0 0; } to { background-position:0 120px; } }
-    .lp-overlay-snow { background-image:radial-gradient(2px 2px at 20% 15%, #fff 60%, transparent), radial-gradient(1.5px 1.5px at 65% 40%, #fff 60%, transparent), radial-gradient(2px 2px at 40% 70%, #fff 60%, transparent), radial-gradient(1.5px 1.5px at 85% 20%, #fff 60%, transparent); background-size:140px 140px; animation:lpSnow 8s linear infinite; opacity:.55; }
+    .lp-overlay-rain { background-image:linear-gradient(107deg, transparent 0 45%, color-mix(in srgb, var(--lp-text, #000) 42%, transparent) 47% 51%, transparent 53% 100%); background-size:8px 56px; animation:lpRain .55s linear infinite; opacity:.55; }
+    @keyframes lpRain { to { background-position:-8px 56px; } }
+    .lp-overlay-snow { --lpsnow:color-mix(in srgb, var(--lp-text, #000) 60%, transparent); background-image:radial-gradient(2px 2px at 20% 15%, var(--lpsnow) 60%, transparent), radial-gradient(1.5px 1.5px at 65% 40%, var(--lpsnow) 60%, transparent), radial-gradient(2px 2px at 40% 70%, var(--lpsnow) 60%, transparent), radial-gradient(1.5px 1.5px at 85% 20%, var(--lpsnow) 60%, transparent); background-size:140px 140px; animation:lpSnow 8s linear infinite; opacity:.55; }
     @keyframes lpSnow { from { background-position:0 -140px; } to { background-position:18px 140px; } }
     .lp-overlay-vhs { background:repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0,0,0,.14) 2px 3px); mix-blend-mode:overlay; animation:lpVhs 4s steps(2) infinite; }
     @keyframes lpVhs { 0%,100% { opacity:.9; } 50% { opacity:.65; } }
@@ -696,6 +693,16 @@ function Styles() {
     .lp-card-body { min-width:0; }
     .lp-card-title { font-size:13.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .lp-price { font-size:13px; font-weight:800; margin-top:3px; }
+    /* Display-name effects mirror (matches Storefront .sf-fx-*) */
+    .lp-fx-gradient .lp-name, .lp-fx-rainbow .lp-name, .lp-fx-shimmer .lp-name { color:transparent; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+    .lp-fx-gradient .lp-name { background-image:linear-gradient(92deg, var(--accent), color-mix(in srgb, var(--accent) 45%, #fff)); }
+    .lp-fx-rainbow .lp-name { background-image:linear-gradient(92deg, #ff2d75, #ff8c00, #ffd400, #00cc99, #00b3ff, #7a5cff, #ff2d75); background-size:220% auto; animation:lpRainbow 4.5s linear infinite; }
+    @keyframes lpRainbow { to { background-position:220% center; } }
+    .lp-fx-shimmer .lp-name { background-image:linear-gradient(100deg, var(--accent) 0 42%, #fff 50%, var(--accent) 58% 100%); background-size:250% auto; animation:lpShine 3.2s linear infinite; }
+    @keyframes lpShine { to { background-position:-250% center; } }
+    .lp-fx-glitch .lp-name { animation:lpGlitch 2.2s infinite steps(1); }
+    @keyframes lpGlitch { 0%,88%,100% { text-shadow:none; } 90% { text-shadow:-2px 0 #ff2d75, 2px 0 #00c8ff; } 96% { text-shadow:1px 0 #ff2d75, -1px 0 #00c8ff; } }
+    .lp-links { display:flex; flex-direction:column; gap:7px; margin-top:11px; width:100%; }
     .lp-linkbtn { display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-radius:999px; font-size:13px; font-weight:700;
       backdrop-filter:blur(var(--lp-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--lp-item-blur, 0px));
       background:color-mix(in srgb, var(--accent) 12%, var(--lp-item-bg, transparent)); border:1.5px solid color-mix(in srgb, var(--accent) 32%, transparent);

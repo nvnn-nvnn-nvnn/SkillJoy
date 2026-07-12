@@ -48,6 +48,22 @@ export default function AudiencePanel() {
       </div>
       <p className="au-sub">People who subscribed from your storefront.</p>
 
+      {subs === null ? (
+        <p className="au-hint">Loading…</p>
+      ) : count > 0 ? (
+        <div className="au-list">
+          {subs.map(s => (
+            <div key={s.id} className="au-row">
+              <div className="au-rowmain">
+                <span className="au-email">{s.email}</span>
+                {s.name && <span className="au-name">{s.name}</span>}
+              </div>
+              <span className="au-date">{new Date(s.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       <div className="au-compose">
         <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject" />
         <textarea rows={4} value={body} onChange={e => setBody(e.target.value)} placeholder="Write your update…" />
@@ -67,6 +83,13 @@ export default function AudiencePanel() {
         .au-h { font-size:18px; font-weight:700; }
         .au-count { color:var(--accent); }
         .au-sub { color:var(--text-muted); font-size:13px; margin:2px 0 14px; }
+        .au-list { max-height:280px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--r); margin-bottom:16px; }
+        .au-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-top:1px solid var(--border); font-size:13.5px; }
+        .au-row:first-child { border-top:none; }
+        .au-rowmain { min-width:0; display:flex; flex-direction:column; }
+        .au-email { color:var(--text); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .au-name { color:var(--text-muted); font-size:12px; }
+        .au-date { flex-shrink:0; color:var(--text-muted); font-size:12px; }
         .au-compose { display:flex; flex-direction:column; gap:10px; }
         .au-compose textarea { resize:vertical; font-family:inherit; }
         .au-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }

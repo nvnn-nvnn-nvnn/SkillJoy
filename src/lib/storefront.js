@@ -34,6 +34,7 @@ export const DEFAULT_THEME = {
   bio_glow: 0,              // 0–20 px — accent drop-shadow glow on the bio
   // ── Phase 2: guns.lol effects ──
   glow_intensity: 0,        // 0–40 px — master accent glow across name/avatar/panel/links
+  name_fx: 'none',          // 'none'|'gradient'|'rainbow'|'shimmer'|'glitch' — display-name text effect
   overlay: 'none',          // 'none' | 'rain' | 'snow' | 'vhs' — full-page overlay effect
   audio_url: '',            // site audio url — play/mute pill on the storefront
   cursor_fx: 'none',        // 'none' | 'trail' | 'sparkle' — pointer particle effect
