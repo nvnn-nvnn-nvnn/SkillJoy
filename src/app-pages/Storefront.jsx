@@ -4,6 +4,7 @@ import { useUser } from '@/lib/stores';
 import { getProfileByUsername } from '@/lib/profiles';
 import { listPublishedSkills } from '@/lib/skills';
 import { resolveTheme, listLinks } from '@/lib/storefront';
+import { getDemoStore } from '@/lib/demoStores';
 import { recordEvent } from '@/lib/metrics';
 import { initials } from '@/lib/stores';
 import { Pencil, Puzzle, Link2, ArrowUpRight, Sparkles, Search, Volume2, VolumeX } from 'lucide-react';
@@ -21,6 +22,10 @@ export default function Storefront() {
 
   useEffect(() => {
     let alive = true;
+    // Placeholder/demo storefronts (landing-page testimonial links) resolve
+    // from static data — no DB round-trip, no metrics/pixels.
+    const demo = getDemoStore(username);
+    if (demo) { setState({ status: 'ready', ...demo }); return () => { alive = false; }; }
     (async () => {
       try {
         const profile = await getProfileByUsername(username);
