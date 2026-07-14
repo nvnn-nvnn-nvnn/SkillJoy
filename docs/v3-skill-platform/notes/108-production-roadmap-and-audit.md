@@ -206,3 +206,42 @@ _2026-07-09. Prioritized, phased checklist. Audit findings up top._
 3. Phase 3 delivery bit (R2/Bunny) — before pushing digital-product volume.
 4. Phase 2 customization — your differentiator, but after money + delivery are solid.
 5. Phase 4 landing/polish — in parallel once Phase 1 works.
+
+---
+
+## Phase 6 — Competitor parity gaps (Stan / Beacons / Sellfy)
+
+_Added 2026-07-13. Gap analysis vs the three main competitors. First, what we ALREADY
+match so we don't re-build it: link-in-bio + all product types (download/course/booking/
+membership/links), Stripe `PaymentElement` (Apple/Google Pay wallets already work) + guest
+checkout, **order bumps**, discount codes, reviews, tracking pixels, embeds, analytics,
+Connect payouts, email capture + subscriber list + one-shot **broadcast** email, and the deep
+customization edge (bg video, overlays, audio, cursor/name FX) none of them have._
+
+### High-leverage — close first
+- [ ] **Automated email** — sequences/flows (welcome, drip, nurture) + **abandoned-checkout
+      recovery**. We only have one-shot `sendBroadcast`. Subscriber table + Resend already exist,
+      so this is mostly automation logic. (Stan.) Direct revenue.
+- [ ] **Custom domain** — `yourbrand.com` instead of `skilljoy.me/@you`. All three offer it;
+      single most-requested "pro" feature + churn guard.
+- [ ] **Bundles + post-purchase upsells** — bundle was deferred; we have pre-purchase order bumps
+      but no one-click post-pay upsell. Pure revenue multiplier on existing traffic. (Stan/Sellfy.)
+
+### Worth doing
+- [ ] **Affiliate / referral program** for creators (was Phase 5). (Stan/Beacons.)
+- [ ] **AI assist** — generate product copy / store setup. (Stan AI, Beacons AI.)
+- [ ] **SMS marketing** + a proper audience CRM/contacts view. (Beacons.)
+- [ ] **Tip jar / donations** product type. (Stan/Beacons.)
+- [ ] **Mobile creator app** + "💰 you made a sale" push (in-app notif already noted in addendum).
+- [ ] **Migration/import** tool from Linktree/Stan/other (switching wedge). (Sellfy.)
+- [ ] **Instagram auto-DM / comment-to-DM** automation. (Beacons.)
+- [ ] **Webinar / live-launch** product type + **drip-scheduled** course lessons. (Stan.)
+
+### Deliberate NON-goals (unless we change what SkillJoy is)
+- [ ] ~~Print-on-demand / physical products / shipping / inventory~~ — Sellfy's headline, but a
+      different business (fulfillment, logistics). Skip unless pivoting.
+- [ ] ~~Media Kit generator + brand-deals marketplace / sponsorship invoicing~~ — Beacons' angle;
+      creator-monetization-via-sponsorship, not storefront sales. Out of scope for now.
+
+> Caveat: competitor feature sets shift fast; knowledge current to early 2026. Spot-check each
+> competitor's live pricing page before committing priority.

@@ -11,7 +11,7 @@ import { uploadBanner, uploadBgVideo, uploadAudio } from '@/lib/storage';
 import {
   Palette, Link2, Eye, ImagePlus, X, Plus, ChevronUp, ChevronDown,
   ExternalLink, Check, MousePointer2, Type, Video, Music, Wand2, SlidersHorizontal,
-  Image as ImageIcon, Camera, AtSign, User,
+  Image as ImageIcon, Camera, AtSign, User, Sparkles, LayoutGrid,
 } from 'lucide-react';
 import { BrandIcon } from '@/lib/brandIcons';
 
@@ -78,11 +78,12 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
     '--lp-item-bg': `color-mix(in srgb, var(--lp-surface) ${theme.product_opacity ?? 100}%, transparent)`,
     '--lp-item-blur': `${theme.product_blur ?? 0}px`,
     '--lp-avatar-size': `${Math.round((theme.avatar_size ?? 96) * 0.7)}px`, // preview is ~70% scale
+    '--lp-avatar-radius': theme.avatar_shape === 'square' ? '14%' : theme.avatar_shape === 'rounded' ? '26%' : '50%',
     '--lp-bio-size': `${theme.bio_size ?? 15}px`,
     '--lp-bio-weight': theme.bio_weight ?? 400,
     '--lp-bio-glow': `${theme.bio_glow ?? 0}px`,
-    '--lp-glow': `${(theme.glow_intensity ?? 0) * 0.6}px`,
-    '--lp-glow-strong': `${(theme.glow_intensity ?? 0) * 1.0}px`,
+    '--lp-glow': `${(theme.glow_intensity ?? 0) * 0.65}px`,
+    '--lp-glow-strong': `${(theme.glow_intensity ?? 0) * 1.4}px`,
   };
   if (theme.text_color) style['--lp-text'] = theme.text_color;
   if (theme.title_color) style['--lp-title'] = theme.title_color;
@@ -264,10 +265,11 @@ export default function StorefrontEditor() {
           <div className="std-mainhead">{subTab === 'customize' ? 'Site Customization' : 'Links'}</div>
           {subTab === 'customize' && (
             <>
+              {/* ── PROFILE — who you are: picture, name, bio, and the profile card itself ── */}
               <Panel icon={User} title="Profile">
                 <Field label="Profile picture">
                   <div className="std-avatarrow">
-                    <div className="std-avatar" style={avatarUrl ? { backgroundImage: `url(${avatarUrl})` } : {}}>{!avatarUrl && (name ? name[0] : '?')}</div>
+                    <div className="std-avatar" style={{ ...(avatarUrl ? { backgroundImage: `url(${avatarUrl})` } : {}), borderRadius: theme.avatar_shape === 'square' ? '14%' : theme.avatar_shape === 'rounded' ? '26%' : '50%' }}>{!avatarUrl && (name ? name[0] : '?')}</div>
                     <label className="std-addbtn">
                       <input type="file" accept="image/*" hidden onChange={onAvatar} />
                       {savingAvatar ? 'Uploading…' : <><Camera size={14} /> {avatarUrl ? 'Change' : 'Upload'}</>}
@@ -277,7 +279,10 @@ export default function StorefrontEditor() {
                 </Field>
                 <Toggle on={theme.show_avatar !== false} onChange={v => set({ show_avatar: v })} label="Show profile picture" hint="Hide it to lead with your name" />
                 {theme.show_avatar !== false && (
-                  <Field label="Profile picture size"><Slider value={theme.avatar_size ?? 96} min={64} max={160} suffix="px" onChange={v => set({ avatar_size: v })} /></Field>
+                  <>
+                    <Field label="Picture shape"><Seg value={theme.avatar_shape || 'circle'} onChange={v => set({ avatar_shape: v })} options={[{ v: 'circle', label: 'Circle' }, { v: 'rounded', label: 'Rounded' }, { v: 'square', label: 'Square' }]} /></Field>
+                    <Field label="Picture size"><Slider value={theme.avatar_size ?? 96} min={64} max={160} suffix="px" onChange={v => set({ avatar_size: v })} /></Field>
+                  </>
                 )}
                 <Field label="Display name">
                   <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" />
@@ -285,11 +290,20 @@ export default function StorefrontEditor() {
                 <Field label="Bio">
                   <textarea rows={3} value={bio} onChange={e => setBio(e.target.value)} placeholder="Tell visitors what you offer…" />
                 </Field>
+                <Field label="Bio size"><Slider value={theme.bio_size ?? 15} min={11} max={25} suffix="px" onChange={v => set({ bio_size: v })} /></Field>
+                <Field label="Bio weight"><Slider value={theme.bio_weight ?? 400} min={300} max={800} step={100} onChange={v => set({ bio_weight: v })} /></Field>
+                <Field label="Bio glow"><Slider value={theme.bio_glow ?? 0} min={0} max={20} suffix="px" onChange={v => set({ bio_glow: v })} /></Field>
+                <p className="std-note">Size, boldness &amp; accent glow for your bio.</p>
+                <Field label="Profile card opacity"><Slider value={theme.card_opacity ?? 100} min={0} max={100} suffix="%" onChange={v => set({ card_opacity: v })} /></Field>
+                <Field label="Profile card blur (glass)"><Slider value={theme.card_blur ?? 0} min={0} max={24} suffix="px" onChange={v => set({ card_blur: v })} /></Field>
+                <Field label="Profile card motion"><Seg value={theme.profile_fx || 'none'} onChange={v => set({ profile_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'glow', label: 'Glow' }, { v: 'float', label: 'Float' }]} /></Field>
+                <p className="std-note">Lower opacity + more blur = frosted glass over your background.</p>
                 <p className="std-note">Your handle: skilljoy.me/@{profile.username}</p>
               </Panel>
 
-              <Panel icon={ImageIcon} title="Assets">
-                <Field label="Background">
+              {/* ── BACKGROUND — the canvas behind everything ── */}
+              <Panel icon={ImageIcon} title="Background">
+                <Field label="Background type">
                   <Seg value={theme.bg} onChange={v => set({ bg: v })} options={[{ v: 'canvas', label: 'Canvas' }, { v: 'solid', label: 'Solid' }, { v: 'gradient', label: 'Gradient' }, { v: 'image', label: 'Image' }, { v: 'video', label: 'Video' }]} />
                 </Field>
                 {theme.bg === 'solid' && <div className="std-colorrow"><input type="color" value={theme.bg_color} onChange={e => set({ bg_color: e.target.value })} /><span>{theme.bg_color}</span></div>}
@@ -313,7 +327,6 @@ export default function StorefrontEditor() {
                     {theme.bg_video && <button className="std-removebtn" onClick={() => set({ bg_video: '' })}><X size={13} /> Remove video</button>}
                   </>
                 )}
-
                 <Field label="Banner">
                   <label className="std-upload std-upload-wide" style={theme.banner_url ? { backgroundImage: `url(${theme.banner_url})` } : {}}>
                     <input type="file" accept="image/*" hidden onChange={onBanner} />
@@ -321,7 +334,27 @@ export default function StorefrontEditor() {
                   </label>
                   {theme.banner_url && <button className="std-removebtn" onClick={() => set({ banner_url: '' })}><X size={13} /> Remove banner</button>}
                 </Field>
+              </Panel>
 
+              {/* ── GENERAL — ambiance: background effects, music, cursor, glow ── */}
+              <Panel icon={Sparkles} title="General">
+                <Field label="Overlay effect"><Seg value={theme.overlay || 'none'} onChange={v => set({ overlay: v })} options={[{ v: 'none', label: 'None' }, { v: 'rain', label: 'Rain' }, { v: 'snow', label: 'Snow' }, { v: 'vhs', label: 'VHS' }]} /></Field>
+                <Field label="Glow intensity"><Slider value={theme.glow_intensity ?? 0} min={0} max={80} suffix="px" onChange={v => set({ glow_intensity: v })} /></Field>
+                <p className="std-note">Master accent glow across your name, picture, card &amp; links.</p>
+                <Field label="Name effect"><Seg value={theme.name_fx || 'none'} onChange={v => set({ name_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'gradient', label: 'Gradient' }, { v: 'rainbow', label: 'Rainbow' }, { v: 'shimmer', label: 'Shine' }, { v: 'glitch', label: 'Glitch' }]} /></Field>
+                <Toggle on={!!theme.animated_name} onChange={v => set({ animated_name: v })} label="Animated username" hint="Subtle accent glow" />
+                <Toggle on={!!theme.mono_icons} onChange={v => set({ mono_icons: v })} label="Monochrome icons" hint="Grayscale social icons" />
+
+                <Field label="Site music">
+                  <label className="std-upload std-upload-sm">
+                    <input type="file" accept="audio/*" hidden onChange={onAudio} />
+                    <span>{savingAudio ? 'Uploading…' : <><Music size={14} /> {theme.audio_url ? 'Change' : 'Upload'}</>}</span>
+                  </label>
+                  <p className="std-note">Visitors get a play/mute button — browsers block autoplay. Keep it small.</p>
+                  {theme.audio_url && <button className="std-removebtn" onClick={() => set({ audio_url: '' })}><X size={13} /> Remove music</button>}
+                </Field>
+
+                <Field label="Cursor effect"><Seg value={theme.cursor_fx || 'none'} onChange={v => set({ cursor_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'trail', label: 'Trail' }, { v: 'sparkle', label: 'Sparkle' }]} /></Field>
                 <Field label="Custom cursor">
                   <label className="std-upload std-upload-sm" style={theme.cursor_url ? { backgroundImage: `url(${theme.cursor_url})`, backgroundSize: 'contain' } : {}}>
                     <input type="file" accept="image/*" hidden onChange={onCursor} />
@@ -330,31 +363,14 @@ export default function StorefrontEditor() {
                   {theme.cursor_url && <button className="std-removebtn" onClick={() => set({ cursor_url: '' })}><X size={13} /> Remove</button>}
                 </Field>
 
-                <Field label="Site audio">
-                  <label className="std-upload std-upload-sm">
-                    <input type="file" accept="audio/*" hidden onChange={onAudio} />
-                    <span>{savingAudio ? 'Uploading…' : <><Music size={14} /> {theme.audio_url ? 'Change' : 'Upload'}</>}</span>
-                  </label>
-                  <p className="std-note">Visitors get a play/mute button — browsers block autoplay. Keep it small.</p>
-                  {theme.audio_url && <button className="std-removebtn" onClick={() => set({ audio_url: '' })}><X size={13} /> Remove audio</button>}
-                </Field>
+                <div className="std-soontiles">
+                  <div className="std-soontile"><Wand2 size={15} /> Name overlays <span className="std-soon">Soon</span></div>
+                  <div className="std-soontile"><Type size={15} /> Custom fonts <span className="std-soon">Soon</span></div>
+                </div>
               </Panel>
 
-              <Panel icon={SlidersHorizontal} title="General">
-                <Field label="Profile opacity"><Slider value={theme.card_opacity ?? 100} min={0} max={100} suffix="%" onChange={v => set({ card_opacity: v })} /></Field>
-                <Field label="Profile blur (glass)"><Slider value={theme.card_blur ?? 0} min={0} max={24} suffix="px" onChange={v => set({ card_blur: v })} /></Field>
-                <p className="std-note">Lower opacity + more blur = frosted glass over your background.</p>
-
-
-                {/* Bio size */}
-
-                <Field label="Bio Size"> <Slider value={theme.bio_size ?? 15} min={11} max={25} suffix="px" onChange={v => set({ bio_size: v })} /></Field>
-                <Field label="Bio weight"><Slider value={theme.bio_weight ?? 400} min={300} max={800} step={100} onChange={v => set({ bio_weight: v })} /></Field>
-                <Field label="Bio glow"><Slider value={theme.bio_glow ?? 0} min={0} max={20} suffix="px" onChange={v => set({ bio_glow: v })} /></Field>
-                <p className="std-note">Size, boldness &amp; accent glow for your bio.</p>
-              </Panel>
-
-              <Panel icon={Palette} title="Color &amp; Theme">
+              {/* ── COLOR — accent, text & title colors, light/dark ── */}
+              <Panel icon={Palette} title="Color">
                 <Field label="Mode"><Seg value={theme.mode} onChange={v => set({ mode: v })} options={[{ v: 'light', label: 'Light' }, { v: 'dark', label: 'Dark' }]} /></Field>
                 <Field label="Accent">
                   <div className="std-swatches">
@@ -369,48 +385,25 @@ export default function StorefrontEditor() {
                     {theme.text_color && <button className="std-textbtn" onClick={() => set({ text_color: '' })}>Reset</button>}
                   </div>
                 </Field>
-                {/* Bio Size */}
-                {/* <Field label="Bio Size">
+                <Field label="Title color">
                   <div className="std-colorrow">
-
-                  </div>
-
-                </Field> */}
-
-
-
-
-                <Field label="Title Color">
-                  <div className="std-colorrow">
-                    <input type="color" value={theme.title_color || '#fff'} onChange={e => set({title_color: e.target.value})}/>
+                    <input type="color" value={theme.title_color || '#ffffff'} onChange={e => set({ title_color: e.target.value })} />
                     <span>{theme.title_color || 'Default'}</span>
                     {theme.title_color && <button className="std-textbtn" onClick={() => set({ title_color: '' })}>Reset</button>}
                   </div>
-
                 </Field>
-                
               </Panel>
 
-              <Panel icon={Wand2} title="Animations &amp; Effects">
-                <Field label="Button style"><Seg value={theme.button_style} onChange={v => set({ button_style: v })} options={[{ v: 'rounded', label: 'Rounded' }, { v: 'pill', label: 'Pill' }, { v: 'sharp', label: 'Sharp' }]} /></Field>
+              {/* ── PRODUCTS — how product cards look & stack ── */}
+              <Panel icon={LayoutGrid} title="Products">
                 <Field label="Product layout"><Seg value={theme.layout} onChange={v => set({ layout: v })} options={[{ v: 'list', label: 'List' }, { v: 'grid', label: 'Grid' }]} /></Field>
+                <Field label="Button style"><Seg value={theme.button_style} onChange={v => set({ button_style: v })} options={[{ v: 'rounded', label: 'Rounded' }, { v: 'pill', label: 'Pill' }, { v: 'sharp', label: 'Sharp' }]} /></Field>
                 <Field label="Product glow"><Seg value={theme.product_glow || 'none'} onChange={v => set({ product_glow: v })} options={[{ v: 'none', label: 'None' }, { v: 'soft', label: 'Soft' }, { v: 'strong', label: 'Strong' }]} /></Field>
                 <Field label="Product opacity (glass)"><Slider value={theme.product_opacity ?? 100} min={40} max={100} suffix="%" onChange={v => set({ product_opacity: v })} /></Field>
                 <Field label="Product blur (glass)"><Slider value={theme.product_blur ?? 0} min={0} max={24} suffix="px" onChange={v => set({ product_blur: v })} /></Field>
-                <Field label="Glow intensity"><Slider value={theme.glow_intensity ?? 0} min={0} max={40} suffix="px" onChange={v => set({ glow_intensity: v })} /></Field>
-                <Field label="Overlay effect"><Seg value={theme.overlay || 'none'} onChange={v => set({ overlay: v })} options={[{ v: 'none', label: 'None' }, { v: 'rain', label: 'Rain' }, { v: 'snow', label: 'Snow' }, { v: 'vhs', label: 'VHS' }]} /></Field>
-                <Field label="Cursor effect"><Seg value={theme.cursor_fx || 'none'} onChange={v => set({ cursor_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'trail', label: 'Trail' }, { v: 'sparkle', label: 'Sparkle' }]} /></Field>
-                <Field label="Profile effect"><Seg value={theme.profile_fx || 'none'} onChange={v => set({ profile_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'glow', label: 'Glow' }, { v: 'float', label: 'Float' }]} /></Field>
-                <Toggle on={!!theme.mono_icons} onChange={v => set({ mono_icons: v })} label="Monochrome icons" hint="Grayscale social icons" />
-                <Field label="Name effect"><Seg value={theme.name_fx || 'none'} onChange={v => set({ name_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'gradient', label: 'Gradient' }, { v: 'rainbow', label: 'Rainbow' }, { v: 'shimmer', label: 'Shine' }, { v: 'glitch', label: 'Glitch' }]} /></Field>
-                <Toggle on={!!theme.animated_name} onChange={v => set({ animated_name: v })} label="Animated username" hint="Subtle accent glow" />
-                <div className="std-soontiles">
-                  <div className="std-soontile"><Wand2 size={15} /> Name overlays <span className="std-soon">Soon</span></div>
-                  <div className="std-soontile"><Type size={15} /> Custom fonts <span className="std-soon">Soon</span></div>
-                </div>
               </Panel>
 
-              <Panel icon={Wand2} title="Product order">
+              <Panel icon={SlidersHorizontal} title="Product order">
                 {skills.length === 0 && <p className="std-note">No published products yet.</p>}
                 {skills.map((s, i) => (
                   <div
@@ -663,13 +656,13 @@ function Styles() {
     .lp-inner { position:relative; z-index:1; margin:20px 14px; padding:24px 16px 22px; border-radius:20px; overflow:hidden;
       background:var(--lp-card-bg, var(--lp-surface)); -webkit-backdrop-filter:blur(var(--lp-card-blur,0px)); backdrop-filter:blur(var(--lp-card-blur,0px));
       border:1px solid color-mix(in srgb, var(--lp-text,#000) 12%, transparent);
-      box-shadow:var(--shadow-lg), 0 0 var(--lp-glow-strong, 0px) color-mix(in srgb, var(--accent) 42%, transparent);
+      box-shadow:var(--shadow-lg), 0 0 var(--lp-glow-strong, 0px) color-mix(in srgb, var(--accent) 62%, transparent);
       display:flex; flex-direction:column; align-items:center; }
     .lp-panelbanner { height:78px; margin:-24px -16px 12px; background:var(--surface-alt) center/cover no-repeat; align-self:stretch; }
     .lp-hasbanner .lp-avatar { margin-top:-42px; position:relative; z-index:1; }
-    .lp-avatar { width:var(--lp-avatar-size, 67px); height:var(--lp-avatar-size, 67px); border-radius:50%; background:color-mix(in srgb, var(--accent) 16%, #fff) center/cover no-repeat;
-      display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(var(--lp-avatar-size, 67px) * 0.35); color:var(--accent); border:3px solid var(--lp-surface); box-shadow:var(--shadow), 0 0 var(--lp-glow-strong, 0px) color-mix(in srgb, var(--accent) 60%, transparent); }
-    .lp-name { font-size:20px; font-weight:800; letter-spacing:-.01em; margin-top:12px; color:var(--lp-title, inherit); filter:drop-shadow(0 0 var(--lp-glow, 0px) color-mix(in srgb, var(--accent) 85%, transparent)); }
+    .lp-avatar { width:var(--lp-avatar-size, 67px); height:var(--lp-avatar-size, 67px); border-radius:var(--lp-avatar-radius, 50%); background:color-mix(in srgb, var(--accent) 16%, #fff) center/cover no-repeat;
+      display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(var(--lp-avatar-size, 67px) * 0.35); color:var(--accent); border:3px solid var(--lp-surface); box-shadow:var(--shadow), 0 0 var(--lp-glow-strong, 0px) color-mix(in srgb, var(--accent) 85%, transparent); }
+    .lp-name { font-size:20px; font-weight:800; letter-spacing:-.01em; margin-top:12px; color:var(--lp-title, inherit); filter:drop-shadow(0 0 var(--lp-glow, 0px) color-mix(in srgb, var(--accent) 100%, transparent)) drop-shadow(0 0 var(--lp-glow-strong, 0px) color-mix(in srgb, var(--accent) 55%, transparent)); }
     .lp-anim .lp-name { animation:sfNameGlow 2.6s ease-in-out infinite; }
     .lp-handle { font-size:13px; font-weight:600; color:var(--accent); margin-top:2px; }
     .lp-bio { font-size:var(--lp-bio-size, 15px); font-weight:var(--lp-bio-weight, 400); color:color-mix(in srgb, var(--lp-text, #5b574e) 75%, transparent); margin-top:10px; max-width:34ch; line-height:1.5;
@@ -680,8 +673,8 @@ function Styles() {
     .lp-mono .lp-social svg { filter:grayscale(1); opacity:.8; }
     .lp-ghost { border-color:transparent; box-shadow:none; }
     .lp-list { display:flex; flex-direction:column; gap:11px; margin:14px 14px 20px; }
-    .lp-glow-soft .lp-card { box-shadow:0 0 16px color-mix(in srgb, var(--accent) 32%, transparent); }
-    .lp-glow-strong .lp-card { box-shadow:0 0 26px color-mix(in srgb, var(--accent) 55%, transparent); }
+    .lp-glow-soft .lp-card { box-shadow:0 0 18px color-mix(in srgb, var(--accent) 45%, transparent); }
+    .lp-glow-strong .lp-card { box-shadow:0 0 26px color-mix(in srgb, var(--accent) 70%, transparent), 0 0 44px color-mix(in srgb, var(--accent) 38%, transparent); }
     .lp-grid { display:grid; grid-template-columns:1fr 1fr; }
     .lp-card { display:flex; gap:11px; align-items:center; text-align:left; padding:10px; border-radius:16px;
       backdrop-filter:blur(var(--lp-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--lp-item-blur, 0px));
