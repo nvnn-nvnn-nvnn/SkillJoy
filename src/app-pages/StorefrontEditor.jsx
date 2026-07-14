@@ -11,7 +11,7 @@ import { uploadBanner, uploadBgVideo, uploadAudio } from '@/lib/storage';
 import {
   Palette, Link2, Eye, ImagePlus, X, Plus, ChevronUp, ChevronDown,
   ExternalLink, Check, MousePointer2, Type, Video, Music, Wand2, SlidersHorizontal,
-  Image as ImageIcon, Camera, AtSign, User, Sparkles, LayoutGrid,
+  Image as ImageIcon, Camera, AtSign, User, Sparkles, LayoutGrid, ListMusic,
 } from 'lucide-react';
 import { BrandIcon } from '@/lib/brandIcons';
 
@@ -97,7 +97,7 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
       )}
       {theme.overlay && theme.overlay !== 'none' && <div className={`lp-overlay lp-overlay-${theme.overlay}`} aria-hidden="true" />}
       {/* Cursor FX (cursor_fx) intentionally NOT simulated in the preview — control only. */}
-      {theme.audio_url && <span className="lp-audiopill" aria-hidden="true"><Music size={11} /></span>}
+      {theme.audio_tracks?.length > 0 && <span className="lp-audiopill" aria-hidden="true"><Music size={11} /></span>}
       <div className={`lp-inner${theme.banner_url ? ' lp-hasbanner' : ''}${theme.card_opacity === 0 ? ' lp-ghost' : ''}${theme.profile_fx && theme.profile_fx !== 'none' ? ` lp-pfx-${theme.profile_fx}` : ''}`}>
         {theme.banner_url && <div className="lp-panelbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} />}
         {theme.show_avatar !== false && <div className="lp-avatar" style={avatar ? { backgroundImage: `url(${avatar})` } : {}}>{!avatar && initials(name)}</div>}
@@ -154,6 +154,7 @@ export default function StorefrontEditor() {
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState('');
   const [subTab, setSubTab] = useState('customize');
+  const [musicOpen, setMusicOpen] = useState(false); // site-music modal
   const [dragIdx, setDragIdx] = useState(null);   // product-order drag source
   const [dragOver, setDragOver] = useState(null); // product-order drop target
 
@@ -180,8 +181,11 @@ export default function StorefrontEditor() {
   async function save() {
     setErr('');
     const tp = Object.fromEntries(Object.entries(pixels).filter(([, v]) => v && v.trim()));
+    // Keep the legacy single audio_url pointed at the first track for back-compat.
+    const tracks = theme.audio_tracks || [];
+    const themeToSave = { ...theme, audio_tracks: tracks, audio_url: tracks[0]?.url || '' };
     const patch = {
-      bio: bio.trim(), storefront_theme: theme,
+      bio: bio.trim(), storefront_theme: themeToSave,
       full_name: name.trim() || profile.full_name,
       avatar_url: avatarUrl || null,
       tracking_pixels: Object.keys(tp).length ? tp : null,
@@ -206,10 +210,23 @@ export default function StorefrontEditor() {
   const onCursor = (e) => uploadTo(e.target.files?.[0], setSavingCursor, (url) => set({ cursor_url: url }));
   const onAvatar = (e) => uploadTo(e.target.files?.[0], setSavingAvatar, (url) => setAvatarUrl(url));
   const onBgVideo = (e) => uploadTo(e.target.files?.[0], setSavingBgVideo, (url) => set({ bg_video: url, bg: 'video' }), uploadBgVideo);
-  const onAudio = (e) => uploadTo(e.target.files?.[0], setSavingAudio, (url) => set({ audio_url: url }), uploadAudio);
+
+  // Site music is a playlist — each upload APPENDS a track (keep the filename as its label).
+  async function onAudioAdd(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSavingAudio(true);
+    try {
+      const url = await uploadAudio(user.id, file);
+      const name = file.name.replace(/\.[^.]+$/, '');
+      setTheme(t => ({ ...t, audio_tracks: [...(t.audio_tracks || []), { url, name }] }));
+    } catch (err) { setErr(err.message); }
+    finally { setSavingAudio(false); if (e.target) e.target.value = ''; } // reset so the same file can be re-added
+  }
+  function removeTrack(i) { setTheme(t => ({ ...t, audio_tracks: (t.audio_tracks || []).filter((_, j) => j !== i) })); }
 
   function setSocial(i, patch) { setTheme(t => ({ ...t, socials: t.socials.map((s, j) => j === i ? { ...s, ...patch } : s) })); }
-  function addSocial() { setTheme(t => ({ ...t, socials: [...(t.socials || []), { type: 'instagram', url: '' }] })); }
+  function addSocial(type = 'instagram') { setTheme(t => ({ ...t, socials: [...(t.socials || []), { type, url: '' }] })); }
   function removeSocial(i) { setTheme(t => ({ ...t, socials: t.socials.filter((_, j) => j !== i) })); }
 
   async function createLink() { try { const l = await addLink(user.id, { label: 'New link', url: '', position: links.length }); setLinks([...links, l]); } catch (e) { setErr(e.message); } }
@@ -346,12 +363,11 @@ export default function StorefrontEditor() {
                 <Toggle on={!!theme.mono_icons} onChange={v => set({ mono_icons: v })} label="Monochrome icons" hint="Grayscale social icons" />
 
                 <Field label="Site music">
-                  <label className="std-upload std-upload-sm">
-                    <input type="file" accept="audio/*" hidden onChange={onAudio} />
-                    <span>{savingAudio ? 'Uploading…' : <><Music size={14} /> {theme.audio_url ? 'Change' : 'Upload'}</>}</span>
-                  </label>
-                  <p className="std-note">Visitors get a play/mute button — browsers block autoplay. Keep it small.</p>
-                  {theme.audio_url && <button className="std-removebtn" onClick={() => set({ audio_url: '' })}><X size={13} /> Remove music</button>}
+                  <button className="std-musicbtn" onClick={() => setMusicOpen(true)}>
+                    <span className="std-musicbtn-l"><Music size={15} /> {theme.audio_tracks?.length ? `${theme.audio_tracks.length} track${theme.audio_tracks.length > 1 ? 's' : ''}` : 'Add music'}</span>
+                    <span className="std-musicbtn-r">Manage</span>
+                  </button>
+                  <p className="std-note">Build a playlist — it plays on your storefront with a play/mute button.</p>
                 </Field>
 
                 <Field label="Cursor effect"><Seg value={theme.cursor_fx || 'none'} onChange={v => set({ cursor_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'trail', label: 'Trail' }, { v: 'sparkle', label: 'Sparkle' }]} /></Field>
@@ -432,16 +448,34 @@ export default function StorefrontEditor() {
           {subTab === 'links' && (
             <>
               <Panel icon={AtSign} title="Social links">
-                {(theme.socials || []).map((s, i) => (
-                  <div key={i} className="std-row">
-                    <select value={s.type} onChange={e => setSocial(i, { type: e.target.value })}>
-                      {SOCIAL_TYPES.map(t => <option key={t.type} value={t.type}>{t.label}</option>)}
-                    </select>
-                    <input value={s.url} onChange={e => setSocial(i, { url: e.target.value })} placeholder="https://…" />
-                    <button className="std-icobtn" onClick={() => removeSocial(i)}><X size={15} /></button>
+                <span className="std-flabel">Choose a platform</span>
+                <div className="std-platgrid">
+                  {SOCIAL_TYPES.map(t => {
+                    const added = (theme.socials || []).some(s => s.type === t.type);
+                    return (
+                      <button key={t.type} className={`std-plattile${added ? ' on' : ''}`} onClick={() => addSocial(t.type)} title={`Add ${t.label}`}>
+                        <span className="std-platicon"><BrandIcon type={t.type} size={22} /></span>
+                        <span className="std-platlabel">{t.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {(theme.socials || []).length > 0 ? (
+                  <div className="std-sociallist">
+                    {(theme.socials || []).map((s, i) => {
+                      const meta = SOCIAL_TYPES.find(t => t.type === s.type);
+                      return (
+                        <div key={i} className="std-socialrow">
+                          <span className="std-socialicon"><BrandIcon type={s.type} size={18} /></span>
+                          <input value={s.url} onChange={e => setSocial(i, { url: e.target.value })} placeholder={`Your ${meta?.label || 'profile'} URL`} />
+                          <button className="std-icobtn" onClick={() => removeSocial(i)} aria-label={`Remove ${meta?.label || 'social'}`}><X size={15} /></button>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-                <button className="std-addbtn" onClick={addSocial}><Plus size={15} /> Add social</button>
+                ) : (
+                  <p className="std-note">Tap an icon above to add it, then paste your link.</p>
+                )}
               </Panel>
 
               <Panel icon={Link2} title="Link buttons">
@@ -470,6 +504,42 @@ export default function StorefrontEditor() {
           <p className="std-preview-note">Updates as you edit · Save to publish</p>
         </aside>
       </div>
+
+      {/* ── Site-music modal — visual list of the submitted tracks ── */}
+      {musicOpen && (
+        <div className="std-modal-backdrop" onClick={() => setMusicOpen(false)}>
+          <div className="std-modal" onClick={e => e.stopPropagation()}>
+            <div className="std-modal-head">
+              <span className="std-modal-title"><ListMusic size={17} /> Site music</span>
+              <button className="std-icobtn" onClick={() => setMusicOpen(false)} aria-label="Close"><X size={16} /></button>
+            </div>
+            <p className="std-modal-sub">Tracks play in order on your storefront. Visitors get a play/mute button — browsers block autoplay until they tap.</p>
+
+            {(theme.audio_tracks || []).length === 0 ? (
+              <div className="std-modal-empty"><Music size={26} strokeWidth={1.5} /><p>No tracks yet</p></div>
+            ) : (
+              <div className="std-tracklist">
+                {(theme.audio_tracks || []).map((tr, i) => (
+                  <div key={i} className="std-track">
+                    <span className="std-track-idx">{i + 1}</span>
+                    <div className="std-track-main">
+                      <span className="std-track-name" title={tr.name}>{tr.name || `Track ${i + 1}`}</span>
+                      <audio className="std-track-audio" src={tr.url} controls preload="none" />
+                    </div>
+                    <button className="std-icobtn" onClick={() => removeTrack(i)} aria-label={`Remove ${tr.name || 'track'}`}><X size={15} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <label className="std-addbtn std-track-add">
+              <input type="file" accept="audio/*" hidden onChange={onAudioAdd} />
+              {savingAudio ? 'Uploading…' : <><Plus size={15} /> Upload track</>}
+            </label>
+            <p className="std-note">Changes apply when you hit “Save changes”.</p>
+          </div>
+        </div>
+      )}
 
       <Styles />
     </div>
@@ -614,6 +684,24 @@ function Styles() {
     .std-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
     .std-row select { flex:0 0 128px; }
     .std-row input { flex:1; }
+
+    /* ── Platform picker (click an icon → adds a social row) ── */
+    .std-platgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(80px, 1fr)); gap:8px; margin-bottom:6px; }
+    .std-plattile { display:flex; flex-direction:column; align-items:center; gap:7px; padding:12px 6px; min-width:0;
+      border:1.5px solid var(--border-strong); border-radius:var(--r); background:var(--surface); color:var(--text-secondary);
+      cursor:pointer; transition:transform .13s ease, border-color .13s ease, color .13s ease, background .13s ease, box-shadow .13s ease; }
+    .std-plattile:hover { transform:translateY(-2px); border-color:var(--accent); color:var(--accent);
+      background:color-mix(in srgb, var(--accent) 8%, var(--surface)); box-shadow:0 6px 16px color-mix(in srgb, var(--accent) 16%, transparent); }
+    .std-plattile.on { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, transparent); }
+    .std-platicon { display:inline-flex; align-items:center; justify-content:center; }
+    .std-platlabel { font-size:11px; font-weight:700; letter-spacing:-.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+
+    /* Added socials — icon chip + URL field + remove */
+    .std-sociallist { display:flex; flex-direction:column; gap:8px; margin-top:14px; padding-top:14px; border-top:1px solid var(--border); }
+    .std-socialrow { display:flex; align-items:center; gap:9px; }
+    .std-socialicon { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; flex-shrink:0;
+      border-radius:var(--r-sm); background:var(--surface-alt); color:var(--text); border:1px solid var(--border); }
+    .std-socialrow input { flex:1; min-width:0; }
     .std-linkcard { border:1px solid var(--border); border-radius:var(--r); padding:14px; margin-bottom:10px; background:var(--surface-alt); }
     .std-linkcard input { width:100%; margin-bottom:8px; }
     .std-check { display:flex; align-items:center; gap:7px; font-size:13px; color:var(--text-secondary); font-weight:500; }
@@ -621,6 +709,34 @@ function Styles() {
     .std-addbtn { width:auto; min-width:0; display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:var(--r-full);
       border:1.5px solid var(--border-strong); background:var(--surface); color:var(--text); font-size:13px; font-weight:700; cursor:pointer; }
     .std-addbtn:hover { border-color:var(--accent); color:var(--accent); }
+
+    /* ── Site-music: trigger button + modal ── */
+    .std-musicbtn { width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 14px; border-radius:var(--r);
+      border:1.5px solid var(--border-strong); background:var(--surface); color:var(--text); font-size:14px; font-weight:700; cursor:pointer; transition:border-color .13s ease; }
+    .std-musicbtn:hover { border-color:var(--accent); }
+    .std-musicbtn-l { display:inline-flex; align-items:center; gap:8px; }
+    .std-musicbtn-r { font-size:12px; font-weight:800; color:var(--accent); }
+
+    .std-modal-backdrop { position:fixed; inset:0; z-index:200; display:flex; align-items:center; justify-content:center; padding:20px;
+      background:rgba(12,10,16,.55); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); animation:stdFade .16s ease; }
+    @keyframes stdFade { from { opacity:0; } to { opacity:1; } }
+    .std-modal { width:100%; max-width:440px; max-height:82vh; overflow-y:auto; padding:20px; border-radius:var(--r-lg);
+      background:color-mix(in srgb, var(--surface) 96%, transparent); -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px);
+      border:1px solid var(--border-strong); box-shadow:0 24px 60px rgba(20,18,12,.28); animation:stdDrop .18s ease; }
+    .std-modal-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:5px; }
+    .std-modal-title { display:flex; align-items:center; gap:9px; font-size:17px; font-weight:800; letter-spacing:-.01em; }
+    .std-modal-sub { font-size:12.5px; color:var(--text-muted); margin:0 0 16px; line-height:1.5; }
+    .std-modal-empty { display:flex; flex-direction:column; align-items:center; gap:8px; padding:28px; color:var(--text-muted);
+      border:1.5px dashed var(--border-strong); border-radius:var(--r); margin-bottom:14px; }
+    .std-modal-empty p { margin:0; font-size:13px; font-weight:600; }
+    .std-tracklist { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+    .std-track { display:flex; align-items:center; gap:11px; padding:11px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-alt); }
+    .std-track-idx { flex-shrink:0; width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:50%;
+      background:color-mix(in srgb, var(--accent) 16%, transparent); color:var(--accent); font-size:12px; font-weight:800; }
+    .std-track-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:7px; }
+    .std-track-name { font-size:13.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .std-track-audio { width:100%; height:32px; }
+    .std-track-add { width:100%; justify-content:center; }
 
     /* Live preview */
     .std-preview { position:sticky; top:78px; display:flex; flex-direction:column; gap:8px; }

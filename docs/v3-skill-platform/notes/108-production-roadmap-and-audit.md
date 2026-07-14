@@ -245,3 +245,15 @@ customization edge (bg video, overlays, audio, cursor/name FX) none of them have
 
 > Caveat: competitor feature sets shift fast; knowledge current to early 2026. Spot-check each
 > competitor's live pricing page before committing priority.
+
+### Tactical follow-ups (from 2026-07-13 build session) — Devv to program
+
+- [ ] **Theme preset picker** — one-tap named looks (bg + accent + effects + glow bundle). Full
+      write-up in note 137. Highest-leverage next customization move.
+- [ ] **Demo `SubscribeForm` no-op** — on demo storefronts the subscribe form posts to Supabase with
+      a fake creator id → silent error. No-op it when the store is a demo (`getDemoStore`).
+- [ ] **Site-music: track drag-reorder + per-creator cap** — upload order = play order today; no cap
+      on number/size of tracks (note 139).
+- [ ] **Change social-type without remove/re-add** — the icon picker only adds; editing a row's
+      platform means remove + re-add (note 138).
+- [ ] **Polish the Link buttons section** like the social icon picker (note 138).

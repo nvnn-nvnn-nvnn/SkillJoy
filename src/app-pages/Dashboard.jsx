@@ -160,25 +160,36 @@ export default function Dashboard() {
 
       {/* ── Bookings ── */}
       {tab === 'bookings' && (
-        <div className="db-panel db-grid">
-          <div className="db-col">
-            <h2 className="db-h2">Upcoming sessions</h2>
-            {bookings.length === 0 ? (
-              <p className="db-muted">No booked sessions yet.</p>
-            ) : (
-              <div className="db-table">
-                {bookings.map(b => (
-                  <div key={b.id} className="db-row" style={{ gridTemplateColumns: '1.2fr 1.4fr 1fr' }}>
-                    <span>{new Date(b.start_time).toLocaleDateString([], { month: 'short', day: 'numeric' })} {new Date(b.start_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
-                    <span className="db-trunc">{b.skill?.title}</span>
-                    <span className="db-trunc">{b.buyer?.full_name || 'Buyer'}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+        <div className="db-panel">
+          {/* Grayed-out notice — native scheduling isn't production-ready yet. */}
+          <div className="db-wip" role="note">
+            <span className="db-wip-icon" aria-hidden="true">🚧</span>
+            <div>
+              <p className="db-wip-title">Bookings are a work in progress</p>
+              <p className="db-wip-sub">Scheduling &amp; availability are still being built. Feel free to explore, but don’t rely on this for live client sessions yet.</p>
+            </div>
           </div>
-          <div className="db-col">
-            <AvailabilityEditor />
+
+          <div className="db-grid db-grid-even db-wip-dim">
+            <div className="db-col">
+              <h2 className="db-h2">Upcoming sessions</h2>
+              {bookings.length === 0 ? (
+                <p className="db-muted">No booked sessions yet.</p>
+              ) : (
+                <div className="db-table">
+                  {bookings.map(b => (
+                    <div key={b.id} className="db-row db-row-book">
+                      <span>{new Date(b.start_time).toLocaleDateString([], { month: 'short', day: 'numeric' })} {new Date(b.start_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                      <span className="db-trunc">{b.skill?.title}</span>
+                      <span className="db-trunc">{b.buyer?.full_name || 'Buyer'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="db-col">
+              <AvailabilityEditor />
+            </div>
           </div>
         </div>
       )}
@@ -212,7 +223,17 @@ function DashStyles() {
     .db-stat-label { display:block; font-size:12px; color:var(--text-muted); margin-top:2px; text-transform:uppercase; letter-spacing:.04em; }
 
     .db-grid { display:grid; grid-template-columns:1.3fr 1fr; gap:20px; align-items:start; margin-bottom:28px; }
+    .db-grid-even { grid-template-columns:1fr 1fr; }
     .db-col { min-width:0; }
+    .db-row-book { grid-template-columns:1fr 1.2fr 1fr; }
+
+    /* ── WIP notice (grayed out) + dimmed content ── */
+    .db-wip { display:flex; gap:12px; align-items:flex-start; padding:14px 16px; margin-bottom:20px; border:1px dashed var(--border-strong); border-radius:var(--r-lg); background:var(--surface-alt); }
+    .db-wip-icon { font-size:20px; line-height:1; flex-shrink:0; filter:grayscale(1); opacity:.75; }
+    .db-wip-title { font-size:14px; font-weight:800; color:var(--text-secondary); margin:0 0 2px; }
+    .db-wip-sub { font-size:12.5px; color:var(--text-muted); margin:0; line-height:1.5; }
+    .db-wip-dim { opacity:.68; filter:grayscale(.25); transition:opacity .14s ease; }
+    .db-wip-dim:hover { opacity:.85; }
 
     .db-buyers-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
     .db-table { border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden; background:var(--surface); }

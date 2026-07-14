@@ -125,7 +125,7 @@ export default function Storefront() {
       {theme.overlay && theme.overlay !== 'none' && (
         <div className={`sf-overlay sf-overlay-${theme.overlay}`} aria-hidden="true" />
       )}
-      {theme.audio_url && <AudioPill url={theme.audio_url} />}
+      {theme.audio_tracks?.length > 0 && <AudioPill tracks={theme.audio_tracks} />}
       {theme.cursor_fx && theme.cursor_fx !== 'none' && <CursorFx kind={theme.cursor_fx} />}
       <Seo
         title={`${profile.full_name || '@' + profile.username} — SkillJoy`}
@@ -211,18 +211,24 @@ export default function Storefront() {
   );
 }
 
-// ── Site audio: plays automatically (unmuted) where the browser allows it.
-// React owns ONE <audio> element (no hand-rolled `new Audio()` → no StrictMode
-// double-instance leaks). The icon tracks the element's REAL play/pause events,
-// so it can never desync. Autoplay is attempted on mount; if the browser blocks
-// it (policy for first-time visitors), we start on the first interaction —
-// UNLESS the user has already taken manual control (`interacted`), so pausing
-// never gets undone by the auto-starter.
-function AudioPill({ url }) {
+// ── Site music: plays a PLAYLIST automatically (unmuted) where the browser
+// allows it. React owns ONE <audio> element (no hand-rolled `new Audio()` → no
+// StrictMode double-instance leaks). The icon tracks the element's REAL
+// play/pause events, so it can never desync. Autoplay is attempted on mount; if
+// the browser blocks it (policy for first-time visitors), we start on the first
+// interaction — UNLESS the user has already taken manual control (`interacted`),
+// so pausing never gets undone by the auto-starter. A single track loops; a
+// multi-track playlist advances on `ended` and wraps back to the first.
+function AudioPill({ tracks }) {
   const audioRef = useRef(null);
   const interacted = useRef(false);
+  const didMount = useRef(false);
+  const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const single = tracks.length <= 1;
+  const current = tracks[idx] || tracks[0];
 
+  // Mount: attempt autoplay; if blocked, start on the first user gesture.
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return undefined;
@@ -241,7 +247,15 @@ function AudioPill({ url }) {
       window.addEventListener('keydown', start);
     });
     return () => { cancelled = true; removeListeners(); a.pause(); };
-  }, [url]);
+  }, []);
+
+  // When the track advances (incl. wrapping back to 0), keep playing the new
+  // src. Skip the initial mount so we don't fight the autoplay/gesture logic.
+  useEffect(() => {
+    if (!didMount.current) { didMount.current = true; return; }
+    const a = audioRef.current;
+    if (a) a.play().catch(() => {});
+  }, [idx]);
 
   // pointerdown fires before the window auto-starter sees this same click, so
   // flagging here means clicking the pill is treated as manual control.
@@ -252,12 +266,17 @@ function AudioPill({ url }) {
     if (!a) return;
     if (a.paused) a.play().catch(() => {}); else a.pause();
   }
+  function onEnded() {
+    if (single) return;                       // single track loops via the `loop` attr
+    setIdx(i => (i + 1) % tracks.length);     // advance; the idx effect resumes playback
+  }
 
   return (
     <>
-      <audio ref={audioRef} src={url} loop onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} />
+      <audio ref={audioRef} src={current?.url} loop={single} onEnded={onEnded}
+        onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} />
       <button className="sf-audiopill" onPointerDown={markInteracted} onClick={toggle}
-        aria-label={playing ? 'Pause music' : 'Play music'}>
+        aria-label={playing ? 'Pause music' : 'Play music'} title={current?.name || undefined}>
         {playing ? <Volume2 size={16} /> : <VolumeX size={16} />}
       </button>
     </>

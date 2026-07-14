@@ -115,7 +115,9 @@ export default function OnboardingPage() {
         }
         const { data: updated } = await supabase.from('profiles').select('*').eq('id', user.id).single();
         if (updated) setProfile(updated);
-        navigate('/build');
+        // First-time account: land on the page builder (customize your storefront),
+        // NOT the digital-products hub — get them building their page first.
+        navigate('/storefront/edit');
     }
 
     // ── Render ───────────────────────────────────────────────────────────────

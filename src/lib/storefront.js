@@ -37,7 +37,8 @@ export const DEFAULT_THEME = {
   glow_intensity: 0,        // 0–40 px — master accent glow across name/avatar/panel/links
   name_fx: 'none',          // 'none'|'gradient'|'rainbow'|'shimmer'|'glitch' — display-name text effect
   overlay: 'none',          // 'none' | 'rain' | 'snow' | 'vhs' — full-page overlay effect
-  audio_url: '',            // site audio url — play/mute pill on the storefront
+  audio_url: '',            // DEPRECATED single site-audio url — kept in sync w/ audio_tracks[0] for back-compat
+  audio_tracks: [],         // [{ url, name }] — site music playlist; play/mute pill plays through it
   cursor_fx: 'none',        // 'none' | 'trail' | 'sparkle' — pointer particle effect
   profile_fx: 'none',       // 'none' | 'glow' | 'float' — profile panel animation
 };
@@ -56,9 +57,23 @@ export const SOCIAL_TYPES = [
   { type: 'website',   label: 'Website',   icon: '🌐' },
 ];
 
+/** Derive a friendly track name from a file URL (last path segment, no extension). */
+function trackNameFromUrl(url) {
+  try {
+    const seg = decodeURIComponent(String(url).split('?')[0].split('/').pop() || '');
+    return seg.replace(/\.[^.]+$/, '') || 'Track';
+  } catch { return 'Track'; }
+}
+
 /** Merge a stored theme over defaults so missing keys are safe. */
 export function resolveTheme(theme) {
-  return { ...DEFAULT_THEME, ...(theme || {}) };
+  const merged = { ...DEFAULT_THEME, ...(theme || {}) };
+  if (!Array.isArray(merged.audio_tracks)) merged.audio_tracks = [];
+  // Back-compat: a legacy single audio_url becomes a one-item playlist.
+  if (merged.audio_tracks.length === 0 && merged.audio_url) {
+    merged.audio_tracks = [{ url: merged.audio_url, name: trackNameFromUrl(merged.audio_url) }];
+  }
+  return merged;
 }
 
 /** Save bio + theme (+ optional integrations) on the creator's profile. */
