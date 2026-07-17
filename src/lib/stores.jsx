@@ -86,9 +86,12 @@ export function normalizeSkills(skills) {
 }
 
 export function initials(name) {
-  if (!name) return '?'
-  return name
-    .split(' ')
+  // Split on runs of whitespace and drop empties — a doubled/leading/trailing
+  // space used to yield '' segments, and ''[0] is undefined → .toUpperCase() threw.
+  // Note a whitespace-only name (' ') is truthy, so it needs the filter, not a !name guard.
+  const words = String(name ?? '').trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return '?'
+  return words
     .slice(0, 2)
     .map((w) => w[0].toUpperCase())
     .join('')

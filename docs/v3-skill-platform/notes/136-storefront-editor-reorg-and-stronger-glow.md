@@ -50,3 +50,20 @@ Also removed the dead commented-out "Bio Size" block and the stray `title_color`
 ## Follow-ups / ideas
 - "Name overlays" + "Custom fonts" still Soon tiles in General.
 - Could add a one-click **theme preset** picker (bg+accent+effects bundle) — Phase 2 roadmap item.
+
+## Learn — build-it-yourself
+**Mental model:** drive many visual effects from *one* number, in CSS, not JS.
+
+1. **One var, fed into blur.** `--sf-glow` is a pixel value piped into `drop-shadow(0 0 var(--sf-glow) …)`
+   and `box-shadow`. When it's `0px` the shadow is invisible — so a single slider covers "off" through
+   "intense" with **zero special-casing** for the off state.
+2. **Tie color to the theme, automatically.** `color-mix(in srgb, var(--accent) 85%, transparent)`
+   means the glow is always the creator's accent — change the accent, the glow follows, no JS.
+3. **Layer shadows for "bloom."** A tight core (`--sf-glow` @100%) plus a wide halo
+   (`--sf-glow-strong` @55%) reads as a real glow; one flat blur reads as a drop shadow. Stacking is
+   the whole trick.
+4. **Derive, don't duplicate.** `--sf-glow-strong = glow * 2.4` is computed once from the input, so
+   everything scales together from the single slider. Raising the max (40→80) needed no other change.
+
+**Transferable:** any "intensity" control (glow, blur, opacity, shake) is cleanest as one CSS custom
+property consumed in several places, with related magnitudes derived from it.

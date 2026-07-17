@@ -36,12 +36,95 @@ export const DEFAULT_THEME = {
   // ── Phase 2: guns.lol effects ──
   glow_intensity: 0,        // 0–40 px — master accent glow across name/avatar/panel/links
   name_fx: 'none',          // 'none'|'gradient'|'rainbow'|'shimmer'|'glitch' — display-name text effect
-  overlay: 'none',          // 'none' | 'rain' | 'snow' | 'vhs' — full-page overlay effect
+  overlay: 'none',          // 'none'|'rain'|'snow'|'vhs'|'stars'|'particles'|'matrix' — full-page overlay
   audio_url: '',            // DEPRECATED single site-audio url — kept in sync w/ audio_tracks[0] for back-compat
   audio_tracks: [],         // [{ url, name }] — site music playlist; play/mute pill plays through it
   cursor_fx: 'none',        // 'none' | 'trail' | 'sparkle' — pointer particle effect
   profile_fx: 'none',       // 'none' | 'glow' | 'float' — profile panel animation
+  // ── Phase 3: entry & depth ──
+  splash_enabled: false,    // show a "click to enter" splash before revealing the page
+  splash_text: 'click to enter',
+  tilt_enabled: false,      // 3D tilt/parallax on the profile card as the pointer moves
+  tilt_max: 10,             // 0–20 — max tilt in degrees
 };
+
+// ── One-tap theme templates ──────────────────────────────────────────────────
+// Each preset is a PARTIAL theme: applying it merges over the current theme, so
+// a creator's name/bio/avatar/socials/links/products are never touched.
+export const THEME_PRESETS = [
+  { id: 'midnight', name: 'Midnight Glow', emoji: '🌌', theme: {
+    mode: 'dark', bg: 'gradient', bg_color: '#0B0B14', bg_color2: '#1B1636', accent: '#7A5CFF',
+    glow_intensity: 34, name_fx: 'shimmer', product_glow: 'strong', overlay: 'stars',
+    card_opacity: 70, card_blur: 14, product_opacity: 70, product_blur: 10,
+    profile_fx: 'glow', button_style: 'pill', tilt_enabled: true, text_color: '', title_color: '' } },
+  { id: 'clean', name: 'Clean Light', emoji: '🤍', theme: {
+    mode: 'light', bg: 'canvas', accent: '#00CC99', glow_intensity: 0, name_fx: 'none',
+    product_glow: 'none', overlay: 'none', card_opacity: 100, card_blur: 0,
+    product_opacity: 100, product_blur: 0, profile_fx: 'none', button_style: 'rounded',
+    tilt_enabled: false, text_color: '', title_color: '' } },
+  { id: 'vapor', name: 'Vaporwave', emoji: '🌴', theme: {
+    mode: 'dark', bg: 'gradient', bg_color: '#2B1055', bg_color2: '#7597DE', accent: '#FF2D75',
+    glow_intensity: 28, name_fx: 'rainbow', overlay: 'vhs', product_glow: 'strong',
+    card_opacity: 65, card_blur: 12, product_opacity: 68, product_blur: 8,
+    button_style: 'sharp', tilt_enabled: true, text_color: '', title_color: '' } },
+  { id: 'frost', name: 'Frosted', emoji: '❄️', theme: {
+    mode: 'light', bg: 'gradient', bg_color: '#E8F4FF', bg_color2: '#F7FBFF', accent: '#2563EB',
+    glow_intensity: 10, name_fx: 'none', overlay: 'snow', product_glow: 'soft',
+    card_opacity: 55, card_blur: 20, product_opacity: 60, product_blur: 14,
+    button_style: 'pill', tilt_enabled: false, text_color: '', title_color: '' } },
+  { id: 'terminal', name: 'Terminal', emoji: '🟩', theme: {
+    mode: 'dark', bg: 'solid', bg_color: '#05080A', accent: '#00FF88', glow_intensity: 24,
+    name_fx: 'glitch', overlay: 'matrix', product_glow: 'soft', mono_icons: true,
+    card_opacity: 75, card_blur: 6, product_opacity: 75, product_blur: 4,
+    button_style: 'sharp', tilt_enabled: false, text_color: '', title_color: '' } },
+  { id: 'sunset', name: 'Sunset', emoji: '🌅', theme: {
+    mode: 'dark', bg: 'gradient', bg_color: '#2A1020', bg_color2: '#6B2D3C', accent: '#FF8C00',
+    glow_intensity: 22, name_fx: 'gradient', overlay: 'particles', product_glow: 'soft',
+    card_opacity: 72, card_blur: 10, product_opacity: 72, product_blur: 8,
+    profile_fx: 'float', button_style: 'rounded', tilt_enabled: true, text_color: '', title_color: '' } },
+];
+
+// A theme file carries LOOK, never content or assets:
+//  - socials/audio_tracks are someone's own links & music, not styling.
+//  - asset URLs would hotlink the exporter's storage (breaks + leaks on their bill).
+// Excluded from both export and import.
+const THEME_PORTABLE_EXCLUDE = new Set([
+  'socials', 'audio_tracks', 'audio_url',
+  'banner_url', 'bg_image', 'bg_video', 'cursor_url',
+]);
+
+/** Strip a theme down to the shareable/stylistic keys (for export). */
+export function portableTheme(theme) {
+  const out = {};
+  for (const [k, v] of Object.entries(theme || {})) {
+    if (!THEME_PORTABLE_EXCLUDE.has(k)) out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Whitelist an imported theme file down to keys we actually know about, so a
+ * hand-edited/hostile JSON can't inject arbitrary fields into the profile row.
+ * Unknown keys, type mismatches, and content/asset keys are dropped silently.
+ * Returns {} if nothing recognizable.
+ */
+export function sanitizeThemeImport(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  for (const key of Object.keys(DEFAULT_THEME)) {
+    if (THEME_PORTABLE_EXCLUDE.has(key)) continue;              // never import content/assets
+    if (!Object.prototype.hasOwnProperty.call(raw, key)) continue;
+    const val = raw[key];
+    const def = DEFAULT_THEME[key];
+    // Type must match the default's shape, else skip it.
+    if (Array.isArray(def)) { if (Array.isArray(val)) out[key] = val; continue; }
+    if (typeof def === typeof val) out[key] = val;
+  }
+  // The importer has no bg_image/bg_video (we never carry them), so an
+  // image/video background would render blank — fall back to the plain canvas.
+  if (out.bg === 'image' || out.bg === 'video') out.bg = 'canvas';
+  return out;
+}
 
 export const SOCIAL_TYPES = [
   { type: 'instagram', label: 'Instagram', icon: '📸' },

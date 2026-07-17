@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>3D tilt — playground (note 143)</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center; gap: 32px;
+    padding: 40px 20px; background: #0d0b14; color: #eee;
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .stage { display: grid; place-items: center; min-height: 280px; }
+
+  /* ── THE WHOLE EFFECT IS THESE 6 LINES ───────────────────────────────────
+     JS never sets `transform`. It only sets --tilt-x / --tilt-y.
+     CSS reads them here. The 0deg fallbacks make it correct before JS runs. */
+  .tiltwrap {
+    transform: perspective(var(--persp, 900px))
+               rotateX(var(--tilt-x, 0deg))
+               rotateY(var(--tilt-y, 0deg));
+    transform-style: preserve-3d;
+    will-change: transform;
+    transition: transform .14s ease-out;   /* ← the "weight". Try removing it. */
+  }
+
+  .card {
+    width: 300px; padding: 34px 26px; border-radius: 20px; text-align: center;
+    background: linear-gradient(150deg, rgba(122,92,255,.35), rgba(30,25,60,.6));
+    border: 1px solid rgba(255,255,255,.16);
+    box-shadow: 0 24px 60px rgba(0,0,0,.5), 0 0 40px rgba(122,92,255,.28);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  }
+  .avatar {
+    width: 74px; height: 74px; margin: 0 auto 14px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 32px;
+    background: rgba(122,92,255,.28); border: 2px solid rgba(122,92,255,.6);
+  }
+  .name { font-size: 21px; font-weight: 800; letter-spacing: -.02em; }
+  .handle { color: #a99cff; font-size: 13px; font-weight: 600; margin-top: 2px; }
+  .bio { color: #b9b4c8; font-size: 13px; margin-top: 10px; }
+
+  .panel {
+    width: min(520px, 100%); padding: 20px 22px; border-radius: 14px;
+    background: #16141f; border: 1px solid #2a2735;
+  }
+  .row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .row:last-child { margin-bottom: 0; }
+  .row label { flex: 0 0 128px; font-size: 13px; font-weight: 700; color: #b9b4c8; }
+  .row input[type=range] { flex: 1; accent-color: #7a5cff; }
+  .val { flex: 0 0 56px; text-align: right; font-weight: 800; font-size: 13px; }
+  .chk { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #b9b4c8; }
+  .chk input { accent-color: #7a5cff; width: 16px; height: 16px; }
+  .hint { font-size: 12px; color: #7d7891; margin: 14px 0 0; line-height: 1.55; }
+  .live { font-family: ui-monospace, monospace; font-size: 12px; color: #7a5cff; }
+</style>
+</head>
+<body>
+
+  <div class="stage">
+    <!-- The wrapper owns the tilt. The card inside is free to run its own
+         transform (e.g. a float animation) without a fight. -->
+    <div class="tiltwrap" id="wrap">
+      <div class="card">
+        <div class="avatar">🌙</div>
+        <div class="name">Nova Reyes</div>
+        <div class="handle">@novacreates</div>
+        <div class="bio">Move your cursor across the card.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <label for="max">Max tilt</label>
+      <input type="range" id="max" min="0" max="30" value="10" />
+      <span class="val" id="maxV">10°</span>
+    </div>
+    <div class="row">
+      <label for="persp">Perspective</label>
+      <input type="range" id="persp" min="200" max="2000" step="50" value="900" />
+      <span class="val" id="perspV">900</span>
+    </div>
+    <div class="row">
+      <label class="chk"><input type="checkbox" id="invert" /> Invert Y</label>
+      <label class="chk"><input type="checkbox" id="throttle" checked /> rAF throttle</label>
+      <label class="chk"><input type="checkbox" id="smooth" checked /> Transition</label>
+    </div>
+    <p class="hint">
+      Live: <span class="live" id="live">--tilt-x: 0deg; --tilt-y: 0deg</span><br /><br />
+      <b>Max tilt →30:</b> classy becomes seasseick. <b>Perspective →200:</b> the vanishing point moves
+      closer; huge, dramatic 3D. <b>Invert Y:</b> the card now leans <i>away</i> from your cursor —
+      that's the sign bug; it feels wrong before you can explain why. <b>Transition off:</b> loses
+      all its weight and feels twitchy. <b>Throttle off:</b> recomputes on every pointermove instead
+      of once per frame — same visuals, wasted work.
+    </p>
+  </div>
+
+<script>
+  const wrap    = document.getElementById('wrap');
+  const maxEl   = document.getElementById('max');
+  const perspEl = document.getElementById('persp');
+  const invertEl   = document.getElementById('invert');
+  const throttleEl = document.getElementById('throttle');
+  const smoothEl   = document.getElementById('smooth');
+  const live = document.getElementById('live');
+
+  let frame = 0;
+
+  function apply(e) {
+    // 1. Where is the pointer INSIDE this box? -> 0..1 on each axis.
+    const r  = wrap.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width;
+    const py = (e.clientY - r.top)  / r.height;
+
+    // 2. Recenter (-0.5..0.5), double (-1..1), scale to degrees.
+    const max = +maxEl.value;
+    const ry  = (px - 0.5) * 2 * max;                       // x input -> rotateY
+    const sign = invertEl.checked ? -1 : 1;                 // flip to feel the bug
+    const rx  = (0.5 - py) * 2 * max * sign;                // y input -> rotateX
+
+    // 3. Hand off to CSS. JS never touches `transform` itself.
+    wrap.style.setProperty('--tilt-x', rx.toFixed(2) + 'deg');
+    wrap.style.setProperty('--tilt-y', ry.toFixed(2) + 'deg');
+    live.textContent = `--tilt-x: ${rx.toFixed(1)}deg; --tilt-y: ${ry.toFixed(1)}deg`;
+  }
+
+  function onMove(e) {
+    if (!throttleEl.checked) return apply(e);   // unthrottled, for comparison
+    if (frame) return;                          // leading-edge throttle: drop until the frame runs
+    frame = requestAnimationFrame(() => { frame = 0; apply(e); });
+  }
+
+  function reset() {
+    if (frame) { cancelAnimationFrame(frame); frame = 0; }  // or it re-tilts after reset
+    wrap.style.setProperty('--tilt-x', '0deg');
+    wrap.style.setProperty('--tilt-y', '0deg');
+    live.textContent = '--tilt-x: 0deg; --tilt-y: 0deg';
+  }
+
+  wrap.addEventListener('pointermove', onMove);
+  wrap.addEventListener('pointerleave', reset);
+
+  // ── playground wiring (not part of the effect) ──
+  maxEl.addEventListener('input',   () => maxV.textContent = maxEl.value + '°');
+  perspEl.addEventListener('input', () => {
+    perspV.textContent = perspEl.value;
+    wrap.style.setProperty('--persp', perspEl.value + 'px');
+  });
+  smoothEl.addEventListener('change', () => {
+    wrap.style.transition = smoothEl.checked ? 'transform .14s ease-out' : 'none';
+  });
+</script>
+</body>
+</html>

@@ -44,3 +44,19 @@ Was a single looping `<audio>`. Now a playlist:
 ## Follow-ups
 - No drag-reorder of tracks yet (upload order = play order; remove + re-add to reorder).
 - Storage: each track is a separate upload in the audio bucket; no per-creator track cap enforced.
+
+## Learn — build-it-yourself
+**Mental model:** an `<audio>` element is a state machine you *observe*, not one you drive.
+
+1. **Own one element, read its real events.** Let React render a single `<audio>` and set `playing`
+   from its own `onPlay`/`onPause`. If you track "is it playing" in your head with a separate flag,
+   it desyncs the moment the browser pauses on its own. Read the source of truth; don't mirror it.
+2. **Advance a playlist declaratively, resume imperatively.** Change which track via render
+   (`src={tracks[idx].url}`), then `play()` in an `useEffect([idx])`. React swaps the source; you just
+   nudge it to keep going.
+3. **The bug worth remembering:** `(i+1) % length` returns **0** on the last track. A guard like
+   `if (idx > 0) play()` silently stalls the loop there. Guard on *"is this the first mount?"*
+   (a `didMount` ref), not on the value — because 0 is a legitimate runtime index.
+4. **Migrate on read, not on write.** `resolveTheme` turns a legacy `audio_url` into a one-item
+   `audio_tracks` list every time it loads. Old rows keep working untouched; only new saves use the
+   new shape. Cheaper and safer than a data migration.

@@ -6,16 +6,38 @@ import { initials } from '@/lib/stores';
 import {
   resolveTheme, updateStorefront, SOCIAL_TYPES,
   listLinks, addLink, updateLink, deleteLink,
+  THEME_PRESETS, sanitizeThemeImport, portableTheme,
 } from '@/lib/storefront';
 import { uploadBanner, uploadBgVideo, uploadAudio } from '@/lib/storage';
 import {
   Palette, Link2, Eye, ImagePlus, X, Plus, ChevronUp, ChevronDown,
   ExternalLink, Check, MousePointer2, Type, Video, Music, Wand2, SlidersHorizontal,
   Image as ImageIcon, Camera, AtSign, User, Sparkles, LayoutGrid, ListMusic,
+  Upload, Download, Layers,
 } from 'lucide-react';
 import { BrandIcon } from '@/lib/brandIcons';
 
 const ACCENT_PRESETS = ['#00CC99', '#2563EB', '#7C3AED', '#DB2777', '#F59E0B', '#EF4444', '#0D9488', '#F8FAFC'];
+
+const SUBTAB_HEADS = { customize: 'Site Customization', themes: 'Themes', links: 'Links' };
+
+// ── Theme-card helpers ───────────────────────────────────────────────────────
+// Paint a preset's ACTUAL background so the card previews the look, not an emoji.
+function swatchStyle(t) {
+  if (t.bg === 'gradient') return { background: `linear-gradient(160deg, ${t.bg_color}, ${t.bg_color2})` };
+  if (t.bg === 'solid') return { background: t.bg_color };
+  return { background: t.mode === 'dark' ? '#121316' : '#FBF8F2' };
+}
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+// Three-word summary of what makes a preset distinct.
+function presetTags(t) {
+  const bits = [t.mode === 'dark' ? 'Dark' : 'Light'];
+  if (t.overlay && t.overlay !== 'none') bits.push(cap(t.overlay));
+  if (t.name_fx && t.name_fx !== 'none') bits.push(cap(t.name_fx));
+  if (t.tilt_enabled) bits.push('Tilt');
+  if (t.glow_intensity >= 24) bits.push('Glow');
+  return bits.slice(0, 3).join(' · ');
+}
 
 // ── Small reusable controls ───────────────────────────────────────────────────
 function Panel({ icon: Icon, title, soon, children }) {
@@ -225,6 +247,36 @@ export default function StorefrontEditor() {
   }
   function removeTrack(i) { setTheme(t => ({ ...t, audio_tracks: (t.audio_tracks || []).filter((_, j) => j !== i) })); }
 
+  // ── Templates: presets + import/export ───────────────────────────────────
+  // Presets MERGE over the current theme, so name/bio/avatar/socials/links and
+  // uploaded assets survive — a preset only restyles.
+  function applyPreset(p) { setTheme(t => ({ ...t, ...p.theme })); setErr(''); }
+
+  function exportTheme() {
+    // portableTheme() drops socials/music/uploads — look only, so the file is
+    // safe to share and can't hotlink this creator's storage.
+    const blob = new Blob([JSON.stringify(portableTheme(theme), null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `skilljoy-theme-${profile.username || 'me'}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function onImportTheme(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const clean = sanitizeThemeImport(JSON.parse(await file.text()));
+      if (Object.keys(clean).length === 0) throw new Error('no recognizable theme settings in that file');
+      setTheme(t => ({ ...t, ...clean }));
+      setErr('');
+    } catch (err) {
+      setErr(`Import failed — ${err.message}`);
+    } finally { if (e.target) e.target.value = ''; }
+  }
+
   function setSocial(i, patch) { setTheme(t => ({ ...t, socials: t.socials.map((s, j) => j === i ? { ...s, ...patch } : s) })); }
   function addSocial(type = 'instagram') { setTheme(t => ({ ...t, socials: [...(t.socials || []), { type, url: '' }] })); }
   function removeSocial(i) { setTheme(t => ({ ...t, socials: t.socials.filter((_, j) => j !== i) })); }
@@ -265,6 +317,9 @@ export default function StorefrontEditor() {
           <button className={`std-tab${subTab === 'customize' ? ' on' : ''}`} onClick={() => setSubTab('customize')}>
             <Palette size={15} /> Customize
           </button>
+          <button className={`std-tab${subTab === 'themes' ? ' on' : ''}`} onClick={() => setSubTab('themes')}>
+            <Layers size={15} /> Themes
+          </button>
           <button className={`std-tab${subTab === 'links' ? ' on' : ''}`} onClick={() => setSubTab('links')}>
             <Link2 size={15} /> Links
           </button>
@@ -279,7 +334,7 @@ export default function StorefrontEditor() {
       <div className="std-body">
         {/* ── Main controls ── */}
         <main className="std-main">
-          <div className="std-mainhead">{subTab === 'customize' ? 'Site Customization' : 'Links'}</div>
+          <div className="std-mainhead">{SUBTAB_HEADS[subTab]}</div>
           {subTab === 'customize' && (
             <>
               {/* ── PROFILE — who you are: picture, name, bio, and the profile card itself ── */}
@@ -314,6 +369,10 @@ export default function StorefrontEditor() {
                 <Field label="Profile card opacity"><Slider value={theme.card_opacity ?? 100} min={0} max={100} suffix="%" onChange={v => set({ card_opacity: v })} /></Field>
                 <Field label="Profile card blur (glass)"><Slider value={theme.card_blur ?? 0} min={0} max={24} suffix="px" onChange={v => set({ card_blur: v })} /></Field>
                 <Field label="Profile card motion"><Seg value={theme.profile_fx || 'none'} onChange={v => set({ profile_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'glow', label: 'Glow' }, { v: 'float', label: 'Float' }]} /></Field>
+                <Toggle on={!!theme.tilt_enabled} onChange={v => set({ tilt_enabled: v })} label="3D tilt" hint="Card leans toward the visitor’s cursor" />
+                {theme.tilt_enabled && (
+                  <Field label="Tilt strength"><Slider value={theme.tilt_max ?? 10} min={2} max={20} suffix="°" onChange={v => set({ tilt_max: v })} /></Field>
+                )}
                 <p className="std-note">Lower opacity + more blur = frosted glass over your background.</p>
                 <p className="std-note">Your handle: skilljoy.me/@{profile.username}</p>
               </Panel>
@@ -355,7 +414,13 @@ export default function StorefrontEditor() {
 
               {/* ── GENERAL — ambiance: background effects, music, cursor, glow ── */}
               <Panel icon={Sparkles} title="General">
-                <Field label="Overlay effect"><Seg value={theme.overlay || 'none'} onChange={v => set({ overlay: v })} options={[{ v: 'none', label: 'None' }, { v: 'rain', label: 'Rain' }, { v: 'snow', label: 'Snow' }, { v: 'vhs', label: 'VHS' }]} /></Field>
+                <Toggle on={!!theme.splash_enabled} onChange={v => set({ splash_enabled: v })} label="Click-to-enter splash" hint="A gate before your page — also lets your music autoplay" />
+                {theme.splash_enabled && (
+                  <Field label="Splash text">
+                    <input value={theme.splash_text ?? ''} onChange={e => set({ splash_text: e.target.value })} placeholder="click to enter" maxLength={40} />
+                  </Field>
+                )}
+                <Field label="Overlay effect"><Seg value={theme.overlay || 'none'} onChange={v => set({ overlay: v })} options={[{ v: 'none', label: 'None' }, { v: 'rain', label: 'Rain' }, { v: 'snow', label: 'Snow' }, { v: 'vhs', label: 'VHS' }, { v: 'stars', label: 'Stars' }, { v: 'particles', label: 'Particles' }, { v: 'matrix', label: 'Matrix' }]} /></Field>
                 <Field label="Glow intensity"><Slider value={theme.glow_intensity ?? 0} min={0} max={80} suffix="px" onChange={v => set({ glow_intensity: v })} /></Field>
                 <p className="std-note">Master accent glow across your name, picture, card &amp; links.</p>
                 <Field label="Name effect"><Seg value={theme.name_fx || 'none'} onChange={v => set({ name_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'gradient', label: 'Gradient' }, { v: 'rainbow', label: 'Rainbow' }, { v: 'shimmer', label: 'Shine' }, { v: 'glitch', label: 'Glitch' }]} /></Field>
@@ -441,6 +506,45 @@ export default function StorefrontEditor() {
                   </div>
                 ))}
                 {skills.length > 1 && <p className="std-note">Drag to reorder — or use the arrows.</p>}
+              </Panel>
+            </>
+          )}
+
+          {subTab === 'themes' && (
+            <>
+              <Panel icon={Layers} title="One-tap themes">
+                <p className="std-panel-lede">Pick a look and it applies instantly — watch the preview. Your name, bio, socials, links, products and uploads all stay exactly as they are.</p>
+                <div className="std-themegrid">
+                  {THEME_PRESETS.map(p => (
+                    <button key={p.id} className="std-theme" onClick={() => applyPreset(p)} title={`Apply ${p.name}`}>
+                      {/* color: drives the muted line via currentColor so it stays
+                          legible on the preset's own light/dark background. */}
+                      <span className="std-theme-swatch" style={{ ...swatchStyle(p.theme), color: p.theme.mode === 'dark' ? '#f2f0ea' : '#1a1916' }}>
+                        <span className="std-theme-dot" style={{ background: p.theme.accent, boxShadow: `0 0 12px ${p.theme.accent}` }} />
+                        <span className="std-theme-lines">
+                          <span className="std-theme-line" style={{ background: p.theme.accent }} />
+                          <span className="std-theme-line short" />
+                        </span>
+                      </span>
+                      <span className="std-theme-meta">
+                        <span className="std-theme-name">{p.emoji} {p.name}</span>
+                        <span className="std-theme-tags">{presetTags(p.theme)}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </Panel>
+
+              <Panel icon={Upload} title="Import &amp; export">
+                <div className="std-tplrow">
+                  <label className="std-addbtn">
+                    <input type="file" accept="application/json,.json" hidden onChange={onImportTheme} />
+                    <Upload size={15} /> Import theme
+                  </label>
+                  <button className="std-addbtn" onClick={exportTheme}><Download size={15} /> Export my theme</button>
+                </div>
+                <p className="std-note">Export saves your look as a <code>.json</code> you can share or back up. Import applies someone else’s.</p>
+                <p className="std-note">Theme files carry <b>look only</b> — colors, effects, layout, glow. Your socials, music and uploaded images never travel in one (they’re yours, and links to them would break on someone else’s page).</p>
               </Panel>
             </>
           )}
@@ -625,8 +729,10 @@ function Styles() {
     .std-flabel { display:block; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); margin-bottom:8px; }
     .std-note { font-size:12px; color:var(--text-muted); margin:10px 0 0; display:flex; align-items:center; gap:6px; }
 
-    .std-seg { display:flex; gap:4px; padding:4px; background:var(--surface-alt); border-radius:var(--r-full); }
-    .std-seg button { flex:1; width:auto; min-width:0; border:none; border-radius:var(--r-full); background:transparent; padding:8px 10px;
+    /* wrap:  the overlay seg now has 7 options — let them flow to a 2nd row
+       instead of squeezing each label to nothing. */
+    .std-seg { display:flex; flex-wrap:wrap; gap:4px; padding:4px; background:var(--surface-alt); border-radius:var(--r-full); }
+    .std-seg button { flex:1 1 auto; width:auto; min-width:60px; border:none; border-radius:var(--r-full); background:transparent; padding:8px 10px;
       font-size:13px; font-weight:700; color:var(--text-secondary); cursor:pointer; transition:all .14s; }
     .std-seg button.on { background:var(--accent); color:#fff; }
 
@@ -710,6 +816,26 @@ function Styles() {
       border:1.5px solid var(--border-strong); background:var(--surface); color:var(--text); font-size:13px; font-weight:700; cursor:pointer; }
     .std-addbtn:hover { border-color:var(--accent); color:var(--accent); }
 
+    /* ── Themes tab: preset gallery + import/export ── */
+    .std-panel-lede { font-size:13px; color:var(--text-secondary); line-height:1.55; margin:-6px 0 16px; }
+    .std-themegrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:12px; }
+    .std-theme { display:flex; flex-direction:column; gap:0; padding:0; min-width:0; overflow:hidden; text-align:left;
+      border:1.5px solid var(--border-strong); border-radius:var(--r-lg); background:var(--surface); cursor:pointer;
+      transition:transform .14s ease, border-color .14s ease, box-shadow .14s ease; }
+    .std-theme:hover { transform:translateY(-3px); border-color:var(--accent);
+      box-shadow:0 10px 24px color-mix(in srgb, var(--accent) 20%, transparent); }
+    /* The swatch paints the preset's real background + accent — a look you can read at a glance. */
+    .std-theme-swatch { position:relative; height:78px; display:flex; align-items:center; gap:8px; padding:0 12px; }
+    .std-theme-dot { width:22px; height:22px; border-radius:50%; flex-shrink:0; }
+    .std-theme-lines { display:flex; flex-direction:column; gap:5px; flex:1; min-width:0; }
+    .std-theme-line { height:5px; border-radius:var(--r-full); width:70%; opacity:.9; }
+    .std-theme-line.short { width:44%; background:currentColor; opacity:.32; }
+    .std-theme-meta { display:flex; flex-direction:column; gap:2px; padding:10px 12px 12px; border-top:1px solid var(--border); }
+    .std-theme-name { font-size:13px; font-weight:800; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .std-theme-tags { font-size:11px; font-weight:600; color:var(--text-muted); }
+    .std-tplrow { display:flex; gap:8px; flex-wrap:wrap; }
+    .std-panel code { font-size:11.5px; background:var(--surface-alt); padding:1px 5px; border-radius:4px; }
+
     /* ── Site-music: trigger button + modal ── */
     .std-musicbtn { width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 14px; border-radius:var(--r);
       border:1.5px solid var(--border-strong); background:var(--surface); color:var(--text); font-size:14px; font-weight:700; cursor:pointer; transition:border-color .13s ease; }
@@ -763,6 +889,29 @@ function Styles() {
     @keyframes lpSnow { from { background-position:0 -140px; } to { background-position:18px 140px; } }
     .lp-overlay-vhs { background:repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0,0,0,.14) 2px 3px); mix-blend-mode:overlay; animation:lpVhs 4s steps(2) infinite; }
     @keyframes lpVhs { 0%,100% { opacity:.9; } 50% { opacity:.65; } }
+    .lp-overlay-stars { --lpstar:color-mix(in srgb, var(--lp-text, #000) 80%, transparent);
+      background-image:
+        radial-gradient(1.4px 1.4px at 14% 20%, var(--lpstar) 60%, transparent),
+        radial-gradient(1px 1px at 40% 60%, var(--lpstar) 60%, transparent),
+        radial-gradient(1.8px 1.8px at 70% 30%, var(--lpstar) 60%, transparent),
+        radial-gradient(1.2px 1.2px at 86% 72%, var(--lpstar) 60%, transparent),
+        radial-gradient(1.4px 1.4px at 26% 86%, var(--lpstar) 60%, transparent);
+      background-size:180px 180px; animation:lpStars 4.5s ease-in-out infinite; }
+    @keyframes lpStars { 0%,100% { opacity:.4; } 50% { opacity:.95; } }
+    .lp-overlay-particles { --lpp:color-mix(in srgb, var(--accent) 78%, transparent);
+      background-image:
+        radial-gradient(2.5px 2.5px at 16% 90%, var(--lpp) 60%, transparent),
+        radial-gradient(1.8px 1.8px at 46% 72%, var(--lpp) 60%, transparent),
+        radial-gradient(2px 2px at 72% 86%, var(--lpp) 60%, transparent),
+        radial-gradient(2.4px 2.4px at 32% 44%, var(--lpp) 60%, transparent);
+      background-size:180px 180px; animation:lpParticles 12s linear infinite; opacity:.7; }
+    @keyframes lpParticles { from { background-position:0 0; } to { background-position:14px -180px; } }
+    .lp-overlay-matrix {
+      background-image:
+        repeating-linear-gradient(90deg, transparent 0 10px, color-mix(in srgb, var(--accent) 20%, transparent) 10px 11px, transparent 11px 22px),
+        linear-gradient(180deg, transparent 0 42%, color-mix(in srgb, var(--accent) 50%, transparent) 72%, transparent 100%);
+      background-size:22px 100%, 22px 170px; animation:lpMatrix 1.8s linear infinite; opacity:.5; }
+    @keyframes lpMatrix { from { background-position:0 0, 0 0; } to { background-position:0 0, 0 170px; } }
     .lp-audiopill { position:absolute; right:9px; bottom:9px; z-index:3; width:22px; height:22px; display:flex; align-items:center; justify-content:center; border-radius:50%; border:1px solid color-mix(in srgb, var(--accent) 40%, transparent); background:color-mix(in srgb, var(--accent) 14%, var(--lp-surface)); color:var(--lp-text, #1a1916); }
     /* Profile FX mirrors */
     .lp-pfx-glow { animation:lpPfxGlow 2.6s ease-in-out infinite; }

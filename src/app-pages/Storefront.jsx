@@ -19,6 +19,13 @@ export default function Storefront() {
   const username = handle.replace(/^@/, '');
   const user = useUser();
   const [state, setState] = useState({ status: 'loading', profile: null, skills: [], links: [] });
+  const [entered, setEntered] = useState(false); // splash: has the visitor clicked through?
+
+  // Resolve the theme BEFORE the early returns so the hooks below are
+  // unconditional (rules of hooks). Safe on a null profile — resolveTheme
+  // falls back to DEFAULT_THEME.
+  const theme = resolveTheme(state.profile?.storefront_theme);
+  const tiltRef = useTilt(state.status === 'ready' && theme.tilt_enabled, theme.tilt_max);
 
   useEffect(() => {
     let alive = true;
@@ -57,8 +64,8 @@ export default function Storefront() {
   );
 
   const { profile, skills, links } = state;
-  const theme = resolveTheme(profile.storefront_theme);
   const isOwner = user && user.id === profile.id;
+  const splashOn = theme.splash_enabled && !entered;
   const socials = (theme.socials || []).filter(s => s.url);
 
   // Bucket products by group_label, preserving first-seen order (= sort_order).
@@ -125,7 +132,11 @@ export default function Storefront() {
       {theme.overlay && theme.overlay !== 'none' && (
         <div className={`sf-overlay sf-overlay-${theme.overlay}`} aria-hidden="true" />
       )}
-      {theme.audio_tracks?.length > 0 && <AudioPill tracks={theme.audio_tracks} />}
+      {/* Splash gates the page AND the music: mounting AudioPill only after the
+          enter click means the browser already has user activation, so autoplay
+          actually works instead of being blocked (see note 139). */}
+      {splashOn && <Splash text={theme.splash_text} onEnter={() => setEntered(true)} />}
+      {theme.audio_tracks?.length > 0 && !splashOn && <AudioPill tracks={theme.audio_tracks} />}
       {theme.cursor_fx && theme.cursor_fx !== 'none' && <CursorFx kind={theme.cursor_fx} />}
       <Seo
         title={`${profile.full_name || '@' + profile.username} — SkillJoy`}
@@ -139,6 +150,9 @@ export default function Storefront() {
         <Link to="/storefront/edit" className="sf-editbtn"><Pencil size={15} /> Edit storefront</Link>
       )}
 
+      {/* Tilt lives on a WRAPPER, not the panel — .sf-pfx-float already animates
+          the panel's transform, and two rules can't own the same property. */}
+      <div ref={tiltRef} className={theme.tilt_enabled ? 'sf-tiltwrap' : undefined}>
       <div className={`sf-panel${theme.banner_url ? ' sf-panel-hasbanner' : ''}${theme.card_opacity === 0 ? ' sf-panel-ghost' : ''}${theme.profile_fx && theme.profile_fx !== 'none' ? ` sf-pfx-${theme.profile_fx}` : ''}`}>
       {theme.banner_url && <div className="sf-panelbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} />}
       <header className="sf-head">
@@ -172,6 +186,7 @@ export default function Storefront() {
           </div>
         )}
       </header>
+      </div>
       </div>
 
       {skills.length > 0 && skillGroups.map((g, gi) => (
@@ -283,6 +298,66 @@ function AudioPill({ tracks }) {
   );
 }
 
+// ── Splash / "click to enter" ────────────────────────────────────────────────
+// A full-screen gate. Beyond the vibe, the click gives the document "user
+// activation", which is what lets the music actually autoplay afterwards.
+function Splash({ text, onEnter }) {
+  return (
+    <div
+      className="sf-splash"
+      role="button"
+      tabIndex={0}
+      onClick={onEnter}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEnter(); } }}
+    >
+      <span className="sf-splash-text">{text || 'click to enter'}</span>
+    </div>
+  );
+}
+
+// ── 3D tilt / parallax ───────────────────────────────────────────────────────
+// Returns a ref to attach to the element you want to tilt. On pointer move we
+// map the cursor's position INSIDE the element to two rotations and write them
+// to CSS custom properties — CSS owns the actual transform. Writing vars (not
+// .style.transform) keeps it declarative and lets a CSS transition smooth it
+// for free. Full walkthrough: notes/143-3d-tilt-parallax/README.md
+function useTilt(enabled, max = 10) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!enabled || !el) return undefined;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined;
+
+    let frame = 0;
+    function onMove(e) {
+      if (frame) return;                    // throttle: at most one write per frame
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const r = el.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width;   // 0 → 1 across the element
+        const py = (e.clientY - r.top) / r.height;   // 0 → 1 down the element
+        // Recenter to -0.5→0.5, double to -1→1, scale to degrees. Y is inverted:
+        // pointer near the TOP should tip the top edge away from the viewer.
+        el.style.setProperty('--tilt-x', `${(0.5 - py) * 2 * max}deg`);
+        el.style.setProperty('--tilt-y', `${(px - 0.5) * 2 * max}deg`);
+      });
+    }
+    function reset() {
+      if (frame) { cancelAnimationFrame(frame); frame = 0; }
+      el.style.setProperty('--tilt-x', '0deg');
+      el.style.setProperty('--tilt-y', '0deg');
+    }
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerleave', reset);
+    return () => {
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerleave', reset);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [enabled, max]);
+  return ref;
+}
+
 // ── Cursor particle effects (trail / sparkle). Distinct from the static
 // cursor_url. Spawns short-lived absolutely-positioned dots at the pointer,
 // capped + cleaned up on unmount. Cheap: plain DOM nodes + CSS animation.
@@ -354,6 +429,63 @@ function StoreStyles() {
       animation:sfVhs 4s steps(2) infinite;
     }
     @keyframes sfVhs { 0%,100% { opacity:.9; } 50% { opacity:.65; } }
+    /* Stars: fixed dots that twinkle together (cheap — one opacity animation). */
+    .sf-overlay-stars {
+      --sfstar:color-mix(in srgb, var(--text) 82%, transparent);
+      background-image:
+        radial-gradient(1.5px 1.5px at 12% 18%, var(--sfstar) 60%, transparent),
+        radial-gradient(1px 1px at 38% 62%, var(--sfstar) 60%, transparent),
+        radial-gradient(2px 2px at 68% 28%, var(--sfstar) 60%, transparent),
+        radial-gradient(1.2px 1.2px at 84% 74%, var(--sfstar) 60%, transparent),
+        radial-gradient(1.6px 1.6px at 24% 84%, var(--sfstar) 60%, transparent),
+        radial-gradient(1px 1px at 56% 12%, var(--sfstar) 60%, transparent),
+        radial-gradient(1.4px 1.4px at 92% 44%, var(--sfstar) 60%, transparent);
+      background-size:260px 260px;
+      animation:sfStars 4.5s ease-in-out infinite;
+    }
+    @keyframes sfStars { 0%,100% { opacity:.4; } 50% { opacity:.95; } }
+    /* Particles: accent motes drifting up; one tile scrolled by exactly its
+       height (-260px) so the loop is seamless. */
+    .sf-overlay-particles {
+      --sfp:color-mix(in srgb, var(--accent) 78%, transparent);
+      background-image:
+        radial-gradient(3px 3px at 15% 92%, var(--sfp) 60%, transparent),
+        radial-gradient(2px 2px at 45% 74%, var(--sfp) 60%, transparent),
+        radial-gradient(2.5px 2.5px at 70% 88%, var(--sfp) 60%, transparent),
+        radial-gradient(2px 2px at 88% 60%, var(--sfp) 60%, transparent),
+        radial-gradient(3px 3px at 30% 42%, var(--sfp) 60%, transparent),
+        radial-gradient(1.8px 1.8px at 60% 20%, var(--sfp) 60%, transparent);
+      background-size:260px 260px;
+      animation:sfParticles 12s linear infinite;
+      opacity:.7;
+    }
+    @keyframes sfParticles { from { background-position:0 0; } to { background-position:18px -260px; } }
+    /* Matrix: accent column grid + a falling light band, scrolled one tile. */
+    .sf-overlay-matrix {
+      background-image:
+        repeating-linear-gradient(90deg, transparent 0 12px, color-mix(in srgb, var(--accent) 20%, transparent) 12px 13px, transparent 13px 26px),
+        linear-gradient(180deg, transparent 0 42%, color-mix(in srgb, var(--accent) 50%, transparent) 72%, transparent 100%);
+      background-size:26px 100%, 26px 220px;
+      background-repeat:repeat, repeat;
+      animation:sfMatrix 1.8s linear infinite;
+      opacity:.5;
+    }
+    @keyframes sfMatrix { from { background-position:0 0, 0 0; } to { background-position:0 0, 0 220px; } }
+
+    /* ── Splash / click-to-enter ── */
+    .sf-splash { position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center;
+      cursor:pointer; background:rgba(8,8,12,.55); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+      animation:sfSplashIn .28s ease; }
+    @keyframes sfSplashIn { from { opacity:0; } to { opacity:1; } }
+    .sf-splash-text { font-size:14px; font-weight:800; letter-spacing:.24em; text-transform:uppercase; color:#fff;
+      text-shadow:0 0 20px color-mix(in srgb, var(--accent) 85%, transparent); animation:sfSplashPulse 2.2s ease-in-out infinite; }
+    @keyframes sfSplashPulse { 0%,100% { opacity:.6; } 50% { opacity:1; } }
+    @media (prefers-reduced-motion: reduce) { .sf-splash-text { animation:none; opacity:1; } }
+
+    /* ── 3D tilt wrapper — the hook writes --tilt-x / --tilt-y, CSS does the rest ── */
+    .sf-tiltwrap { transform:perspective(900px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
+      transform-style:preserve-3d; will-change:transform; transition:transform .14s ease-out; }
+    @media (prefers-reduced-motion: reduce) { .sf-tiltwrap { transform:none; } }
 
     /* ── Site audio pill ── */
     .sf-audiopill {
