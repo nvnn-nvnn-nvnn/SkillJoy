@@ -7,6 +7,7 @@ import {
 } from '@/lib/skills';
 import { Trash2, Send, EyeOff, Puzzle } from 'lucide-react';
 import { uploadCover } from '@/lib/storage';
+import { validateUpload } from '@/lib/uploadLimits';
 import { startSubscription } from '@/lib/billing';
 import { BLOCK_TYPES } from '@/lib/blockTypes';
 import { PRODUCT_TYPES, TYPE_BY_ID } from '@/lib/productTypes';
@@ -223,6 +224,9 @@ function SkillEditor({ skillId, userId }) {
   async function onCover(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Was completely unguarded — any size, any type, straight to storage.
+    const check = validateUpload('cover', file);
+    if (!check.ok) { alert({ title: 'Can’t upload that', message: check.error, tone: 'danger' }); e.target.value = ''; return; }
     setSavingCover(true);
     try {
       const url = await uploadCover(userId, skillId, file);

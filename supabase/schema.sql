@@ -174,6 +174,9 @@ ALTER TABLE profiles
 ALTER TABLE profiles
     ADD COLUMN IF NOT EXISTS username         TEXT,
     ADD COLUMN IF NOT EXISTS bio              TEXT,
+    -- Public storefront content, same class as bio — rendered under the display
+    -- name on the page. Private contact details stay in Settings, never here.
+    ADD COLUMN IF NOT EXISTS location         TEXT,
     ADD COLUMN IF NOT EXISTS storefront_theme JSONB;
 CREATE UNIQUE INDEX IF NOT EXISTS profiles_username_lower_idx
     ON profiles (lower(username)) WHERE username IS NOT NULL;
@@ -226,6 +229,14 @@ CREATE TABLE IF NOT EXISTS purchases (
 );
 CREATE INDEX IF NOT EXISTS purchases_buyer_idx ON purchases(buyer_id);
 CREATE INDEX IF NOT EXISTS purchases_skill_idx ON purchases(skill_id);
+-- Exactly-once fulfilment claim (see backend/lib/skillFulfillment.js).
+-- `status` marks ACCESS, and is written by BOTH the Stripe webhook and the
+-- /confirm fast-path, which race — so it cannot also gate the one-time side
+-- effects. `fulfilled_at` is the atomic token that decides which caller runs
+-- them (receipt email, creator notification, promo redemption, automation).
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS fulfilled_at TIMESTAMPTZ;
+-- Backfill: rows paid before this column existed must never re-fire effects.
+UPDATE purchases SET fulfilled_at = created_at WHERE status = 'paid' AND fulfilled_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS community_posts (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),

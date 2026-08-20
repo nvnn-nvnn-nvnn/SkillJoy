@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { UploadCloud, Link2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { uploadBlockFile } from '@/lib/storage';
+import { validateUpload, ZIP_REQUIRED_ABOVE, LIMITS, formatBytes } from '@/lib/uploadLimits';
 import { BLOCK_META } from '@/lib/blockTypes';
 import GoogleCalendarConnect from '@/components/GoogleCalendarConnect';
 
@@ -10,7 +11,6 @@ import GoogleCalendarConnect from '@/components/GoogleCalendarConnect';
 // onRemove()/onMove(dir) for list ops. NOTE: named BlockEditor (not Block*) to
 // stay clear of BlockButton.jsx / routes/blocks.js, which mean user-blocking.
 
-const MAX_FILE_MB = 50; // keep uploads snappy; bigger files → use a link
 const isHttpUrl = (s) => /^https?:\/\/.+/i.test((s || '').trim());
 
 // Coaching scheduling options.
@@ -28,10 +28,11 @@ export default function BlockEditor({ block, index, total, creatorId, skillId, o
   async function handleFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > MAX_FILE_MB * 1024 * 1024) {
-      setUploadErr(`That file is ${(file.size / 1048576).toFixed(0)}MB — max is ${MAX_FILE_MB}MB. For bigger files, use “Link” instead.`);
-      return;
-    }
+    // Shared policy (src/lib/uploadLimits.js) — size ceiling AND the
+    // zip-required-above rule. Checked before upload so the creator gets an
+    // instant, specific message instead of waiting out a doomed transfer.
+    const check = validateUpload('digital', file);
+    if (!check.ok) { setUploadErr(check.error); e.target.value = ''; return; }
     setUploadErr(''); setUploading(true);
     try {
       const { key, name } = await uploadBlockFile(creatorId, skillId, file);
@@ -265,7 +266,12 @@ function FileField({ uploading, fileKey, name, err, onFile }) {
           <span className="be-dropzone-icon"><UploadCloud size={22} /></span>
           <span className="be-dropzone-text">
             <b>{uploading ? 'Uploading…' : 'Choose a file to upload'}</b>
-            <span className="be-dropzone-hint">PDF, ZIP, video, image — this is what buyers download</span>
+            {/* States the rule BEFORE the click. An upload limit discovered only
+                by tripping it reads as a bug; stated up front it reads as a spec. */}
+            <span className="be-dropzone-hint">
+              PDF, ZIP, video, image — this is what buyers download.
+              Up to {formatBytes(LIMITS.digital.max)}; over {formatBytes(ZIP_REQUIRED_ABOVE)} must be a .zip
+            </span>
           </span>
           <input type="file" hidden onChange={onFile} disabled={uploading} />
         </label>

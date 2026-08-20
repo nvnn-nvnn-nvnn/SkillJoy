@@ -3,8 +3,21 @@ import { supabase } from './supabase';
 // ── Storefront customization data layer (v3, Phase 7) ───────────────────────
 // Theme lives in profiles.storefront_theme; link buttons in store_links.
 
+// Site music plays at 85%, never full blast — a page the visitor didn't ask to
+// make noise shouldn't arrive at 100%. This trims the page, not the creator:
+// their file's own mastering still sets the perceived loudness.
+//
+// MUST be assigned to the DOM `volume` property, never passed as JSX. `volume`
+// is not an HTML attribute, so `<audio volume={0.85}>` is dropped silently and
+// the element stays at 1. The property survives `src` changes, so setting it
+// once on mount also covers every later track in a playlist.
+//
+// Shared with the editor's track-preview player so a creator auditions their
+// music at exactly the level visitors will hear.
+export const SITE_AUDIO_VOLUME = 0.85;
+
 export const DEFAULT_THEME = {
-  accent: '#00CC99',
+  accent: '#F5634A',
   layout: 'list',           // 'list' | 'grid'
   banner_url: '',
   show_avatar: true,        // false → hide the profile picture on the storefront
@@ -13,7 +26,7 @@ export const DEFAULT_THEME = {
   mode: 'light',            // 'light' | 'dark' — drives surface/text palette
   bg: 'canvas',             // 'canvas' | 'solid' | 'gradient' | 'image' | 'video'
   bg_color: '#FBF8F2',      // solid fill / gradient start
-  bg_color2: '#E0F8F1',     // gradient end
+  bg_color2: '#FDEBE6',     // gradient end
   bg_image: '',             // full-page background image url
   bg_video: '',             // full-page background video url (bg === 'video')
   button_style: 'rounded',  // 'rounded' | 'pill' | 'sharp'
@@ -34,14 +47,24 @@ export const DEFAULT_THEME = {
   bio_weight: 400,          // 300–800 — bio font weight
   bio_glow: 0,              // 0–20 px — accent drop-shadow glow on the bio
   // ── Phase 2: guns.lol effects ──
-  glow_intensity: 0,        // 0–40 px — master accent glow across name/avatar/panel/links
+  // Master ON/OFF for the accent halo on the display name + social icons. The
+  // two sliders below keep their values when it is off, so flipping it back
+  // restores the creator's exact settings instead of resetting them to zero.
+  // Always read as `glow_enabled !== false` — stores saved before this key
+  // existed have it undefined and must keep glowing.
+  glow_enabled: true,
+  glow_intensity: 0,        // 0–80 px — master accent glow across name/avatar/panel/links
+  icon_glow: 10,            // 0–60 px — social-icon glow halo (10 ≈ the old fixed look)
   name_fx: 'none',          // 'none'|'gradient'|'rainbow'|'shimmer'|'glitch' — display-name text effect
   overlay: 'none',          // 'none'|'rain'|'snow'|'vhs'|'stars'|'particles'|'matrix' — full-page overlay
   audio_url: '',            // DEPRECATED single site-audio url — kept in sync w/ audio_tracks[0] for back-compat
   audio_tracks: [],         // [{ url, name }] — site music playlist; play/mute pill plays through it
   cursor_fx: 'none',        // 'none' | 'trail' | 'sparkle' — pointer particle effect
+  cursor_fx_color: '',      // '' = follow accent; else a hex for the particles
   profile_fx: 'none',       // 'none' | 'glow' | 'float' — profile panel animation
   // ── Phase 3: entry & depth ──
+  show_group_headers: true, // group/section headers above product groups
+  show_type_badges: true,   // product-type chips (Course · Download · …) on cards
   splash_enabled: false,    // show a "click to enter" splash before revealing the page
   splash_text: 'click to enter',
   tilt_enabled: false,      // 3D tilt/parallax on the profile card as the pointer moves
@@ -58,7 +81,7 @@ export const THEME_PRESETS = [
     card_opacity: 70, card_blur: 14, product_opacity: 70, product_blur: 10,
     profile_fx: 'glow', button_style: 'pill', tilt_enabled: true, text_color: '', title_color: '' } },
   { id: 'clean', name: 'Clean Light', emoji: '🤍', theme: {
-    mode: 'light', bg: 'canvas', accent: '#00CC99', glow_intensity: 0, name_fx: 'none',
+    mode: 'light', bg: 'canvas', accent: '#F5634A', glow_intensity: 0, name_fx: 'none',
     product_glow: 'none', overlay: 'none', card_opacity: 100, card_blur: 0,
     product_opacity: 100, product_blur: 0, profile_fx: 'none', button_style: 'rounded',
     tilt_enabled: false, text_color: '', title_color: '' } },
@@ -126,6 +149,52 @@ export function sanitizeThemeImport(raw) {
   return out;
 }
 
+// ── Mode palettes — SINGLE source of truth ───────────────────────────────────
+// The public storefront pins these via .sf-mode-light/.sf-mode-dark, and the
+// themed checkout pins the same values inline. Both consume THIS constant so
+// the two surfaces can never drift apart.
+export const MODE_PALETTES = {
+  light: {
+    bg: '#FBF8F2', surface: '#ffffff', surfaceAlt: '#F4F1EA',
+    text: '#1A1916', textSecondary: '#5B574E', textMuted: '#97917F',
+    border: '#ECE6DB', borderStrong: '#DCD4C6',
+  },
+  dark: {
+    bg: '#121316', surface: '#1b1c20', surfaceAlt: '#24262b',
+    text: '#f2f0ea', textSecondary: '#b6b3ab', textMuted: '#85817a',
+    border: '#2c2e34', borderStrong: '#3a3d45',
+  },
+};
+
+// ── Contrast helpers (WCAG relative luminance) ───────────────────────────────
+// Creators pick ANY accent — near-white (#F8FAFC) or near-black included. Text
+// sitting on or colored by that accent must stay legible, so these decide.
+function relLuminance(hex) {
+  const h = String(hex || '').replace('#', '');
+  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  if (!/^[0-9a-f]{6}$/i.test(full)) return 0;
+  const chan = (i) => {
+    const c = parseInt(full.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * chan(0) + 0.7152 * chan(2) + 0.0722 * chan(4);
+}
+
+/** WCAG contrast ratio between two hex colors (1–21). */
+export function contrastRatio(a, b) {
+  const la = relLuminance(a), lb = relLuminance(b);
+  const [hi, lo] = la >= lb ? [la, lb] : [lb, la];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** '#fff' or '#111' — whichever is more readable ON the given color. */
+export function readableOn(hex) {
+  const l = relLuminance(hex);
+  const white = 1.05 / (l + 0.05);
+  const black = (l + 0.05) / 0.05;
+  return white >= black ? '#ffffff' : '#111111';
+}
+
 export const SOCIAL_TYPES = [
   { type: 'instagram', label: 'Instagram', icon: '📸' },
   { type: 'tiktok',    label: 'TikTok',    icon: '🎵' },
@@ -160,9 +229,10 @@ export function resolveTheme(theme) {
 }
 
 /** Save bio + theme (+ optional integrations) on the creator's profile. */
-export async function updateStorefront(userId, { bio, storefront_theme, tracking_pixels, automation_webhook_url, full_name, avatar_url }) {
+export async function updateStorefront(userId, { bio, location, storefront_theme, tracking_pixels, automation_webhook_url, full_name, avatar_url }) {
   const patch = {};
   if (bio !== undefined) patch.bio = bio;
+  if (location !== undefined) patch.location = location;
   if (storefront_theme !== undefined) patch.storefront_theme = storefront_theme;
   if (tracking_pixels !== undefined) patch.tracking_pixels = tracking_pixels;
   if (automation_webhook_url !== undefined) patch.automation_webhook_url = automation_webhook_url;

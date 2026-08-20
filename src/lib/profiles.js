@@ -6,11 +6,29 @@ import { supabase } from './supabase';
 export async function getProfileByUsername(username) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, username, full_name, avatar_url, bio, storefront_theme, tracking_pixels')
+    .select('id, username, full_name, avatar_url, bio, location, storefront_theme, tracking_pixels')
     .ilike('username', username)
     .maybeSingle();
   if (error) throw error;
   return data;
+}
+
+/**
+ * Creator's storefront theme by id — for the themed checkout. Best-effort:
+ * returns null on ANY failure so the caller falls back to the app-default
+ * look; returns {} when the creator simply hasn't themed yet (their store
+ * renders defaults, so checkout pinning defaults still matches it).
+ */
+export async function getProfileTheme(creatorId) {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('storefront_theme')
+      .eq('id', creatorId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data.storefront_theme || {};
+  } catch { return null; }
 }
 
 /**

@@ -6,7 +6,7 @@ import {
   Package, Store, BarChart3, Compass, Lock, ExternalLink, User, Settings, TrendingUp,
 } from 'lucide-react';
 import Notifications from './Notifications';
-import SkillJoyGreen from '../assets/skilljoy-green.svg';
+import Logo from './Logo';
 
 // One nav row — icon + label, active state, optional unread badge.
 function NavItem({ to, icon: Icon, label, active, badge = 0, onClick }) {
@@ -54,7 +54,7 @@ export default function Header() {
       {/* Mobile top bar */}
       <div className="sb-topbar">
         <Link to="/" className="sb-logo" onClick={close}>
-          <img src={SkillJoyGreen} alt="SkillJoy" style={{ height: 30, width: 'auto' }} />
+          <Logo height={30} />
         </Link>
         <button className={`sb-burger${menuOpen ? ' open' : ''}`} onClick={() => setMenuOpen(o => !o)} aria-label="Toggle menu">
           <span /><span /><span />
@@ -66,7 +66,7 @@ export default function Header() {
       {/* Sidebar — fixed rail (desktop) / slide-in drawer (mobile) */}
       <aside className={`sidebar${menuOpen ? ' open' : ''}`}>
         <Link to="/" className="sb-logo sb-logo-full" onClick={close}>
-          <img src={SkillJoyGreen} alt="SkillJoy" style={{ height: 38, width: 'auto' }} />
+          <Logo height={38} />
         </Link>
 
         <nav className="sb-nav">

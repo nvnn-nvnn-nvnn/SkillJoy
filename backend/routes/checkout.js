@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { serverError } = require('../lib/http');
+const { fulfillSkillPurchase } = require('../lib/skillFulfillment');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
 const { skillFeeCents, SKILL_PLATFORM_FEE_BPS } = require('../config/fees');
@@ -213,8 +214,9 @@ router.post('/:skillId/intent', async (req, res) => {
     }
 });
 
-// POST /api/checkout/:skillId/confirm — fast fulfilment fallback if the webhook
-// is delayed. Idempotent; the webhook is the source of truth.
+// POST /api/checkout/:skillId/confirm — fast fulfilment path, fired by the client
+// as soon as Stripe confirms. Usually BEATS the webhook. Both call the same
+// fulfilSkillPurchase(), which is exactly-once — neither is "the" source of truth.
 router.post('/:skillId/confirm', async (req, res) => {
     try {
         const { skillId } = req.params;
@@ -228,19 +230,12 @@ router.post('/:skillId/confirm', async (req, res) => {
             return res.status(403).json({ error: 'Payment does not match this purchase.' });
         }
 
-        const { error } = await supabase
-            .from('purchases')
-            .update({ status: 'paid' })
-            .eq('buyer_id', buyerId).eq('skill_id', skillId).neq('status', 'paid');
-        if (error) return serverError(res, error);
-
-        // Grant the order-bump product too, if one rode this payment.
-        const bumpSkillId = pi.metadata?.bump_skill_id;
-        if (bumpSkillId) {
-            await supabase.from('purchases')
-                .update({ status: 'paid' })
-                .eq('buyer_id', buyerId).eq('skill_id', bumpSkillId).neq('status', 'paid');
-        }
+        // Run the SAME fulfilment the webhook runs — grant + receipt email +
+        // creator notification + promo redemption + automation. Previously this
+        // route only flipped `status`, and because it almost always beats the
+        // webhook, the webhook's guard then matched 0 rows and silently skipped
+        // every side effect. Exactly-once is enforced inside via `fulfilled_at`.
+        await fulfillSkillPurchase(pi);
 
         res.json({ success: true });
     } catch (err) {

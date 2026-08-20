@@ -2,8 +2,8 @@
 
 :root {
   /* ──────────────────────────────────────────────────────────
-     SkillJoy — Seafoam system (Stan-inspired: calm, rounded, solid)
-     Warm cream canvas + one confident solid seafoam accent.
+     SkillJoy — Coral system (Stan-inspired: calm, rounded, solid)
+     Warm cream canvas + one confident solid coral accent.
      No gradients, no glows — clarity and breathing room.
      ────────────────────────────────────────────────────────── */
 
@@ -22,28 +22,38 @@
   --text-muted: #97917F;
 
   --primary: #1A1916;
-  --primary-hover: #00A37A;
-  --primary-light: #E0F8F1;
-  --primary-mid: #9FE6D0;
+  --primary-hover: #E04A32;
+  --primary-light: #FDEBE6;
+  --primary-mid: #F9B7A8;
 
-  /* ── Caribbean green accent ──
-     --accent is the brand green (buttons, links, focus).
+  /* ── Coral accent ──
+     --accent is the brand coral (buttons, links, focus).
      --accent-bright is the softer decorative variant (fills, chips).
      Keep --accent-rgb in sync with --accent — it drives every shadow,
      focus ring, and glow via rgb(var(--accent-rgb) / <alpha>). */
-  --accent: #00CC99;
-  --accent-hover: #00A37A;
-  --accent-bright: #2FD9AB;
-  --accent-light: #E0F8F1;
-  --accent-mid: #9FE6D0;
+  --accent: #F5634A;
+  --accent-hover: #E04A32;
+  --accent-bright: #FA8A73;
+  --accent-light: #FDEBE6;
+  --accent-mid: #F9B7A8;
   --accent-foreground: #FFFFFF;
 
-  --accent-rgb: 0 204 153;
-  --accent-bright-rgb: 47 217 171;
+  --accent-rgb: 245 99 74;
+  --accent-bright-rgb: 250 138 115;
 
   --green: #2A7A4B;
   --green-light: #E6F7EE;
   --green-mid: #A0D8B8;
+
+  /* ── Danger ──
+     Errors must never borrow --accent: an error painted in the brand color
+     reads as an info/success chip. These values are the Tailwind red scale the
+     app was already hardcoding in ~120 places before it had a token. */
+  --danger: #DC2626;
+  --danger-hover: #B91C1C;
+  --danger-light: #FEF2F2;
+  --danger-mid: #FCA5A5;
+  --danger-rgb: 220 38 38;
 
   /* One unified sans across the whole product. */
   --font-display: 'DM Sans', system-ui, sans-serif;
@@ -69,7 +79,7 @@
 
 /* ── Site-wide DARK MODE ──────────────────────────────────────────────
    Toggled by `data-theme="dark"` on <html> (see src/lib/theme.js). Only
-   the neutral system + shadows flip; --accent (brand green) stays. The
+   the neutral system + shadows flip; --accent (brand coral) stays. The
    public storefront pins its OWN palette via .sf-mode-* so a visitor's
    site theme never bleeds into a creator's page. */
 :root[data-theme="dark"] {
@@ -84,8 +94,9 @@
   --text-muted: #83807A;
 
   --primary: #F1EFEA;          /* ink flips light so `color:var(--primary)` stays readable */
-  --primary-light: #0E2E27;
-  --accent-light: #0E2E27;     /* dark-tinted green fill instead of bright mint */
+  --primary-light: #331A14;
+  --accent-light: #331A14;     /* dark-tinted coral fill instead of bright blush */
+  --danger-light: #3A1518;     /* red-50 would flashbang a dark page */
 
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.40), 0 1px 3px rgba(0,0,0,0.30);
   --shadow: 0 2px 8px rgba(0,0,0,0.45), 0 1px 3px rgba(0,0,0,0.35);
@@ -149,7 +160,7 @@ p {
 /* Highlight a key word in a headline — solid accent, no gradient. */
 .accent-text { color: var(--accent); }
 
-/* Soft pill label — a small seafoam chip above a section heading. */
+/* Soft pill label — a small coral chip above a section heading. */
 .sj-pill {
   display: inline-flex;
   align-items: center;
@@ -170,7 +181,7 @@ p {
   flex-shrink: 0;
 }
 
-/* Soft seafoam-tinted section (alternative to plain cream). */
+/* Soft coral-tinted section (alternative to plain cream). */
 .sj-tint { background: var(--accent-light); }
 
 /* Gentle, optional float for product mockups. */

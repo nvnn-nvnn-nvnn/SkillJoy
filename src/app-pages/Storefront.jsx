@@ -3,12 +3,13 @@ import { useParams, Link } from 'react-router-dom';
 import { useUser } from '@/lib/stores';
 import { getProfileByUsername } from '@/lib/profiles';
 import { listPublishedSkills } from '@/lib/skills';
-import { resolveTheme, listLinks } from '@/lib/storefront';
+import { resolveTheme, listLinks, MODE_PALETTES, SITE_AUDIO_VOLUME } from '@/lib/storefront';
 import { getDemoStore } from '@/lib/demoStores';
 import { recordEvent } from '@/lib/metrics';
 import { initials } from '@/lib/stores';
-import { Pencil, Puzzle, Link2, ArrowUpRight, Sparkles, Search, Volume2, VolumeX } from 'lucide-react';
+import { Pencil, Puzzle, Link2, ArrowUpRight, Sparkles, Search, Volume2, VolumeX, MapPin } from 'lucide-react';
 import { BrandIcon } from '@/lib/brandIcons';
+import { TYPE_BY_ID } from '@/lib/productTypes';
 import SubscribeForm from '@/components/SubscribeForm';
 import Seo from '@/components/Seo';
 import { injectPixels } from '@/lib/pixels';
@@ -53,7 +54,16 @@ export default function Storefront() {
     return () => { alive = false; };
   }, [username]);
 
-  if (state.status === 'loading') return <div className="sf-wrap"><p className="sf-muted">Loading…</p></div>;
+  // Dead-centered in the visible area, and it renders StoreStyles — the old
+  // version shipped neither, so it was a bare left-aligned line of text at the
+  // top of the page with none of the storefront CSS even loaded.
+  if (state.status === 'loading') return (
+    <div className="sf-loading" role="status" aria-live="polite">
+      <span className="sf-spinner" aria-hidden="true" />
+      <p className="sf-muted">Loading…</p>
+      <StoreStyles />
+    </div>
+  );
   if (state.status === 'notfound') return (
     <div className="sf-wrap sf-center">
       <div style={{ color: 'var(--text-muted)', marginBottom: 12 }}><Search size={44} strokeWidth={1.5} /></div>
@@ -67,6 +77,9 @@ export default function Storefront() {
   const isOwner = user && user.id === profile.id;
   const splashOn = theme.splash_enabled && !entered;
   const socials = (theme.socials || []).filter(s => s.url);
+  // Master switch for the name + social-icon halo. `!== false` on purpose:
+  // stores saved before this key existed have it undefined and must keep glowing.
+  const glowOn = theme.glow_enabled !== false;
 
   // Bucket products by group_label, preserving first-seen order (= sort_order).
   // '' (no label) is one anonymous group rendered without a heading.
@@ -91,7 +104,9 @@ export default function Storefront() {
     `sf-glow-${theme.product_glow || 'none'}`,
     (theme.bg === 'image' && theme.bg_image) || hasBgVideo ? 'sf-has-bgimg' : '',
     theme.mono_icons ? 'sf-mono' : '',
-    theme.animated_name ? 'sf-anim-name' : '',
+    // Gated on glowOn too: sfNameGlow animates a hardcoded 18px text-shadow, so
+    // unlike everything else it would NOT go away when --sf-glow collapses to 0.
+    glowOn && theme.animated_name ? 'sf-anim-name' : '',
     theme.name_fx && theme.name_fx !== 'none' ? `sf-fx-${theme.name_fx}` : '',
   ].filter(Boolean).join(' ');
 
@@ -106,8 +121,11 @@ export default function Storefront() {
     '--sf-bio-size': `${theme.bio_size ?? 15}px`,
     '--sf-bio-weight': theme.bio_weight ?? 400,
     '--sf-bio-glow': `${theme.bio_glow ?? 0}px`,
-    '--sf-glow': `${theme.glow_intensity ?? 0}px`,
-    '--sf-glow-strong': `${(theme.glow_intensity ?? 0) * 2.4}px`,
+    // Glow OFF collapses these to 0 rather than clearing the stored values, so
+    // toggling back restores the creator's exact sliders.
+    '--sf-glow': glowOn ? `${theme.glow_intensity ?? 0}px` : '0px',
+    '--sf-glow-strong': glowOn ? `${(theme.glow_intensity ?? 0) * 2.4}px` : '0px',
+    '--sf-icon-glow': glowOn ? `${theme.icon_glow ?? 10}px` : '0px',
   };
   if (theme.text_color) {
     wrapStyle['--text'] = theme.text_color;
@@ -137,7 +155,9 @@ export default function Storefront() {
           actually works instead of being blocked (see note 139). */}
       {splashOn && <Splash text={theme.splash_text} onEnter={() => setEntered(true)} />}
       {theme.audio_tracks?.length > 0 && !splashOn && <AudioPill tracks={theme.audio_tracks} />}
-      {theme.cursor_fx && theme.cursor_fx !== 'none' && <CursorFx kind={theme.cursor_fx} />}
+      {theme.cursor_fx && theme.cursor_fx !== 'none' && (
+        <CursorFx kind={theme.cursor_fx} color={theme.cursor_fx_color || theme.accent} />
+      )}
       <Seo
         title={`${profile.full_name || '@' + profile.username} — SkillJoy`}
         description={profile.bio || `Shop ${profile.full_name || '@' + profile.username}'s Skills on SkillJoy.`}
@@ -163,6 +183,9 @@ export default function Storefront() {
         )}
         <h1 className="sf-name">{profile.full_name || `@${profile.username}`}</h1>
         <p className="sf-handle">@{profile.username}</p>
+        {profile.location && (
+          <p className="sf-location"><MapPin size={13} strokeWidth={2.4} aria-hidden="true" />{profile.location}</p>
+        )}
         {profile.bio && <p className="sf-bio">{profile.bio}</p>}
         {socials.length > 0 && (
           <div className="sf-socials">
@@ -180,6 +203,10 @@ export default function Storefront() {
             {links.filter(l => l.url).map(l => (
               <a key={l.id} href={l.url} target="_blank" rel={l.is_affiliate ? 'noopener noreferrer sponsored' : 'noopener noreferrer'} className="sf-linkbtn">
                 <span className="sf-linkbtn-label"><Link2 size={16} /> {l.label}</span>
+                {/* Visible disclosure. rel="sponsored" above is a crawler hint only —
+                    a human sees nothing from it, and an affiliate relationship has to
+                    be disclosed to the READER, not just to Google. */}
+                {l.is_affiliate && <span className="sf-afftag">Affiliate</span>}
                 <ArrowUpRight size={18} className="sf-linkbtn-arrow" />
               </a>
             ))}
@@ -191,7 +218,13 @@ export default function Storefront() {
 
       {skills.length > 0 && skillGroups.map((g, gi) => (
         <div key={gi} className="sf-group">
-          {g.label && <h2 className="sf-grouptitle">{g.label}</h2>}
+          {g.label && theme.show_group_headers !== false && (
+            <div className="sf-grouphead">
+              <h2 className="sf-grouptitle">{g.label}</h2>
+              <span className="sf-groupline" aria-hidden="true" />
+              <span className="sf-groupcount">{g.items.length}</span>
+            </div>
+          )}
           <div className={`sf-list${theme.layout === 'grid' ? ' sf-grid' : ''}`}>
             {g.items.map(s => (
               <Link key={s.id} to={`/@${profile.username}/${s.id}`} className="sf-card">
@@ -203,7 +236,7 @@ export default function Storefront() {
                   {s.outcome && <p className="sf-card-outcome">{s.outcome}</p>}
                   <div className="sf-card-foot">
                     <span className="sf-price">{s.price_cents ? `$${(s.price_cents / 100).toFixed(2)}` : 'Free'}</span>
-                    {s.pricing_type === 'membership' && <span className="sf-tag">Membership</span>}
+                    {theme.show_type_badges !== false && <TypeTag skill={s} />}
                   </div>
                 </div>
               </Link>
@@ -234,6 +267,7 @@ export default function Storefront() {
 // interaction — UNLESS the user has already taken manual control (`interacted`),
 // so pausing never gets undone by the auto-starter. A single track loops; a
 // multi-track playlist advances on `ended` and wraps back to the first.
+
 function AudioPill({ tracks }) {
   const audioRef = useRef(null);
   const interacted = useRef(false);
@@ -247,6 +281,7 @@ function AudioPill({ tracks }) {
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return undefined;
+    a.volume = SITE_AUDIO_VOLUME;   // BEFORE any play() so the first note is already at 85%
     let cancelled = false;
     const start = () => {
       removeListeners();
@@ -296,6 +331,16 @@ function AudioPill({ tracks }) {
       </button>
     </>
   );
+}
+
+// ── Product-type badge — differentiates card kinds (Course · Download · …).
+// `skills.kind` matches PRODUCT_TYPES ids; legacy rows without a kind fall back
+// to membership (by pricing_type) or digital.
+function TypeTag({ skill }) {
+  const t = TYPE_BY_ID[skill.kind]
+    || (skill.pricing_type === 'membership' ? TYPE_BY_ID.membership : TYPE_BY_ID.digital);
+  const Icon = t.icon;
+  return <span className="sf-tag"><Icon size={11} strokeWidth={2.4} /> {t.label}</span>;
 }
 
 // ── Splash / "click to enter" ────────────────────────────────────────────────
@@ -362,10 +407,14 @@ function useTilt(enabled, max = 10) {
 // cursor_url. Spawns short-lived absolutely-positioned dots at the pointer,
 // capped + cleaned up on unmount. Cheap: plain DOM nodes + CSS animation.
 const CURSOR_FX_MAX = 24;
-function CursorFx({ kind }) {
+function CursorFx({ kind, color }) {
   useEffect(() => {
     const layer = document.createElement('div');
     layer.className = 'sf-fxlayer';
+    // The layer lives on <body>, OUTSIDE the storefront wrapper — so the
+    // creator's pinned --accent doesn't reach it. Pin the color here instead
+    // (also what makes the custom cursor_fx_color work).
+    layer.style.setProperty('--sf-fx-color', color);
     document.body.appendChild(layer);
     let last = 0;
     function onMove(e) {
@@ -383,7 +432,7 @@ function CursorFx({ kind }) {
     }
     window.addEventListener('mousemove', onMove);
     return () => { window.removeEventListener('mousemove', onMove); layer.remove(); };
-  }, [kind]);
+  }, [kind, color]);
   return null;
 }
 
@@ -473,9 +522,22 @@ function StoreStyles() {
     @keyframes sfMatrix { from { background-position:0 0, 0 0; } to { background-position:0 0, 0 220px; } }
 
     /* ── Splash / click-to-enter ── */
-    .sf-splash { position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center;
+    /* left:var(--shell-offset) instead of inset:0 — a logged-in visitor has the
+       248px app rail on screen, and a viewport-wide fixed layer ignores it, so
+       the text centered ~124px left of where the page visually centers. The rail
+       also paints OVER this at z-index 200, so the gate is inset beside it. */
+    .sf-splash { position:fixed; top:0; right:0; bottom:0; left:var(--shell-offset, 0px);
+      z-index:100; display:flex; align-items:center; justify-content:center;
       cursor:pointer; background:rgba(8,8,12,.55); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
       animation:sfSplashIn .28s ease; }
+    /* Full-height centered loader, matched to the splash so both agree. */
+    .sf-loading { position:fixed; top:0; right:0; bottom:0; left:var(--shell-offset, 0px);
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:13px; }
+    .sf-spinner { width:30px; height:30px; border-radius:50%;
+      border:3px solid color-mix(in srgb, var(--accent) 20%, transparent);
+      border-top-color:var(--accent); animation:sfSpin .8s linear infinite; }
+    @keyframes sfSpin { to { transform:rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .sf-spinner { animation-duration:2.6s; } }
     @keyframes sfSplashIn { from { opacity:0; } to { opacity:1; } }
     .sf-splash-text { font-size:14px; font-weight:800; letter-spacing:.24em; text-transform:uppercase; color:#fff;
       text-shadow:0 0 20px color-mix(in srgb, var(--accent) 85%, transparent); animation:sfSplashPulse 2.2s ease-in-out infinite; }
@@ -507,8 +569,8 @@ function StoreStyles() {
     /* ── Cursor particle FX ── */
     .sf-fxlayer { position:fixed; inset:0; z-index:60; pointer-events:none; overflow:hidden; }
     .sf-fxp { position:absolute; transform:translate(-50%,-50%); animation:sfFxFade .65s ease-out forwards; }
-    .sf-fxp-trail { width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent); }
-    .sf-fxp-sparkle { color:var(--accent); font-size:12px; line-height:1; text-shadow:0 0 6px var(--accent); }
+    .sf-fxp-trail { width:7px; height:7px; border-radius:50%; background:var(--sf-fx-color, var(--accent)); box-shadow:0 0 8px var(--sf-fx-color, var(--accent)); }
+    .sf-fxp-sparkle { color:var(--sf-fx-color, var(--accent)); font-size:12px; line-height:1; text-shadow:0 0 6px var(--sf-fx-color, var(--accent)); }
     @keyframes sfFxFade { from { opacity:.9; scale:1; } to { opacity:0; scale:.2; } }
 
     /* ── Profile panel FX (respect reduced motion) ── */
@@ -530,17 +592,17 @@ function StoreStyles() {
        dark mode (data-theme on <html>) can never override a creator's chosen
        page mode — the public page always reflects the creator's setting. */
     .sf-mode-light {
-      --bg:#FBF8F2; --surface:#ffffff; --surface-alt:#F4F1EA;
-      --text:#1A1916; --text-secondary:#5B574E; --text-muted:#97917F;
-      --border:#ECE6DB; --border-strong:#DCD4C6;
+      --bg:${MODE_PALETTES.light.bg}; --surface:${MODE_PALETTES.light.surface}; --surface-alt:${MODE_PALETTES.light.surfaceAlt};
+      --text:${MODE_PALETTES.light.text}; --text-secondary:${MODE_PALETTES.light.textSecondary}; --text-muted:${MODE_PALETTES.light.textMuted};
+      --border:${MODE_PALETTES.light.border}; --border-strong:${MODE_PALETTES.light.borderStrong};
     }
     .sf-mode-dark {
-      --bg:#121316; --surface:#1b1c20; --surface-alt:#24262b;
-      --text:#f2f0ea; --text-secondary:#b6b3ab; --text-muted:#85817a;
-      --border:#2c2e34; --border-strong:#3a3d45;
+      --bg:${MODE_PALETTES.dark.bg}; --surface:${MODE_PALETTES.dark.surface}; --surface-alt:${MODE_PALETTES.dark.surfaceAlt};
+      --text:${MODE_PALETTES.dark.text}; --text-secondary:${MODE_PALETTES.dark.textSecondary}; --text-muted:${MODE_PALETTES.dark.textMuted};
+      --border:${MODE_PALETTES.dark.border}; --border-strong:${MODE_PALETTES.dark.borderStrong};
     }
     /* Explicit dark canvas so it never falls back to the app's light bg. */
-    .sf-mode-dark .sf-bg { background:#121316; }
+    .sf-mode-dark .sf-bg { background:${MODE_PALETTES.dark.bg}; }
     .sf-has-bgimg .sf-name, .sf-has-bgimg .sf-handle, .sf-has-bgimg .sf-bio { text-shadow:0 1px 14px rgba(0,0,0,.5); }
     /* Button-style + glow apply to PRODUCTS only — links have their own look below. */
     .sf-btn-pill .sf-card, .sf-btn-pill .sf-cover { border-radius:var(--r-2xl); }
@@ -607,27 +669,40 @@ function StoreStyles() {
     .sf-avatar { width:var(--sf-avatar-size, 96px); height:var(--sf-avatar-size, 96px); border-radius:var(--sf-avatar-radius, 50%); margin:0 auto 14px; background:color-mix(in srgb, var(--accent) 14%, white) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(var(--sf-avatar-size, 96px) * 0.34); color:var(--accent); border:4px solid var(--surface); box-shadow:var(--shadow-lg), 0 0 var(--sf-glow-strong, 0px) color-mix(in srgb, var(--accent) 85%, transparent); }
     .sf-name { font-size:27px; font-weight:800; font-family:var(--font-display); letter-spacing:-.02em; line-height:1.15; color:var(--sf-title, inherit); filter:drop-shadow(0 0 var(--sf-glow, 0px) color-mix(in srgb, var(--accent) 100%, transparent)) drop-shadow(0 0 var(--sf-glow-strong, 0px) color-mix(in srgb, var(--accent) 55%, transparent)); }
     .sf-handle { color:var(--accent); font-size:14px; font-weight:600; margin-top:3px; }
+    /* Muted, not accent — the handle already owns the accent here; a second
+       accent line directly under it competes with the display name. */
+    .sf-location { display:inline-flex; align-items:center; gap:5px; margin-top:7px;
+      color:var(--text-muted); font-size:13px; font-weight:600; }
+    .sf-location svg { flex-shrink:0; opacity:.85; }
     .sf-bio { color:var(--text-secondary); font-size:var(--sf-bio-size, 15px); font-weight:var(--sf-bio-weight, 400); margin:12px auto 0; line-height:1.55; max-width:42ch;
       filter:drop-shadow(0 0 var(--sf-bio-glow, 0px) color-mix(in srgb, var(--accent) 70%, transparent)); }
     .sf-socials { display:flex; gap:16px; justify-content:center; margin-top:20px; }
-    /* Bare icons (no circle) with a shape-hugging glow via filter:drop-shadow. */
+    /* Bare icons (no circle) with a shape-hugging glow via filter:drop-shadow.
+       Driven by --sf-icon-glow (0–60px slider): triple layered bloom — tight
+       core + halo + wide outer wash — so cranked all the way it reads as a
+       full neon burst, and at 0px it's invisible. */
     .sf-social { display:inline-flex; align-items:center; justify-content:center; padding:5px; color:var(--text); text-decoration:none;
       transition:transform .18s cubic-bezier(.34,1.4,.64,1), color .14s ease, filter .18s ease;
-      /* Layered bloom: tight core + soft halo, both tracking the accent. */
       filter:
-        drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 75%, transparent))
-        drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 45%, transparent)); }
+        drop-shadow(0 0 calc(var(--sf-icon-glow, 10px) * 0.3) color-mix(in srgb, var(--accent) 90%, transparent))
+        drop-shadow(0 0 var(--sf-icon-glow, 10px) color-mix(in srgb, var(--accent) 55%, transparent))
+        drop-shadow(0 0 calc(var(--sf-icon-glow, 10px) * 2.2) color-mix(in srgb, var(--accent) 38%, transparent)); }
     .sf-social:hover { transform:translateY(-3px) scale(1.14); color:var(--accent);
       filter:
-        drop-shadow(0 0 4px var(--accent))
-        drop-shadow(0 0 12px color-mix(in srgb, var(--accent) 80%, transparent))
-        drop-shadow(0 0 24px color-mix(in srgb, var(--accent) 55%, transparent)); }
+        drop-shadow(0 0 calc(var(--sf-icon-glow, 10px) * 0.4) var(--accent))
+        drop-shadow(0 0 calc(var(--sf-icon-glow, 10px) * 1.3) color-mix(in srgb, var(--accent) 75%, transparent))
+        drop-shadow(0 0 calc(var(--sf-icon-glow, 10px) * 2.8) color-mix(in srgb, var(--accent) 50%, transparent)); }
 
     /* Product cards + link buttons — a separate section below the profile panel */
     /* Links sit inside the profile panel — full width, stacked under the socials. */
     .sf-links { display:flex; flex-direction:column; gap:10px; margin-top:18px; width:100%; }
     .sf-group { margin-top:22px; }
-    .sf-grouptitle { font-size:15px; font-weight:800; letter-spacing:-.01em; color:var(--text); margin:0 4px 2px; }
+    /* Section header: title + accent-fading rule + item-count pill. */
+    .sf-grouphead { display:flex; align-items:center; gap:12px; margin:0 4px 2px; }
+    .sf-grouptitle { font-size:15px; font-weight:800; letter-spacing:-.01em; color:var(--sf-title, var(--text)); margin:0; white-space:nowrap;
+      filter:drop-shadow(0 0 var(--sf-glow, 0px) color-mix(in srgb, var(--accent) 70%, transparent)); }
+    .sf-groupline { flex:1; height:1px; background:linear-gradient(90deg, color-mix(in srgb, var(--accent) 55%, transparent), color-mix(in srgb, var(--border-strong) 50%, transparent)); }
+    .sf-groupcount { font-size:11px; font-weight:800; color:var(--accent); background:color-mix(in srgb, var(--accent) 13%, transparent); border:1px solid color-mix(in srgb, var(--accent) 28%, transparent); padding:2px 8px; border-radius:var(--r-full); }
     .sf-group .sf-list { margin-top:12px; }
     .sf-list { display:flex; flex-direction:column; gap:14px; margin-top:22px; }
     .sf-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; }
@@ -641,10 +716,17 @@ function StoreStyles() {
     .sf-card-outcome { font-size:13px; color:var(--text-secondary); margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
     .sf-card-foot { display:flex; align-items:center; gap:8px; margin-top:10px; }
     .sf-price { font-weight:800; color:var(--text); font-size:15px; }
-    .sf-tag { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--accent); background:color-mix(in srgb, var(--accent) 16%, transparent); border:1px solid color-mix(in srgb, var(--accent) 30%, transparent); padding:3px 9px; border-radius:var(--r-full); }
+    .sf-tag { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--accent); background:color-mix(in srgb, var(--accent) 16%, transparent); border:1px solid color-mix(in srgb, var(--accent) 30%, transparent); padding:3px 9px; border-radius:var(--r-full); white-space:nowrap; }
+    .sf-tag svg { flex-shrink:0; }
 
     /* Link buttons — deliberately distinct from product cards: pill, accent-tinted,
        centered label, no cover/border-box. */
+    /* Visible affiliate disclosure. Deliberately legible, not a whisper — the
+       point is that a visitor can actually see it. */
+    .sf-afftag { flex-shrink:0; font-size:9.5px; font-weight:800; letter-spacing:.07em; text-transform:uppercase;
+      padding:3px 8px; border-radius:var(--r-full); color:var(--accent);
+      background:color-mix(in srgb, var(--accent) 14%, transparent);
+      border:1px solid color-mix(in srgb, var(--accent) 32%, transparent); }
     .sf-linkbtn { display:flex; align-items:center; justify-content:center; gap:9px; padding:14px 18px; border:1.5px solid color-mix(in srgb, var(--accent) 32%, transparent); border-radius:var(--r-full); background:color-mix(in srgb, var(--accent) 10%, var(--sf-item-bg, var(--surface))); backdrop-filter:blur(var(--sf-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--sf-item-blur, 0px)); text-decoration:none; color:var(--text); font-weight:700; box-shadow:0 0 var(--sf-glow, 0px) color-mix(in srgb, var(--accent) 78%, transparent); transition:transform .16s cubic-bezier(.34,1.4,.64,1), background .16s ease, border-color .16s ease, box-shadow .16s ease; }
     .sf-linkbtn:hover { transform:translateY(-2px); background:color-mix(in srgb, var(--accent) 18%, var(--surface)); border-color:var(--accent); box-shadow:0 8px 22px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 var(--sf-glow, 0px) color-mix(in srgb, var(--accent) 60%, transparent); }
     .sf-linkbtn-label { display:inline-flex; align-items:center; gap:9px; }

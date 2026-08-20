@@ -6,6 +6,7 @@ const supabase = require('../config/supabase');
 const { sendEmail, getUserEmail, purchaseThankYou } = require('./../lib/email');
 const { fireAutomation } = require('./../lib/webhookout');
 const { fulfillGuestPurchase } = require('./../lib/guestFulfillment');
+const { fulfillSkillPurchase } = require('./../lib/skillFulfillment');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STRIPE WEBHOOK ENDPOINT
@@ -41,86 +42,11 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
             }
 
             // ── v3 Skill purchase (instant digital goods, no escrow) ──
+            // Shared with the /confirm fast-path — see lib/skillFulfillment.js
+            // for why the idempotency guard is `fulfilled_at`, not `status`.
             if (paymentIntent.metadata?.kind === 'skill') {
-                const { skill_id, buyer_id } = paymentIntent.metadata;
-                console.log(`🧩 Skill purchase: skill ${skill_id} for buyer ${buyer_id}`);
-
-                const { data: paid, error: skillErr } = await supabase
-                    .from('purchases')
-                    .update({ status: 'paid', stripe_payment_id: paymentIntent.id })
-                    .eq('buyer_id', buyer_id).eq('skill_id', skill_id)
-                    .neq('status', 'paid') // idempotency guard
-                    .select('id');
-
-                if (skillErr) {
-                    console.error('❌ Failed to mark Skill purchase paid:', skillErr.message);
-                } else if (!paid || paid.length === 0) {
-                    console.warn(`⚠️ Skill purchase already paid or pending row missing (skill ${skill_id}, buyer ${buyer_id})`);
-                } else {
-                    const { data: skill } = await supabase
-                        .from('skills').select('title, creator_id, confirmation_message').eq('id', skill_id).single();
-                    // Notify the creator of the sale.
-                    if (skill?.creator_id) {
-                        await supabase.from('notifications').insert({
-                            user_id: skill.creator_id,
-                            type: 'skill_purchase',
-                            title: 'New sale! 🎉',
-                            message: `Someone just bought "${skill.title ?? 'your Skill'}".`,
-                            related_id: skill_id, related_type: null,
-                        });
-                    }
-                    // Count a promo-code redemption, if one was used.
-                    const code = paymentIntent.metadata?.code;
-                    if (code && skill?.creator_id) {
-                        const { data: d } = await supabase.from('discounts')
-                            .select('id, times_redeemed').eq('creator_id', skill.creator_id).ilike('code', code).maybeSingle();
-                        if (d) await supabase.from('discounts').update({ times_redeemed: d.times_redeemed + 1 }).eq('id', d.id);
-                    }
-                    // Best-effort thank-you / receipt to the buyer.
-                    try {
-                        const email = await getUserEmail(buyer_id);
-                        if (email) {
-                            const { subject, html } = purchaseThankYou({
-                                title: skill?.title ?? 'your purchase',
-                                amountCents: paymentIntent.amount,
-                                note: skill?.confirmation_message || '',
-                                accessUrl: `${process.env.FRONTEND_URL}/locker/${skill_id}`,
-                                accessLabel: 'Open in Locker',
-                            });
-                            await sendEmail({ to: email, subject, html });
-                        }
-                    } catch (e) { console.warn('receipt email failed:', e.message); }
-                    // Outbound automation webhook (Zapier/Make/AutoDM).
-                    if (skill?.creator_id) fireAutomation(skill.creator_id, 'sale', {
-                        skill_id, title: skill.title, amount: paymentIntent.amount / 100, kind: 'onetime',
-                    });
-                    console.log(`✅ Skill purchase fulfilled (skill ${skill_id}, buyer ${buyer_id})`);
-                }
-
-                // ── Order bump: grant the add-on product that rode this payment ──
-                const bumpSkillId = paymentIntent.metadata?.bump_skill_id;
-                if (bumpSkillId) {
-                    const { data: bumpPaid } = await supabase
-                        .from('purchases')
-                        .update({ status: 'paid', stripe_payment_id: paymentIntent.id })
-                        .eq('buyer_id', buyer_id).eq('skill_id', bumpSkillId)
-                        .neq('status', 'paid') // idempotency guard
-                        .select('id');
-                    if (bumpPaid?.length) {
-                        const { data: bumpSkill } = await supabase
-                            .from('skills').select('title, creator_id').eq('id', bumpSkillId).single();
-                        if (bumpSkill?.creator_id) {
-                            await supabase.from('notifications').insert({
-                                user_id: bumpSkill.creator_id,
-                                type: 'skill_purchase',
-                                title: 'Order bump sold! 🎉',
-                                message: `Your add-on "${bumpSkill.title ?? 'product'}" sold alongside another purchase.`,
-                                related_id: bumpSkillId, related_type: null,
-                            });
-                        }
-                        console.log(`✅ Order bump fulfilled (skill ${bumpSkillId}, buyer ${buyer_id})`);
-                    }
-                }
+                try { await fulfillSkillPurchase(paymentIntent); }
+                catch (e) { console.error('❌ Skill fulfilment failed:', e.message); }
                 break;
             }
 

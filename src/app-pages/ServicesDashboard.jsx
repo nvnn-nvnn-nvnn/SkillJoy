@@ -44,7 +44,8 @@ export default function ServicesDashboard() {
   const [skills, setSkills] = useState(null);   // null = loading
   const [sales, setSales] = useState([]);
   const [events, setEvents] = useState([]);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState('all');   // product KIND
+  const [status, setStatus] = useState('all');   // 'all' | 'active' | 'draft' — independent axis
   const [query, setQuery] = useState('');
   const [menuFor, setMenuFor] = useState(null);
   const [toast, setToast] = useState('');
@@ -126,8 +127,24 @@ export default function ServicesDashboard() {
     return c;
   }, [services]);
 
+  // Status counts are computed off the TYPE-filtered set, not everything, so the
+  // numbers describe what you'd actually get if you clicked — pick "Course" and
+  // Draft reads "3" meaning three draft courses, not three drafts overall.
+  const statusCounts = useMemo(() => {
+    const inType = services.filter(s => filter === 'all' || s.kind === filter);
+    return {
+      all: inType.length,
+      active: inType.filter(s => s.status === 'active').length,
+      draft: inType.filter(s => s.status === 'draft').length,
+    };
+  }, [services, filter]);
+
+  // Type and status are independent axes — kept as separate controls so you can
+  // ask for "draft courses". Folding status into the type tabs would make "All"
+  // mean two different things and lose that combination entirely.
   const visible = services.filter(s =>
     (filter === 'all' || s.kind === filter) &&
+    (status === 'all' || s.status === status) &&
     s.title.toLowerCase().includes(query.trim().toLowerCase())
   );
 
@@ -222,9 +239,30 @@ export default function ServicesDashboard() {
             </button>
           ))}
         </div>
-        <div className="sv-search">
-          <Search size={15} />
-          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search products…" />
+        <div className="sv-controls-right">
+          {/* Status is its own segmented control, not another tab in the row
+              above — the two filters compose, so "Course + Draft" works. */}
+          <div className="sv-statusseg" role="group" aria-label="Filter by status">
+            {[
+              { id: 'all',    label: 'All' },
+              { id: 'active', label: 'Active' },
+              { id: 'draft',  label: 'Draft' },
+            ].map(o => (
+              <button
+                key={o.id}
+                className={`sv-statusbtn ${status === o.id ? 'on' : ''}`}
+                aria-pressed={status === o.id}
+                onClick={() => setStatus(o.id)}
+              >
+                {o.label}
+                <span className="sv-statusbtn-count">{statusCounts[o.id]}</span>
+              </button>
+            ))}
+          </div>
+          <div className="sv-search">
+            <Search size={15} />
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search products…" />
+          </div>
         </div>
       </div>
 
@@ -232,9 +270,21 @@ export default function ServicesDashboard() {
       {visible.length === 0 ? (
         <div className="sv-empty">
           <div className="sv-empty-icon">🗂️</div>
-          <h3>No products here yet</h3>
-          <p>{query ? 'Nothing matches your search.' : 'Create your first product to start selling.'}</p>
-          <button className="sv-new" onClick={() => navigate('/build/new')}><Plus size={16} /> New product</button>
+          <h3>{services.length === 0 ? 'No products here yet' : 'Nothing matches'}</h3>
+          {/* Distinguishes "you have none" from "your filters hid them all" —
+              otherwise filtering to Draft with no drafts reads as data loss. */}
+          <p>
+            {services.length === 0 ? 'Create your first product to start selling.'
+              : query ? 'Nothing matches your search and filters.'
+              : status === 'draft' ? 'No drafts here — everything is published.'
+              : status === 'active' ? 'Nothing published here yet.'
+              : 'Nothing matches the current filters.'}
+          </p>
+          {services.length > 0 && (status !== 'all' || filter !== 'all' || query) ? (
+            <button className="sv-new" onClick={() => { setStatus('all'); setFilter('all'); setQuery(''); }}>Clear filters</button>
+          ) : (
+            <button className="sv-new" onClick={() => navigate('/build/new')}><Plus size={16} /> New product</button>
+          )}
         </div>
       ) : (
         <div className="sv-grid">
@@ -356,6 +406,19 @@ function Styles() {
       background: var(--surface); color: var(--text-muted); flex: 1 1 220px; min-width: 0; }
     .sv-search input { border: none; outline: none; background: none; font-size: 14px; color: var(--text); font-family: inherit; width: 100%; min-width: 0; }
 
+    /* Status filter — a distinct segmented control so it reads as a SECOND axis
+       rather than more type tabs. Active/Draft carry the same dot colors as the
+       card status pills so the link between filter and badge is obvious. */
+    .sv-controls-right { display: flex; align-items: center; gap: 10px; flex: 1 1 340px; min-width: 0; flex-wrap: wrap; }
+    .sv-statusseg { display: flex; gap: 3px; padding: 4px; background: var(--surface-alt); border-radius: 10px; flex: 0 0 auto; }
+    .sv-statusbtn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border: none; border-radius: 7px;
+      background: transparent; color: var(--text-secondary); font-size: 13px; font-weight: 600; cursor: pointer;
+      font-family: inherit; white-space: nowrap; width: auto; min-width: 0; transition: all .15s; }
+    .sv-statusbtn:hover { color: var(--text); background: var(--surface); }
+    .sv-statusbtn.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .sv-statusbtn-count { font-size: 11px; font-weight: 700; color: var(--text-muted); }
+    .sv-statusbtn.on .sv-statusbtn-count { color: var(--accent); }
+
     /* Grid + cards — min(100%, …) keeps a single card from overflowing narrow screens */
     .sv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 16px; }
     .sv-card { display: flex; flex-direction: column; gap: 10px; padding: 18px; border: 1px solid var(--border);
@@ -426,6 +489,9 @@ function Styles() {
       .sv-head-actions { width: 100%; }
       .sv-head-actions > * { flex: 1 1 auto; }
       .sv-controls { flex-direction: column; align-items: stretch; }
+      .sv-controls-right { flex-direction: column; align-items: stretch; }
+      .sv-statusseg { justify-content: space-between; }
+      .sv-statusbtn { flex: 1 1 0; justify-content: center; }
       .sv-type-grid { grid-template-columns: 1fr; }
       .sv-modal { padding: 24px 18px; border-radius: 14px; }
     }

@@ -4,7 +4,7 @@ import { useUser } from '@/lib/stores';
 import { LEGACY_MODE } from '@/lib/config';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import SkillJoyLogo3 from '../../assets/SkillJoy-Logo2.svg'
-import SkillJoyGreen from '../../assets/skilljoy-green.svg'; // adjust alias if needed
+import Logo from '@/components/Logo';
 
 // Base site URL with any trailing slash(es) stripped. Without this, a
 // VITE_SITE_URL like "https://skilljoy.me/" + "/login" becomes
@@ -137,9 +137,7 @@ export default function LoginPage() {
 
             <div className="login-bg">
                 <div className="login-card fade-up">
-                    <img
-                    style={{ height: '45px'}}
-                    src={SkillJoyGreen} alt="" />
+                    <Logo height={45} />
 
                     <h1 className="login-title">{titles[mode]}</h1>
                     <p className="login-sub">{subs[mode]}</p>

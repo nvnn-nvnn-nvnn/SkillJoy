@@ -51,11 +51,11 @@ export default function SubscribeForm({ creatorId, name }) {
         .sub-form input:focus { outline:none; border-color:var(--accent); }
         /* Dedicated high-contrast button (hard fallback so it's never a pale/UA-default
            box at rest — the .btn-primary version rendered near-white on the storefront). */
-        /* Brand-green CTA, hardcoded — NOT the creator's --accent (which can be
+        /* Brand-coral CTA, hardcoded — NOT the creator's --accent (which can be
            white/light on some themes, making an accent-bg button invisible). This
-           is a "Built on SkillJoy" element, so a fixed green is correct + always
+           is a "Built on SkillJoy" element, so a fixed coral is correct + always
            high-contrast. */
-        .sub-btn { flex-shrink:0; border:none; cursor:pointer; padding:12px 22px; border-radius:var(--r); font-family:var(--font-body); font-size:14px; font-weight:800; white-space:nowrap; color:#ffffff; background:#00CC99; box-shadow:0 2px 12px rgba(0,204,153,0.40); transition:filter .15s ease, transform .15s ease; }
+        .sub-btn { flex-shrink:0; border:none; cursor:pointer; padding:12px 22px; border-radius:var(--r); font-family:var(--font-body); font-size:14px; font-weight:800; white-space:nowrap; color:#ffffff; background:#F5634A; box-shadow:0 2px 12px rgba(245,99,74,0.40); transition:filter .15s ease, transform .15s ease; }
         .sub-btn:hover:not(:disabled) { filter:brightness(1.08); transform:translateY(-1px); }
         .sub-btn:disabled { opacity:.6; cursor:default; }
         .sub-done { font-weight:600; color:var(--green); }

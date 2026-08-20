@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth } from '@/lib/stores';
 import { TOS_VERSION } from '@/lib/config';
-import SkillJoyGreen from '../../assets/skilljoy-green.svg';
+import Logo from '@/components/Logo';
 
 const TOTAL_STEPS = 1;
 
@@ -134,7 +134,7 @@ export default function OnboardingPage() {
                     {/* ── Left: brand / value panel ── */}
                     <aside className="onb-brand">
                             <div>
-                                <img className="onb-logo-img" src={SkillJoyGreen} alt="SkillJoy" />
+                                <Logo height={30} className="onb-logo-img" />
                                 <h2 className="onb-brand-h">Your link in bio,<br />built to sell.</h2>
                                 <p className="onb-brand-sub">A customizable page for all your links, socials &amp; everything you sell — one link in your bio.</p>
                             </div>

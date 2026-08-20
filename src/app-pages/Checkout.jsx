@@ -4,6 +4,8 @@ import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { useUser } from '@/lib/stores';
 import { getPublicSkill } from '@/lib/skills';
+import { resolveTheme, MODE_PALETTES, readableOn, contrastRatio } from '@/lib/storefront';
+import { getProfileTheme } from '@/lib/profiles';
 import { startCheckout, confirmCheckout, validateCode, startGuestCheckout, confirmGuestCheckout } from '@/lib/purchases';
 import { recordEvent } from '@/lib/metrics';
 import BackLink from '@/components/BackLink';
@@ -21,6 +23,7 @@ export default function Checkout() {
   const [amountCents, setAmountCents] = useState(0);
   const [err, setErr] = useState('');
   const [status, setStatus] = useState('loading'); // loading|notfound|error|promo|pay|guest-success
+  const [ckTheme, setCkTheme] = useState(null); // creator's resolved storefront theme; null → app-default look
 
   // guest checkout (no account) — collected on the promo step when !user
   const [guestName, setGuestName] = useState('');
@@ -47,6 +50,13 @@ export default function Checkout() {
         setSkill(s);
         setAmountCents(s.price_cents);
         recordEvent('checkout_start', { skillId: s.id, creatorId: s.creator_id, buyerId: user?.id ?? null });
+
+        // Themed checkout: fetch the creator's look in parallel. Best-effort by
+        // design — a slow or failed theme query must NEVER delay or break
+        // payment, so this doesn't await and null falls back to the app look.
+        getProfileTheme(s.creator_id)
+          .then(t => { if (alive && t !== null) setCkTheme(resolveTheme(t)); })
+          .catch(() => {});
 
         // Load the order-bump product (one-time checkouts only). Best-effort.
         if (s.order_bump_skill_id && s.price_cents && s.pricing_type === 'onetime') {
@@ -109,14 +119,52 @@ export default function Checkout() {
   const bumpCents = bumpSkill ? (skill?.order_bump_price_cents ?? bumpSkill.price_cents ?? 0) : 0;
   const displayTotal = amountCents + (bumpOn ? bumpCents : 0);
 
-  if (status === 'loading') return <Shell><p className="ck-muted">Preparing checkout…</p></Shell>;
-  if (status === 'notfound') return <Shell><p className="ck-muted">This Skill isn’t available.</p></Shell>;
+  // ── Creator theming — accent + mode palette ONLY. Deliberately no bg media,
+  // overlays, glow, audio or tilt here: checkout is a trust surface, and it
+  // stays calm, fast and legible no matter how loud the storefront is.
+  const mode = ckTheme?.mode === 'dark' ? 'dark' : 'light';
+  const palette = ckTheme ? MODE_PALETTES[mode] : null;
+  const accent = ckTheme?.accent;
+  const pin = palette ? {
+    colorScheme: mode,
+    '--bg': palette.bg, '--surface': palette.surface, '--surface-alt': palette.surfaceAlt,
+    '--text': palette.text, '--text-secondary': palette.textSecondary, '--text-muted': palette.textMuted,
+    '--border': palette.border, '--border-strong': palette.borderStrong,
+    '--accent': accent,
+    // Text ON the accent (pay buttons): luminance-picked so a near-white or
+    // near-black accent can never produce an unreadable button.
+    '--accent-foreground': readableOn(accent),
+    '--accent-hover': `color-mix(in srgb, ${accent} 85%, #000)`,
+    '--accent-light': `color-mix(in srgb, ${accent} 12%, ${palette.surface})`,
+    '--accent-mid': `color-mix(in srgb, ${accent} 38%, transparent)`,
+    // Accent AS text (bump price): needs 4.5:1 on the surface, else fall back.
+    '--ck-accent-text': contrastRatio(accent, palette.surface) >= 4.5 ? accent : palette.text,
+    '--ck-danger': mode === 'dark' ? '#f87171' : '#dc2626',
+  } : undefined;
+
+  // Stripe's PaymentElement is an iframe — themed via the appearance API, not
+  // CSS. Built from the same resolved theme; appearance is fixed at <Elements>
+  // mount, which clientSecret already gates.
+  const appearance = ckTheme ? {
+    theme: mode === 'dark' ? 'night' : 'flat',
+    variables: {
+      colorPrimary: accent,
+      colorBackground: palette.surface,
+      colorText: palette.text,
+      colorDanger: '#dc2626',
+      fontFamily: 'inherit',
+      borderRadius: '10px',
+    },
+  } : { theme: 'flat', variables: { colorPrimary: '#D4522A' } };
+
+  if (status === 'loading') return <Shell pin={pin}><p className="ck-muted">Preparing checkout…</p></Shell>;
+  if (status === 'notfound') return <Shell pin={pin}><p className="ck-muted">This Skill isn’t available.</p></Shell>;
   if (status === 'error') return (
-    <Shell><p className="ck-err">{err}</p><BackLink onClick={() => navigate(-1)}>Go back</BackLink></Shell>
+    <Shell pin={pin}><p className="ck-err">{err}</p><BackLink onClick={() => navigate(-1)}>Go back</BackLink></Shell>
   );
 
   return (
-    <Shell>
+    <Shell pin={pin}>
       <Summary skill={skill} amountCents={amountCents} discounted={!!applied} />
 
       {status === 'promo' && (
@@ -164,7 +212,7 @@ export default function Checkout() {
       )}
 
       {status === 'pay' && clientSecret && (
-        <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'flat', variables: { colorPrimary: '#D4522A' } } }}>
+        <Elements stripe={stripePromise} options={{ clientSecret, appearance }}>
           <CheckoutForm skill={skill} amountCents={amountCents} guest={isGuest} onPaid={() => {
             recordEvent('purchase', { skillId: skill.id, creatorId: skill.creator_id, buyerId: user?.id ?? null });
             if (isGuest) setStatus('guest-success');
@@ -246,17 +294,26 @@ function CheckoutForm({ skill, amountCents, onPaid, guest = false }) {
   );
 }
 
-function Shell({ children }) {
+function Shell({ pin, children }) {
   return (
-    <div className="ck-wrap">
+    <div className="ck-wrap" style={pin}>
+      {/* Full-page canvas so a dark store gets a dark page, not a dark card on cream. */}
+      {pin && <div className="ck-bg" aria-hidden="true" />}
       <title>Checkout — SkillJoy</title>
       <h1 className="ck-h1">Checkout</h1>
       {children}
       <style>{`
-        .ck-wrap { max-width:460px; margin:0 auto; padding:28px 16px 80px; }
-        .ck-h1 { font-size:24px; font-weight:700; font-family:var(--font-display); margin-bottom:18px; }
+        .ck-wrap { position:relative; max-width:460px; margin:0 auto; padding:28px 16px 80px; color:var(--text); }
+        .ck-bg { position:fixed; inset:0; z-index:-1; background:var(--bg); }
+        .ck-h1 { font-size:24px; font-weight:700; font-family:var(--font-display); margin-bottom:18px; color:var(--text); }
         .ck-muted { color:var(--text-muted); }
-        .ck-err { color:var(--accent); background:var(--accent-light); border:1px solid var(--accent-mid); border-radius:var(--r-sm); padding:10px 14px; font-size:14px; margin:8px 0; }
+        /* Pay CTAs re-pinned here so the themed accent + readable-on-accent text
+           win regardless of how the global .btn-primary is defined. */
+        .ck-wrap .btn-primary { background:var(--accent); color:var(--accent-foreground, #fff); }
+        .ck-wrap .btn-primary:hover:not(:disabled) { background:var(--accent-hover, var(--accent)); color:var(--accent-foreground, #fff); }
+        /* Errors are semantic danger, not the creator's accent — a mint-green
+           "payment failed" is a trust bug, not a style choice. */
+        .ck-err { color:var(--ck-danger, #dc2626); background:color-mix(in srgb, var(--ck-danger, #dc2626) 10%, var(--surface)); border:1px solid color-mix(in srgb, var(--ck-danger, #dc2626) 35%, var(--border)); border-radius:var(--r-sm); padding:10px 14px; font-size:14px; margin:8px 0; }
         .ck-summary { display:flex; gap:14px; align-items:center; padding:14px; border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); margin-bottom:20px; }
         .ck-cover { width:64px; height:64px; border-radius:var(--r); background:var(--surface-alt) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-size:26px; flex-shrink:0; }
         .ck-title { font-weight:700; color:var(--text); }
@@ -266,21 +323,21 @@ function Shell({ children }) {
         .ck-promo { display:flex; flex-direction:column; gap:10px; }
         .ck-plabel { font-size:13px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; }
         .ck-prow { display:flex; gap:8px; }
-        .ck-prow input { flex:1; text-transform:uppercase; }
+        .ck-prow input { flex:1; text-transform:uppercase; background:var(--surface); color:var(--text); }
         .ck-pmsg { font-size:13px; margin:0; }
-        .ck-pmsg.ok { color:var(--green); }
-        .ck-pmsg.bad { color:var(--accent); }
+        .ck-pmsg.ok { color:var(--green, #16a34a); }
+        .ck-pmsg.bad { color:var(--ck-danger, #dc2626); }
         .ck-bump { display:flex; gap:12px; align-items:flex-start; padding:14px; border:1.5px dashed var(--accent-mid); border-radius:var(--r-lg); background:var(--accent-light); cursor:pointer; }
         .ck-bump input { margin-top:3px; width:18px; height:18px; flex-shrink:0; accent-color:var(--accent); cursor:pointer; }
         .ck-bump-body { display:flex; flex-direction:column; gap:3px; }
         .ck-bump-title { font-weight:700; color:var(--text); display:flex; flex-wrap:wrap; gap:8px; align-items:baseline; }
-        .ck-bump-price { color:var(--accent); font-weight:800; }
+        .ck-bump-price { color:var(--ck-accent-text, var(--accent)); font-weight:800; }
         .ck-bump-sub { font-size:13px; color:var(--text-secondary); }
         .ck-form { display:flex; flex-direction:column; gap:16px; }
         .ck-pay { width:100%; font-size:16px; padding:13px; }
         .ck-fine { text-align:center; font-size:12px; color:var(--text-muted); }
         .ck-guest { display:flex; flex-direction:column; gap:10px; margin-bottom:6px; }
-        .ck-in { width:100%; padding:11px 12px; border:1px solid var(--border-strong); border-radius:var(--r); font-family:inherit; font-size:15px; }
+        .ck-in { width:100%; padding:11px 12px; border:1px solid var(--border-strong); border-radius:var(--r); font-family:inherit; font-size:15px; background:var(--surface); color:var(--text); }
         .ck-in:focus { outline:none; border-color:var(--accent); }
         .ck-guest-note { text-align:left; margin-top:2px; }
         .ck-done { text-align:center; padding:24px 0; }

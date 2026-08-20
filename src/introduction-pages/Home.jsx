@@ -74,7 +74,7 @@ export default function LandingPage() {
 
   return (
     <>
-      <title>SkillJoy — Your link in bio, built to sell</title>
+      <title>SkillJoy — The Ultimate Link-in-Bio Solution</title>
 
       <main className="lp">
         {/* ── 1. Intro / hero ── */}

@@ -1,23 +1,24 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useUser, useProfile, useAuth } from '@/lib/stores';
-import { listMySkills, reorderSkills } from '@/lib/skills';
+import { listMySkills, reorderSkills, updateSkill } from '@/lib/skills';
 import { initials } from '@/lib/stores';
 import {
   resolveTheme, updateStorefront, SOCIAL_TYPES,
   listLinks, addLink, updateLink, deleteLink,
-  THEME_PRESETS, sanitizeThemeImport, portableTheme,
+  THEME_PRESETS, sanitizeThemeImport, portableTheme, SITE_AUDIO_VOLUME,
 } from '@/lib/storefront';
 import { uploadBanner, uploadBgVideo, uploadAudio } from '@/lib/storage';
+import { validateUpload, LIMITS, formatBytes } from '@/lib/uploadLimits';
 import {
   Palette, Link2, Eye, ImagePlus, X, Plus, ChevronUp, ChevronDown,
   ExternalLink, Check, MousePointer2, Type, Video, Music, Wand2, SlidersHorizontal,
   Image as ImageIcon, Camera, AtSign, User, Sparkles, LayoutGrid, ListMusic,
-  Upload, Download, Layers,
+  Upload, Download, Layers, MapPin,
 } from 'lucide-react';
 import { BrandIcon } from '@/lib/brandIcons';
 
-const ACCENT_PRESETS = ['#00CC99', '#2563EB', '#7C3AED', '#DB2777', '#F59E0B', '#EF4444', '#0D9488', '#F8FAFC'];
+const ACCENT_PRESETS = ['#F5634A', '#2563EB', '#7C3AED', '#DB2777', '#F59E0B', '#EF4444', '#0D9488', '#F8FAFC'];
 
 const SUBTAB_HEADS = { customize: 'Site Customization', themes: 'Themes', links: 'Links' };
 
@@ -82,7 +83,10 @@ function Toggle({ on, onChange, label, hint }) {
 }
 
 // ── Live preview — a faithful mini-storefront that reflects the draft theme ────
-function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links }) {
+function LivePreview({ theme, name, handle, avatar, bio, location, socials, skills, links }) {
+  // Mirrors Storefront.jsx exactly — if the preview ignored glow_enabled the
+  // toggle would look like it did nothing until you opened the live page.
+  const glowOn = theme.glow_enabled !== false;
   const bgStyle =
     theme.bg === 'solid' ? { background: theme.bg_color } :
     theme.bg === 'gradient' ? { background: `linear-gradient(160deg, ${theme.bg_color}, ${theme.bg_color2})` } :
@@ -90,7 +94,7 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
     undefined;
   const cls = [
     'lp', `lp-mode-${theme.mode}`, `lp-btn-${theme.button_style}`, `lp-glow-${theme.product_glow || 'none'}`,
-    theme.mono_icons ? 'lp-mono' : '', theme.animated_name ? 'lp-anim' : '',
+    theme.mono_icons ? 'lp-mono' : '', glowOn && theme.animated_name ? 'lp-anim' : '',
     theme.name_fx && theme.name_fx !== 'none' ? `lp-fx-${theme.name_fx}` : '',
   ].filter(Boolean).join(' ');
   const style = {
@@ -104,8 +108,9 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
     '--lp-bio-size': `${theme.bio_size ?? 15}px`,
     '--lp-bio-weight': theme.bio_weight ?? 400,
     '--lp-bio-glow': `${theme.bio_glow ?? 0}px`,
-    '--lp-glow': `${(theme.glow_intensity ?? 0) * 0.65}px`,
-    '--lp-glow-strong': `${(theme.glow_intensity ?? 0) * 1.4}px`,
+    '--lp-glow': glowOn ? `${(theme.glow_intensity ?? 0) * 0.65}px` : '0px',
+    '--lp-glow-strong': glowOn ? `${(theme.glow_intensity ?? 0) * 1.4}px` : '0px',
+    '--lp-icon-glow': glowOn ? `${(theme.icon_glow ?? 10) * 0.65}px` : '0px', // preview ~65% scale
   };
   if (theme.text_color) style['--lp-text'] = theme.text_color;
   if (theme.title_color) style['--lp-title'] = theme.title_color;
@@ -125,6 +130,7 @@ function LivePreview({ theme, name, handle, avatar, bio, socials, skills, links 
         {theme.show_avatar !== false && <div className="lp-avatar" style={avatar ? { backgroundImage: `url(${avatar})` } : {}}>{!avatar && initials(name)}</div>}
         <div className="lp-name">{name}</div>
         <div className="lp-handle">@{handle}</div>
+        {location && <div className="lp-location"><MapPin size={11} strokeWidth={2.4} />{location}</div>}
         {bio && <div className="lp-bio">{bio}</div>}
         {(socials || []).filter(s => s.url).length > 0 && (
           <div className="lp-socials">
@@ -161,6 +167,7 @@ export default function StorefrontEditor() {
 
   const [bio, setBio] = useState('');
   const [name, setName] = useState('');
+  const [location, setLocation] = useState('');   // public storefront field, not a Settings/private one
   const [avatarUrl, setAvatarUrl] = useState('');
   const [savingAvatar, setSavingAvatar] = useState(false);
   const [theme, setTheme] = useState(resolveTheme());
@@ -177,13 +184,15 @@ export default function StorefrontEditor() {
   const [err, setErr] = useState('');
   const [subTab, setSubTab] = useState('customize');
   const [musicOpen, setMusicOpen] = useState(false); // site-music modal
-  const [dragIdx, setDragIdx] = useState(null);   // product-order drag source
-  const [dragOver, setDragOver] = useState(null); // product-order drop target
+  const [dragId, setDragId] = useState(null);       // id of the product being dragged
+  const [dragOver, setDragOver] = useState(null);   // section key currently hovered
+  const [extraSections, setExtraSections] = useState([]); // named but still empty (no products yet)
 
   useEffect(() => {
     if (!profile) return;
     setBio(profile.bio ?? '');
     setName(profile.full_name ?? '');
+    setLocation(profile.location ?? '');
     setAvatarUrl(profile.avatar_url ?? '');
     setTheme(resolveTheme(profile.storefront_theme));
     setPixels({ meta: '', tiktok: '', ga4: '', ...(profile.tracking_pixels || {}) });
@@ -209,6 +218,7 @@ export default function StorefrontEditor() {
     const patch = {
       bio: bio.trim(), storefront_theme: themeToSave,
       full_name: name.trim() || profile.full_name,
+      location: location.trim() || null,
       avatar_url: avatarUrl || null,
       tracking_pixels: Object.keys(tp).length ? tp : null,
       automation_webhook_url: webhookUrl.trim() || null,
@@ -220,23 +230,34 @@ export default function StorefrontEditor() {
     } catch (e) { setErr(e.message); }
   }
 
-  async function uploadTo(file, setBusy, apply, uploader = uploadBanner) {
+  // Every storefront upload funnels through here, so the size/type gate goes in
+  // ONE place — each caller just names which rule in LIMITS applies to it.
+  // These five were previously unguarded: any size, any type.
+  async function uploadTo(file, setBusy, apply, uploader = uploadBanner, kind = 'banner') {
     if (!file) return;
+    const check = validateUpload(kind, file);
+    if (!check.ok) { setErr(check.error); return; }
+    setErr('');
     setBusy(true);
     try { const url = await uploader(user.id, file); apply(url); }
     catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   }
-  const onBanner = (e) => uploadTo(e.target.files?.[0], setSavingBanner, (url) => set({ banner_url: url }));
-  const onBgImage = (e) => uploadTo(e.target.files?.[0], setSavingBg, (url) => set({ bg_image: url, bg: 'image' }));
-  const onCursor = (e) => uploadTo(e.target.files?.[0], setSavingCursor, (url) => set({ cursor_url: url }));
-  const onAvatar = (e) => uploadTo(e.target.files?.[0], setSavingAvatar, (url) => setAvatarUrl(url));
-  const onBgVideo = (e) => uploadTo(e.target.files?.[0], setSavingBgVideo, (url) => set({ bg_video: url, bg: 'video' }), uploadBgVideo);
+  const onBanner = (e) => uploadTo(e.target.files?.[0], setSavingBanner, (url) => set({ banner_url: url }), uploadBanner, 'banner');
+  const onBgImage = (e) => uploadTo(e.target.files?.[0], setSavingBg, (url) => set({ bg_image: url, bg: 'image' }), uploadBanner, 'bgImage');
+  const onCursor = (e) => uploadTo(e.target.files?.[0], setSavingCursor, (url) => set({ cursor_url: url }), uploadBanner, 'cursor');
+  const onAvatar = (e) => uploadTo(e.target.files?.[0], setSavingAvatar, (url) => setAvatarUrl(url), uploadBanner, 'avatar');
+  const onBgVideo = (e) => uploadTo(e.target.files?.[0], setSavingBgVideo, (url) => set({ bg_video: url, bg: 'video' }), uploadBgVideo, 'bgVideo');
 
   // Site music is a playlist — each upload APPENDS a track (keep the filename as its label).
   async function onAudioAdd(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Has its own path (it appends to a playlist rather than replacing a value),
+    // so it needs the gate applied separately from uploadTo.
+    const check = validateUpload('audio', file);
+    if (!check.ok) { setErr(check.error); if (e.target) e.target.value = ''; return; }
+    setErr('');
     setSavingAudio(true);
     try {
       const url = await uploadAudio(user.id, file);
@@ -286,20 +307,76 @@ export default function StorefrontEditor() {
   async function saveLink(id, patch) { try { await updateLink(id, patch); } catch (e) { setErr(e.message); } }
   async function removeLinkRow(id) { setLinks(ls => ls.filter(l => l.id !== id)); try { await deleteLink(id); } catch (e) { setErr(e.message); } }
 
-  async function moveSkill(i, dir) {
-    const j = i + dir; if (j < 0 || j >= skills.length) return;
-    const next = [...skills]; [next[i], next[j]] = [next[j], next[i]];
+  // ── Sections ──────────────────────────────────────────────────────────────
+  // A "section" is just a distinct `group_label` across the creator's products —
+  // there's no sections table. Renaming one re-labels every product in it;
+  // moving a product between sections rewrites that product's label. Section
+  // ORDER is derived from product order (first-seen), exactly like the public
+  // storefront buckets them, so the editor can never disagree with the page.
+  const lbl = (s) => (s.group_label || '').trim();
+  const sections = (() => {
+    const map = new Map();
+    for (const s of skills) { const k = lbl(s); if (!map.has(k)) map.set(k, []); map.get(k).push(s); }
+    for (const name of extraSections) if (!map.has(name)) map.set(name, []);
+    return [...map.entries()].map(([label, items]) => ({ label, items }));
+  })();
+
+  /** Move a product into `targetLabel`, optionally before `beforeId`. Persists label + order. */
+  async function moveSkillTo(skillId, targetLabel, beforeId = null) {
+    const moving = skills.find(s => s.id === skillId);
+    if (!moving) return;
+    const rest = skills.filter(s => s.id !== skillId);
+    const updated = { ...moving, group_label: targetLabel };
+    let next;
+    if (beforeId && beforeId !== skillId) {
+      const at = rest.findIndex(s => s.id === beforeId);
+      next = at < 0 ? [...rest, updated] : [...rest.slice(0, at), updated, ...rest.slice(at)];
+    } else {
+      // No anchor → append after the section's current last item (keeps sections contiguous).
+      const last = rest.map(lbl).lastIndexOf(targetLabel);
+      next = last < 0 ? [...rest, updated] : [...rest.slice(0, last + 1), updated, ...rest.slice(last + 1)];
+    }
     setSkills(next);
-    try { await reorderSkills(next.map(s => s.id)); } catch (e) { setErr(e.message); }
+    setExtraSections(xs => xs.filter(x => x !== targetLabel)); // it has a product now — no longer "empty"
+    try {
+      if (lbl(moving) !== targetLabel) await updateSkill(skillId, { group_label: targetLabel || null });
+      await reorderSkills(next.map(s => s.id));
+    } catch (e) { setErr(e.message); }
   }
 
-  // Drag-and-drop reorder (native HTML5). ADDITIVE — the up/down buttons stay
-  // as the accessible/touch fallback; both paths persist via reorderSkills.
-  async function dropSkill(from, to) {
-    if (from === to || from == null || to == null) return;
+  async function renameSection(oldLabel, raw) {
+    const next = raw.trim();
+    if (next === oldLabel) return;
+    const affected = skills.filter(s => lbl(s) === oldLabel);
+    setSkills(ss => ss.map(s => (lbl(s) === oldLabel ? { ...s, group_label: next } : s)));
+    setExtraSections(xs => xs.map(x => (x === oldLabel ? next : x)));
+    try { await Promise.all(affected.map(s => updateSkill(s.id, { group_label: next || null }))); }
+    catch (e) { setErr(e.message); }
+  }
+
+  /** Remove the heading — products drop into Ungrouped, nothing is deleted. */
+  async function deleteSection(label) {
+    const affected = skills.filter(s => lbl(s) === label);
+    setSkills(ss => ss.map(s => (lbl(s) === label ? { ...s, group_label: '' } : s)));
+    setExtraSections(xs => xs.filter(x => x !== label));
+    try { await Promise.all(affected.map(s => updateSkill(s.id, { group_label: null }))); }
+    catch (e) { setErr(e.message); }
+  }
+
+  function addSection() {
+    const taken = new Set(sections.map(s => s.label));
+    let name = 'New section', n = 2;
+    while (taken.has(name)) name = `New section ${n++}`;
+    setExtraSections(xs => [...xs, name]);
+  }
+
+  /** Keyboard/touch fallback for ordering (drag isn't reachable on either). */
+  async function nudge(skillId, dir) {
+    const i = skills.findIndex(s => s.id === skillId);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= skills.length) return;
     const next = [...skills];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
+    [next[i], next[j]] = [next[j], next[i]];
     setSkills(next);
     try { await reorderSkills(next.map(s => s.id)); } catch (e) { setErr(e.message); }
   }
@@ -359,6 +436,10 @@ export default function StorefrontEditor() {
                 <Field label="Display name">
                   <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" />
                 </Field>
+                <Field label="Location">
+                  <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Austin, TX" maxLength={60} />
+                  <p className="std-note">Public — shows under your name. Leave blank to hide it.</p>
+                </Field>
                 <Field label="Bio">
                   <textarea rows={3} value={bio} onChange={e => setBio(e.target.value)} placeholder="Tell visitors what you offer…" />
                 </Field>
@@ -399,7 +480,7 @@ export default function StorefrontEditor() {
                       <input type="file" accept="video/*" hidden onChange={onBgVideo} />
                       <span>{savingBgVideo ? 'Uploading…' : <><Video size={15} /> {theme.bg_video ? 'Change video' : 'Upload video'}</>}</span>
                     </label>
-                    <p className="std-note">Keep it small (a few MB) — big files load slowly.</p>
+                    <p className="std-note">Max {formatBytes(LIMITS.bgVideo.max)} — but keep it well under that, big files load slowly on phones.</p>
                     {theme.bg_video && <button className="std-removebtn" onClick={() => set({ bg_video: '' })}><X size={13} /> Remove video</button>}
                   </>
                 )}
@@ -421,10 +502,26 @@ export default function StorefrontEditor() {
                   </Field>
                 )}
                 <Field label="Overlay effect"><Seg value={theme.overlay || 'none'} onChange={v => set({ overlay: v })} options={[{ v: 'none', label: 'None' }, { v: 'rain', label: 'Rain' }, { v: 'snow', label: 'Snow' }, { v: 'vhs', label: 'VHS' }, { v: 'stars', label: 'Stars' }, { v: 'particles', label: 'Particles' }, { v: 'matrix', label: 'Matrix' }]} /></Field>
-                <Field label="Glow intensity"><Slider value={theme.glow_intensity ?? 0} min={0} max={80} suffix="px" onChange={v => set({ glow_intensity: v })} /></Field>
-                <p className="std-note">Master accent glow across your name, picture, card &amp; links.</p>
+                {/* One switch for the whole halo. The sliders stay mounted-but-hidden
+                    rather than reset, so turning it back on restores the exact look. */}
+                <Toggle
+                  on={theme.glow_enabled !== false}
+                  onChange={v => set({ glow_enabled: v })}
+                  label="Glow effects"
+                  hint="Accent halo on your name and social icons"
+                />
+                {theme.glow_enabled !== false && (
+                  <div className="std-subgroup">
+                    <Field label="Glow intensity"><Slider value={theme.glow_intensity ?? 0} min={0} max={80} suffix="px" onChange={v => set({ glow_intensity: v })} /></Field>
+                    <p className="std-note">Master accent glow across your name, picture, card &amp; links.</p>
+                    <Field label="Icon glow"><Slider value={theme.icon_glow ?? 10} min={0} max={60} suffix="px" onChange={v => set({ icon_glow: v })} /></Field>
+                    <p className="std-note">Neon halo on your social icons — crank it for a full burst, 0 to turn it off.</p>
+                    {/* Lives inside the group because it is ALSO a name glow and is
+                        suppressed with the rest — outside, it would look broken. */}
+                    <Toggle on={!!theme.animated_name} onChange={v => set({ animated_name: v })} label="Pulse the name" hint="Slow accent breathe on your display name" />
+                  </div>
+                )}
                 <Field label="Name effect"><Seg value={theme.name_fx || 'none'} onChange={v => set({ name_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'gradient', label: 'Gradient' }, { v: 'rainbow', label: 'Rainbow' }, { v: 'shimmer', label: 'Shine' }, { v: 'glitch', label: 'Glitch' }]} /></Field>
-                <Toggle on={!!theme.animated_name} onChange={v => set({ animated_name: v })} label="Animated username" hint="Subtle accent glow" />
                 <Toggle on={!!theme.mono_icons} onChange={v => set({ mono_icons: v })} label="Monochrome icons" hint="Grayscale social icons" />
 
                 <Field label="Site music">
@@ -432,10 +529,19 @@ export default function StorefrontEditor() {
                     <span className="std-musicbtn-l"><Music size={15} /> {theme.audio_tracks?.length ? `${theme.audio_tracks.length} track${theme.audio_tracks.length > 1 ? 's' : ''}` : 'Add music'}</span>
                     <span className="std-musicbtn-r">Manage</span>
                   </button>
-                  <p className="std-note">Build a playlist — it plays on your storefront with a play/mute button.</p>
+                  <p className="std-note">Build a playlist — it plays on your storefront with a play/mute button. Max {formatBytes(LIMITS.audio.max)} per track.</p>
                 </Field>
 
                 <Field label="Cursor effect"><Seg value={theme.cursor_fx || 'none'} onChange={v => set({ cursor_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'trail', label: 'Trail' }, { v: 'sparkle', label: 'Sparkle' }]} /></Field>
+                {theme.cursor_fx && theme.cursor_fx !== 'none' && (
+                  <Field label="Effect color">
+                    <div className="std-colorrow">
+                      <input type="color" value={theme.cursor_fx_color || theme.accent} onChange={e => set({ cursor_fx_color: e.target.value })} />
+                      <span>{theme.cursor_fx_color || 'Accent'}</span>
+                      {theme.cursor_fx_color && <button className="std-textbtn" onClick={() => set({ cursor_fx_color: '' })}>Reset</button>}
+                    </div>
+                  </Field>
+                )}
                 <Field label="Custom cursor">
                   <label className="std-upload std-upload-sm" style={theme.cursor_url ? { backgroundImage: `url(${theme.cursor_url})`, backgroundSize: 'contain' } : {}}>
                     <input type="file" accept="image/*" hidden onChange={onCursor} />
@@ -482,30 +588,92 @@ export default function StorefrontEditor() {
                 <Field label="Product glow"><Seg value={theme.product_glow || 'none'} onChange={v => set({ product_glow: v })} options={[{ v: 'none', label: 'None' }, { v: 'soft', label: 'Soft' }, { v: 'strong', label: 'Strong' }]} /></Field>
                 <Field label="Product opacity (glass)"><Slider value={theme.product_opacity ?? 100} min={40} max={100} suffix="%" onChange={v => set({ product_opacity: v })} /></Field>
                 <Field label="Product blur (glass)"><Slider value={theme.product_blur ?? 0} min={0} max={24} suffix="px" onChange={v => set({ product_blur: v })} /></Field>
+                <Toggle on={theme.show_group_headers !== false} onChange={v => set({ show_group_headers: v })} label="Section headers" hint="Titled dividers above each product group" />
+                <Toggle on={theme.show_type_badges !== false} onChange={v => set({ show_type_badges: v })} label="Product-type badges" hint="Course · Download · Coaching chips on cards" />
               </Panel>
 
-              <Panel icon={SlidersHorizontal} title="Product order">
+              <Panel icon={SlidersHorizontal} title="Sections &amp; product order">
+                <p className="std-panel-lede">
+                  Group products under your own headings — “My favorite products”, “Essentials”.
+                  Type to rename a section, drag a product to move it between them.
+                </p>
                 {skills.length === 0 && <p className="std-note">No published products yet.</p>}
-                {skills.map((s, i) => (
-                  <div
-                    key={s.id}
-                    className={`std-orderrow${dragIdx === i ? ' dragging' : ''}${dragOver === i ? ' dragover' : ''}`}
-                    draggable
-                    onDragStart={() => setDragIdx(i)}
-                    onDragOver={e => { e.preventDefault(); if (dragOver !== i) setDragOver(i); }}
-                    onDragLeave={() => setDragOver(o => (o === i ? null : o))}
-                    onDrop={e => { e.preventDefault(); dropSkill(dragIdx, i); setDragIdx(null); setDragOver(null); }}
-                    onDragEnd={() => { setDragIdx(null); setDragOver(null); }}
-                  >
-                    <span className="std-grip" aria-hidden="true">⠿</span>
-                    <span className="std-ordername">{s.title || 'Untitled'}</span>
-                    <div className="std-orderbtns">
-                      <button className="std-icobtn" disabled={i === 0} onClick={() => moveSkill(i, -1)}><ChevronUp size={16} /></button>
-                      <button className="std-icobtn" disabled={i === skills.length - 1} onClick={() => moveSkill(i, 1)}><ChevronDown size={16} /></button>
+
+                {sections.map(sec => {
+                  const key = sec.label || '__none';
+                  return (
+                    <div
+                      key={key}
+                      className={`std-sec${dragOver === key ? ' dragover' : ''}`}
+                      onDragOver={e => { e.preventDefault(); if (dragOver !== key) setDragOver(key); }}
+                      onDragLeave={() => setDragOver(o => (o === key ? null : o))}
+                      onDrop={e => { e.preventDefault(); if (dragId) moveSkillTo(dragId, sec.label); setDragId(null); setDragOver(null); }}
+                    >
+                      <div className="std-sechead">
+                        {sec.label === '' ? (
+                          <span className="std-secname std-secname-none">Ungrouped</span>
+                        ) : (
+                          <input
+                            className="std-secname"
+                            /* key on label so an external rename re-seeds the uncontrolled input */
+                            key={sec.label}
+                            defaultValue={sec.label}
+                            placeholder="Section name"
+                            aria-label="Section name"
+                            onBlur={e => renameSection(sec.label, e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                          />
+                        )}
+                        <span className="std-seccount">{sec.items.length}</span>
+                        {sec.label !== '' && (
+                          <button className="std-icobtn" onClick={() => deleteSection(sec.label)} aria-label={`Remove section ${sec.label}`}>
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+
+                      {sec.items.length === 0 && <p className="std-secempty">Drag a product here</p>}
+
+                      {sec.items.map(s => (
+                        <div
+                          key={s.id}
+                          className={`std-orderrow${dragId === s.id ? ' dragging' : ''}`}
+                          draggable
+                          onDragStart={() => setDragId(s.id)}
+                          onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+                          onDrop={e => {
+                            e.preventDefault(); e.stopPropagation();
+                            if (dragId && dragId !== s.id) moveSkillTo(dragId, sec.label, s.id);
+                            setDragId(null); setDragOver(null);
+                          }}
+                          onDragEnd={() => { setDragId(null); setDragOver(null); }}
+                        >
+                          <span className="std-grip" aria-hidden="true">⠿</span>
+                          <span className="std-ordername">{s.title || 'Untitled'}</span>
+                          {/* Touch/keyboard fallback — drag reaches neither. */}
+                          <select
+                            className="std-secpick"
+                            value={sec.label}
+                            aria-label={`Section for ${s.title || 'product'}`}
+                            onChange={e => moveSkillTo(s.id, e.target.value)}
+                          >
+                            <option value="">Ungrouped</option>
+                            {sections.filter(x => x.label !== '').map(x => (
+                              <option key={x.label} value={x.label}>{x.label}</option>
+                            ))}
+                          </select>
+                          <div className="std-orderbtns">
+                            <button className="std-icobtn" onClick={() => nudge(s.id, -1)} aria-label="Move up"><ChevronUp size={16} /></button>
+                            <button className="std-icobtn" onClick={() => nudge(s.id, 1)} aria-label="Move down"><ChevronDown size={16} /></button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                ))}
-                {skills.length > 1 && <p className="std-note">Drag to reorder — or use the arrows.</p>}
+                  );
+                })}
+
+                <button className="std-addbtn" onClick={addSection}><Plus size={15} /> Add section</button>
+                <p className="std-note">Headings show on your page when “Section headers” is on (above).</p>
               </Panel>
             </>
           )}
@@ -594,6 +762,12 @@ export default function StorefrontEditor() {
                   </div>
                 ))}
                 <button className="std-addbtn" onClick={createLink}><Plus size={15} /> Add link</button>
+                <p className="std-note">
+                  Not products — plain buttons on your page, for anything you want to send people
+                  to. Tick <strong>Affiliate link</strong> on any you earn commission from: it shows
+                  a small “Affiliate” tag to visitors and tags the link <code>rel=&quot;sponsored&quot;</code>
+                  for search engines. Disclosing that is generally required, so leave it on.
+                </p>
               </Panel>
             </>
           )}
@@ -603,7 +777,7 @@ export default function StorefrontEditor() {
         <aside className="std-preview">
           <div className="std-preview-label"><Eye size={13} /> Live preview</div>
           <div className="std-preview-frame">
-            <LivePreview theme={theme} name={name || `@${profile.username}`} handle={profile.username} avatar={avatarUrl} bio={bio} socials={theme.socials} skills={skills} links={links} />
+            <LivePreview theme={theme} name={name || `@${profile.username}`} handle={profile.username} avatar={avatarUrl} bio={bio} location={location} socials={theme.socials} skills={skills} links={links} />
           </div>
           <p className="std-preview-note">Updates as you edit · Save to publish</p>
         </aside>
@@ -628,7 +802,11 @@ export default function StorefrontEditor() {
                     <span className="std-track-idx">{i + 1}</span>
                     <div className="std-track-main">
                       <span className="std-track-name" title={tr.name}>{tr.name || `Track ${i + 1}`}</span>
-                      <audio className="std-track-audio" src={tr.url} controls preload="none" />
+                      {/* Matches the live page's 85% so you audition at the level
+                          visitors actually hear. Ref callback, not a prop — see
+                          SITE_AUDIO_VOLUME. Native controls still override it. */}
+                      <audio className="std-track-audio" src={tr.url} controls preload="none"
+                        ref={el => { if (el) el.volume = SITE_AUDIO_VOLUME; }} />
                     </div>
                     <button className="std-icobtn" onClick={() => removeTrack(i)} aria-label={`Remove ${tr.name || 'track'}`}><X size={15} /></button>
                   </div>
@@ -671,7 +849,13 @@ function Styles() {
 
     /* Top header */
     .std-top { display:flex; align-items:center; justify-content:space-between; gap:12px;
-      padding:10px 14px; border-radius:var(--r-lg); margin-bottom:16px; position:sticky; top:12px; z-index:30; }
+      padding:10px 14px; border-radius:var(--r-lg); margin-bottom:16px; z-index:30;
+      /* Holds the Save button. Parks below the mobile app header instead of
+         scrolling underneath it — .sb-topbar is 60px at z-index 190, so a bare
+         top:12px put this INSIDE that band and the header painted over it.
+         --app-header-h is 0 on desktop, where nothing sits above the page. */
+      position:sticky; top:calc(var(--app-header-h, 0px) + 12px);
+      scroll-margin-top:calc(var(--app-header-h, 0px) + 12px); }
     .std-top-tabs { display:flex; gap:4px; }
     .std-tab { width:auto; min-width:0; padding:9px 18px; border-radius:var(--r-full); border:none; background:transparent;
       color:var(--text-secondary); font-size:14px; font-weight:700; cursor:pointer; transition:all .15s; }
@@ -691,7 +875,7 @@ function Styles() {
     .std-dropitem:hover { background:var(--surface-alt); color:var(--text); }
     .std-dropitem.on { background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--accent); }
     .std-dropitem-wip { opacity:.75; }
-    .std-mainhead { font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); padding:2px; }
+    .std-mainhead { font-size:14px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); padding:2px; }
     .std-avatarrow { display:flex; align-items:center; gap:12px; }
     .std-avatar { width:56px; height:56px; border-radius:50%; flex-shrink:0; background:color-mix(in srgb, var(--accent) 16%, #fff) center/cover no-repeat;
       display:flex; align-items:center; justify-content:center; font-weight:800; font-size:22px; color:var(--accent); border:2px solid var(--border-strong); text-transform:uppercase; }
@@ -705,40 +889,43 @@ function Styles() {
     .std-err { color:#b91c1c; background:#fef2f2; border:1px solid #fecaca; border-radius:var(--r); padding:9px 13px; font-size:13px; margin-bottom:12px; }
 
     /* Body: subnav | main | preview */
-    .std-body { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:16px; align-items:start; }
+    .std-body { display:grid; grid-template-columns:minmax(0,1fr) 396px; gap:22px; align-items:start; }
 
-    .std-sub { border-radius:var(--r-lg); padding:10px; display:flex; flex-direction:column; gap:4px; position:sticky; top:78px; }
-    .std-subitem { width:100%; display:flex; align-items:center; gap:10px; padding:11px 13px; border:none; border-radius:var(--r);
-      background:transparent; color:var(--text-secondary); font-size:14px; font-weight:600; cursor:pointer; text-align:left; transition:all .14s; }
+    /* Same offset chain as .std-top, one bar lower, so the subnav never tucks
+       under the app header either. */
+    .std-sub { border-radius:var(--r-lg); padding:10px; display:flex; flex-direction:column; gap:4px;
+      position:sticky; top:calc(var(--app-header-h, 0px) + 78px); }
+    .std-subitem { width:100%; display:flex; align-items:center; gap:11px; padding:13px 15px; border:none; border-radius:var(--r);
+      background:transparent; color:var(--text-secondary); font-size:15px; font-weight:600; cursor:pointer; text-align:left; transition:all .14s; }
     .std-subitem:hover { background:var(--surface-alt); color:var(--text); }
     .std-subitem.on { background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--accent); }
     .std-subitem-wip { opacity:.7; }
     .std-wip { margin-left:auto; font-size:9px; font-weight:800; letter-spacing:.05em; padding:2px 6px; border-radius:var(--r-full); background:var(--surface-alt); color:var(--text-muted); }
 
-    .std-main { display:flex; flex-direction:column; gap:16px; min-width:0; }
-    .std-panel { border-radius:var(--r-lg); padding:20px; }
-    .std-panel-head { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
-    .std-panel-icon { display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:var(--r-sm);
+    .std-main { display:flex; flex-direction:column; gap:20px; min-width:0; }
+    .std-panel { border-radius:var(--r-lg); padding:26px; }
+    .std-panel-head { display:flex; align-items:center; gap:12px; margin-bottom:22px; }
+    .std-panel-icon { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:var(--r-sm);
       background:color-mix(in srgb, var(--accent) 15%, transparent); color:var(--accent); }
-    .std-panel-title { font-size:16px; font-weight:800; letter-spacing:-.01em; margin:0; }
+    .std-panel-title { font-size:18px; font-weight:800; letter-spacing:-.01em; margin:0; }
     .std-soon { font-size:9px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; padding:2px 7px; border-radius:var(--r-full);
       background:var(--surface-alt); color:var(--text-muted); }
 
-    .std-field { margin-bottom:16px; }
+    .std-field { margin-bottom:22px; }
     .std-field:last-child { margin-bottom:0; }
-    .std-flabel { display:block; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); margin-bottom:8px; }
-    .std-note { font-size:12px; color:var(--text-muted); margin:10px 0 0; display:flex; align-items:center; gap:6px; }
+    .std-flabel { display:block; font-size:12.5px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); margin-bottom:10px; }
+    .std-note { font-size:13px; line-height:1.5; color:var(--text-muted); margin:9px 0 0; display:flex; align-items:center; gap:6px; }
 
     /* wrap:  the overlay seg now has 7 options — let them flow to a 2nd row
        instead of squeezing each label to nothing. */
     .std-seg { display:flex; flex-wrap:wrap; gap:4px; padding:4px; background:var(--surface-alt); border-radius:var(--r-full); }
-    .std-seg button { flex:1 1 auto; width:auto; min-width:60px; border:none; border-radius:var(--r-full); background:transparent; padding:8px 10px;
-      font-size:13px; font-weight:700; color:var(--text-secondary); cursor:pointer; transition:all .14s; }
+    .std-seg button { flex:1 1 auto; width:auto; min-width:66px; border:none; border-radius:var(--r-full); background:transparent; padding:10px 14px;
+      font-size:14px; font-weight:700; color:var(--text-secondary); cursor:pointer; transition:all .14s; }
     .std-seg button.on { background:var(--accent); color:#fff; }
 
     .std-slider { display:flex; align-items:center; gap:12px; }
     .std-slider input[type=range] { flex:1; accent-color:var(--accent); }
-    .std-slider-val { font-size:13px; font-weight:800; color:var(--text); min-width:44px; text-align:right; }
+    .std-slider-val { font-size:14px; font-weight:800; color:var(--text); min-width:48px; text-align:right; }
 
     .std-colorrow { display:flex; align-items:center; gap:10px; }
     .std-colorrow input[type=color] { width:40px; height:34px; padding:0; border:1.5px solid var(--border-strong); border-radius:8px; background:none; cursor:pointer; }
@@ -765,14 +952,35 @@ function Styles() {
     .std-soontile { display:inline-flex; align-items:center; gap:7px; padding:9px 13px; border:1px dashed var(--border-strong); border-radius:var(--r);
       background:var(--surface-alt); color:var(--text-muted); font-size:12.5px; font-weight:600; }
 
-    .std-toggle-row { width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 0; border:none; background:none; cursor:pointer; }
+    .std-toggle-row { width:100%; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px 0; border:none; background:none; cursor:pointer; }
     .std-toggle-txt { display:flex; flex-direction:column; gap:2px; text-align:left; }
-    .std-toggle-label { font-size:14px; font-weight:700; color:var(--text); }
-    .std-toggle-hint { font-size:12px; color:var(--text-muted); }
-    .std-toggle { width:42px; height:24px; border-radius:var(--r-full); background:var(--border-strong); position:relative; transition:background .16s; flex-shrink:0; }
-    .std-toggle-knob { position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:#fff; transition:transform .16s; box-shadow:var(--shadow-sm); }
+    .std-toggle-label { font-size:15px; font-weight:700; color:var(--text); }
+    .std-toggle-hint { font-size:13px; line-height:1.45; color:var(--text-muted); }
+    .std-toggle { width:46px; height:26px; border-radius:var(--r-full); background:var(--border-strong); position:relative; transition:background .16s; flex-shrink:0; }
+    .std-toggle-knob { position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:#fff; transition:transform .16s; box-shadow:var(--shadow-sm); }
     .std-toggle-row.on .std-toggle { background:var(--accent); }
-    .std-toggle-row.on .std-toggle-knob { transform:translateX(18px); }
+    .std-toggle-row.on .std-toggle-knob { transform:translateX(20px); }
+
+    /* Settings that only exist while their parent toggle is ON. The rule + inset
+       make the dependency visible instead of leaving orphaned sliders floating
+       at the same level as the switch that controls them. */
+    .std-subgroup { margin:4px 0 0 6px; padding:16px 0 2px 18px; border-left:2px solid color-mix(in srgb, var(--accent) 26%, transparent); }
+    .std-subgroup .std-field:last-child { margin-bottom:14px; }
+
+    /* ── Sections (creator-named product groups) ── */
+    .std-sec { border:1.5px solid var(--border); border-radius:var(--r); padding:10px 12px 6px; margin-bottom:10px; transition:border-color .13s ease, background .13s ease; }
+    .std-sec.dragover { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 7%, transparent); border-style:dashed; }
+    .std-sechead { display:flex; align-items:center; gap:8px; margin-bottom:2px; }
+    /* Reads as a heading until focused, so it doesn't look like a form field. */
+    .std-secname { flex:1; min-width:0; width:auto; padding:5px 8px; border:1px solid transparent; border-radius:var(--r-sm);
+      background:transparent; color:var(--text); font-size:14px; font-weight:800; letter-spacing:-.01em; }
+    .std-secname:hover { border-color:var(--border-strong); }
+    .std-secname:focus { border-color:var(--accent); background:var(--surface); outline:none; }
+    .std-secname-none { color:var(--text-muted); font-weight:700; }
+    .std-seccount { flex-shrink:0; font-size:11px; font-weight:800; color:var(--accent); background:color-mix(in srgb, var(--accent) 13%, transparent);
+      border:1px solid color-mix(in srgb, var(--accent) 28%, transparent); padding:2px 8px; border-radius:var(--r-full); }
+    .std-secempty { font-size:12px; color:var(--text-muted); font-style:italic; padding:8px 6px 10px; margin:0; }
+    .std-secpick { flex-shrink:0; max-width:132px; font-size:12px; padding:5px 8px; }
 
     .std-orderrow { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 6px; border-top:1px solid var(--border); cursor:grab; border-radius:8px; }
     .std-orderrow:active { cursor:grabbing; }
@@ -865,7 +1073,9 @@ function Styles() {
     .std-track-add { width:100%; justify-content:center; }
 
     /* Live preview */
-    .std-preview { position:sticky; top:78px; display:flex; flex-direction:column; gap:8px; }
+    /* Hidden below 1100px so it never meets the mobile header today, but it uses
+       the same offset chain so it stays correct if that breakpoint ever moves. */
+    .std-preview { position:sticky; top:calc(var(--app-header-h, 0px) + 78px); display:flex; flex-direction:column; gap:8px; }
     .std-preview-label { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); padding-left:4px; }
     .std-preview-frame { border-radius:var(--r-xl); padding:0; overflow:hidden; height:600px; }
     .std-preview-note { text-align:center; font-size:11px; color:var(--text-muted); margin:0; }
@@ -930,11 +1140,17 @@ function Styles() {
     .lp-name { font-size:20px; font-weight:800; letter-spacing:-.01em; margin-top:12px; color:var(--lp-title, inherit); filter:drop-shadow(0 0 var(--lp-glow, 0px) color-mix(in srgb, var(--accent) 100%, transparent)) drop-shadow(0 0 var(--lp-glow-strong, 0px) color-mix(in srgb, var(--accent) 55%, transparent)); }
     .lp-anim .lp-name { animation:sfNameGlow 2.6s ease-in-out infinite; }
     .lp-handle { font-size:13px; font-weight:600; color:var(--accent); margin-top:2px; }
+    .lp-location { display:inline-flex; align-items:center; gap:4px; margin-top:5px; font-size:11px; font-weight:600;
+      color:color-mix(in srgb, var(--lp-text, #5b574e) 58%, transparent); }
+    .lp-location svg { flex-shrink:0; opacity:.85; }
     .lp-bio { font-size:var(--lp-bio-size, 15px); font-weight:var(--lp-bio-weight, 400); color:color-mix(in srgb, var(--lp-text, #5b574e) 75%, transparent); margin-top:10px; max-width:34ch; line-height:1.5;
       filter:drop-shadow(0 0 var(--lp-bio-glow, 0px) color-mix(in srgb, var(--accent) 70%, transparent)); }
     .lp-socials { display:flex; gap:8px; justify-content:center; margin-top:14px; color:var(--lp-text, #5b574e) }
     .lp-social { display:inline-flex; align-items:center; justify-content:center; padding:3px; color:var(--lp-text, #1a1916);
-      filter:drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 55%, transparent)); }
+      filter:
+        drop-shadow(0 0 calc(var(--lp-icon-glow, 6px) * 0.3) color-mix(in srgb, var(--accent) 90%, transparent))
+        drop-shadow(0 0 var(--lp-icon-glow, 6px) color-mix(in srgb, var(--accent) 55%, transparent))
+        drop-shadow(0 0 calc(var(--lp-icon-glow, 6px) * 2.2) color-mix(in srgb, var(--accent) 38%, transparent)); }
     .lp-mono .lp-social svg { filter:grayscale(1); opacity:.8; }
     .lp-ghost { border-color:transparent; box-shadow:none; }
     .lp-list { display:flex; flex-direction:column; gap:11px; margin:14px 14px 20px; }

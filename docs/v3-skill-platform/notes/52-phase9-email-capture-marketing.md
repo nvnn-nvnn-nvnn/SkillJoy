@@ -2,6 +2,11 @@
 
 **Date:** 2026-06-23
 
+> 📘 **Looking for how this works *today*?** This note is the change-log for the
+> day it was built, and is partly stale — the unsubscribe mechanism it lists as
+> missing was added in Phase 12. For the current system, read
+> [explainers/02 — Email capture & broadcast](explainers/02-email-capture-and-broadcast.md).
+
 ## Overview
 
 Built **Phase 9 — email capture + marketing**: storefront lead capture,

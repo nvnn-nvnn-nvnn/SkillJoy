@@ -67,11 +67,11 @@ export default function TrialBanner() {
       <style>{`
         .tb { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
               padding:12px 16px; border-radius:12px; margin:0 0 16px; font-size:14px; }
-        .tb-trial  { background:rgba(0,204,153,.1);  border:1px solid rgba(0,204,153,.35); }
+        .tb-trial  { background:rgba(245,99,74,.1);  border:1px solid rgba(245,99,74,.35); }
         .tb-active { background:rgba(0,0,0,.04);     border:1px solid rgba(0,0,0,.08); }
         .tb-paused { background:rgba(255,159,10,.12); border:1px solid rgba(255,159,10,.4); }
         .tb-btn { border:0; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600;
-                  cursor:pointer; background:#00CC99; color:#fff; white-space:nowrap; }
+                  cursor:pointer; background:#F5634A; color:#fff; white-space:nowrap; }
         .tb-btn:disabled { opacity:.6; cursor:default; }
         .tb-btn-warn { background:#e08700; }
         .tb-err { color:#c0392b; font-size:13px; margin:-8px 0 12px; }
