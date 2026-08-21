@@ -522,16 +522,19 @@ function StoreStyles() {
     @keyframes sfMatrix { from { background-position:0 0, 0 0; } to { background-position:0 0, 0 220px; } }
 
     /* ── Splash / click-to-enter ── */
-    /* left:var(--shell-offset) instead of inset:0 — a logged-in visitor has the
-       248px app rail on screen, and a viewport-wide fixed layer ignores it, so
-       the text centered ~124px left of where the page visually centers. The rail
-       also paints OVER this at z-index 200, so the gate is inset beside it. */
-    .sf-splash { position:fixed; top:0; right:0; bottom:0; left:var(--shell-offset, 0px);
+    /* Inset to the VISIBLE area on both axes, rather than inset:0.
+       Horizontally: desktop puts a 248px app rail on screen for a logged-in
+       visitor (--shell-offset). Vertically: mobile swaps that rail for a 60px
+       top bar (--app-header-h). Both paint OVER this layer (z-index 190/200 vs
+       100), so a viewport-sized fixed layer centers its text against space the
+       visitor cannot see — ~124px too far left on desktop, ~30px too high on
+       mobile. Centering only works if the box matches what is actually visible. */
+    .sf-splash { position:fixed; top:var(--app-header-h, 0px); right:0; bottom:0; left:var(--shell-offset, 0px);
       z-index:100; display:flex; align-items:center; justify-content:center;
       cursor:pointer; background:rgba(8,8,12,.55); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
       animation:sfSplashIn .28s ease; }
-    /* Full-height centered loader, matched to the splash so both agree. */
-    .sf-loading { position:fixed; top:0; right:0; bottom:0; left:var(--shell-offset, 0px);
+    /* Same box as the splash, so the loader and the gate agree on where centre is. */
+    .sf-loading { position:fixed; top:var(--app-header-h, 0px); right:0; bottom:0; left:var(--shell-offset, 0px);
       display:flex; flex-direction:column; align-items:center; justify-content:center; gap:13px; }
     .sf-spinner { width:30px; height:30px; border-radius:50%;
       border:3px solid color-mix(in srgb, var(--accent) 20%, transparent);
@@ -539,7 +542,18 @@ function StoreStyles() {
     @keyframes sfSpin { to { transform:rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) { .sf-spinner { animation-duration:2.6s; } }
     @keyframes sfSplashIn { from { opacity:0; } to { opacity:1; } }
+    /* text-align is the load-bearing line here. splash_text is creator-supplied
+       (up to 40 chars) and this is 14px UPPERCASE at .24em tracking, so it wraps
+       on any phone. The flex parent centres the BOX, but with no text-align the
+       lines inside that box sit flush left — which reads as "the message hugs
+       the left" even though the box is perfectly centred.
+       max-width keeps it off the screen edges; the taller line-height is because
+       wrapped uppercase at this tracking is unreadable when lines are tight.
+       margin-right cancels the trailing letter-space: letter-spacing adds room
+       after the LAST glyph of every line, so centred text optically sits half a
+       space left of true centre. */
     .sf-splash-text { font-size:14px; font-weight:800; letter-spacing:.24em; text-transform:uppercase; color:#fff;
+      text-align:center; line-height:1.9; max-width:min(32ch, 84vw); margin-right:-.24em;
       text-shadow:0 0 20px color-mix(in srgb, var(--accent) 85%, transparent); animation:sfSplashPulse 2.2s ease-in-out infinite; }
     @keyframes sfSplashPulse { 0%,100% { opacity:.6; } 50% { opacity:1; } }
     @media (prefers-reduced-motion: reduce) { .sf-splash-text { animation:none; opacity:1; } }

@@ -82,6 +82,11 @@ viewport and centered its text on the **screen**, while the storefront content c
 **248px-offset area** — the click-to-enter text landed ~124px left of where the page visually
 centers. The rail also paints at `z-index:200` vs the splash's `100`, so it drew over the gate.
 
+> ⚠️ **Partly superseded — see [note 160](160-splash-centering-the-other-axis.md).**
+> The fix below is HORIZONTAL only. On mobile `--shell-offset` is `0px`, so the
+> splash stayed ~30px off-centre vertically under the 60px top bar. Note 160
+> adds `top: var(--app-header-h)` to both layers.
+
 **Fix:** a new `--shell-offset` on `body` (`248px` under `.has-sidebar`, `0px` on mobile where the
 drawer overlays instead of pushing). Fixed overlays use
 `top:0; right:0; bottom:0; left:var(--shell-offset, 0px)` instead of `inset:0`.
