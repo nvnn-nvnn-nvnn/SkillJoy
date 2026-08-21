@@ -10,6 +10,7 @@ import {
 } from '@/lib/storefront';
 import { uploadBanner, uploadBgVideo, uploadAudio } from '@/lib/storage';
 import { validateUpload, LIMITS, formatBytes } from '@/lib/uploadLimits';
+import { MAX_AUDIO_TRACKS } from '@/lib/storefront';
 import {
   Palette, Link2, Eye, ImagePlus, X, Plus, ChevronUp, ChevronDown,
   ExternalLink, Check, MousePointer2, Type, Video, Music, Wand2, SlidersHorizontal,
@@ -255,6 +256,13 @@ export default function StorefrontEditor() {
     if (!file) return;
     // Has its own path (it appends to a playlist rather than replacing a value),
     // so it needs the gate applied separately from uploadTo.
+    // Cap checked BEFORE the upload — no point spending a round trip and a
+    // storage object on a track that can't be added.
+    if ((theme.audio_tracks || []).length >= MAX_AUDIO_TRACKS) {
+      setErr(`Playlist is full — ${MAX_AUDIO_TRACKS} tracks max. Remove one first.`);
+      if (e.target) e.target.value = '';
+      return;
+    }
     const check = validateUpload('audio', file);
     if (!check.ok) { setErr(check.error); if (e.target) e.target.value = ''; return; }
     setErr('');
@@ -267,6 +275,18 @@ export default function StorefrontEditor() {
     finally { setSavingAudio(false); if (e.target) e.target.value = ''; } // reset so the same file can be re-added
   }
   function removeTrack(i) { setTheme(t => ({ ...t, audio_tracks: (t.audio_tracks || []).filter((_, j) => j !== i) })); }
+  // Playlist order IS play order on the storefront, and track 1 is also what the
+  // legacy `audio_url` back-compat field points at (see save()), so moving a
+  // track to the top genuinely changes what a visitor hears first.
+  function moveTrack(i, dir) {
+    setTheme(t => {
+      const tracks = [...(t.audio_tracks || [])];
+      const j = i + dir;
+      if (j < 0 || j >= tracks.length) return t;
+      [tracks[i], tracks[j]] = [tracks[j], tracks[i]];
+      return { ...t, audio_tracks: tracks };
+    });
+  }
 
   // ── Templates: presets + import/export ───────────────────────────────────
   // Presets MERGE over the current theme, so name/bio/avatar/socials/links and
@@ -791,14 +811,22 @@ export default function StorefrontEditor() {
               <span className="std-modal-title"><ListMusic size={17} /> Site music</span>
               <button className="std-icobtn" onClick={() => setMusicOpen(false)} aria-label="Close"><X size={16} /></button>
             </div>
-            <p className="std-modal-sub">Tracks play in order on your storefront. Visitors get a play/mute button — browsers block autoplay until they tap.</p>
+            <p className="std-modal-sub">
+              Tracks play top to bottom, then loop — use the arrows to set the order.
+              Up to {MAX_AUDIO_TRACKS} tracks. Visitors get a play/mute button and a volume
+              slider; browsers block autoplay until they tap.
+            </p>
 
             {(theme.audio_tracks || []).length === 0 ? (
               <div className="std-modal-empty"><Music size={26} strokeWidth={1.5} /><p>No tracks yet</p></div>
             ) : (
               <div className="std-tracklist">
-                {(theme.audio_tracks || []).map((tr, i) => (
-                  <div key={i} className="std-track">
+                {(theme.audio_tracks || []).map((tr, i, arr) => (
+                  // Keyed by url, NOT index: with an index key React would keep each
+                  // <audio> element in place and just swap its src on reorder, so a
+                  // playing preview would jump to a different song. A stable key moves
+                  // the actual DOM node instead.
+                  <div key={tr.url || i} className="std-track">
                     <span className="std-track-idx">{i + 1}</span>
                     <div className="std-track-main">
                       <span className="std-track-name" title={tr.name}>{tr.name || `Track ${i + 1}`}</span>
@@ -808,16 +836,31 @@ export default function StorefrontEditor() {
                       <audio className="std-track-audio" src={tr.url} controls preload="none"
                         ref={el => { if (el) el.volume = SITE_AUDIO_VOLUME; }} />
                     </div>
+                    <div className="std-track-move">
+                      <button className="std-icobtn" disabled={i === 0}
+                        onClick={() => moveTrack(i, -1)} aria-label={`Move ${tr.name || 'track'} up`}><ChevronUp size={14} /></button>
+                      <button className="std-icobtn" disabled={i === arr.length - 1}
+                        onClick={() => moveTrack(i, 1)} aria-label={`Move ${tr.name || 'track'} down`}><ChevronDown size={14} /></button>
+                    </div>
                     <button className="std-icobtn" onClick={() => removeTrack(i)} aria-label={`Remove ${tr.name || 'track'}`}><X size={15} /></button>
                   </div>
                 ))}
               </div>
             )}
 
-            <label className="std-addbtn std-track-add">
-              <input type="file" accept="audio/*" hidden onChange={onAudioAdd} />
-              {savingAudio ? 'Uploading…' : <><Plus size={15} /> Upload track</>}
-            </label>
+            {(theme.audio_tracks || []).length < MAX_AUDIO_TRACKS ? (
+              <label className="std-addbtn std-track-add">
+                <input type="file" accept="audio/*" hidden onChange={onAudioAdd} />
+                {savingAudio ? 'Uploading…' : <><Plus size={15} /> Upload track ({(theme.audio_tracks || []).length}/{MAX_AUDIO_TRACKS})</>}
+              </label>
+            ) : (
+              // Removed rather than disabled: a dead button invites clicking to
+              // find out why. The sentence says what to do instead.
+              <p className="std-note std-track-full">
+                Playlist full — {MAX_AUDIO_TRACKS} tracks max. Remove one to add another.
+              </p>
+            )}
+            {err && <p className="std-note std-track-err">{err}</p>}
             <p className="std-note">Changes apply when you hit “Save changes”.</p>
           </div>
         </div>
@@ -1067,6 +1110,13 @@ function Styles() {
     .std-track { display:flex; align-items:center; gap:11px; padding:11px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-alt); }
     .std-track-idx { flex-shrink:0; width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:50%;
       background:color-mix(in srgb, var(--accent) 16%, transparent); color:var(--accent); font-size:12px; font-weight:800; }
+    /* Reorder arrows, stacked so the row height doesn't grow. Disabled at the
+       ends rather than hidden — buttons that vanish make the row jump width. */
+    .std-track-move { display:flex; flex-direction:column; gap:2px; flex-shrink:0; }
+    .std-track-move .std-icobtn { width:24px; height:20px; padding:0; }
+    .std-track-move .std-icobtn:disabled { opacity:.32; cursor:default; }
+    .std-track-full { text-align:center; padding:11px; border:1px dashed var(--border-strong); border-radius:var(--r); }
+    .std-track-err { color:var(--danger, #dc2626); }
     .std-track-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:7px; }
     .std-track-name { font-size:13.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .std-track-audio { width:100%; height:32px; }

@@ -268,20 +268,59 @@ export default function Storefront() {
 // so pausing never gets undone by the auto-starter. A single track loops; a
 // multi-track playlist advances on `ended` and wraps back to the first.
 
+// Per-visitor volume, shared across every storefront they browse. Deliberately
+// NOT namespaced per creator: it expresses "how loud I want site music", which is
+// a property of the person, not of whose page they happen to be on.
+const VOLUME_KEY = 'sj-site-volume';
+
+// Module-level so the state initializer and the mount effect share one
+// definition of "what volume should this start at" — no ref, no duplication, and
+// the effect needs no dependency on component state to read it.
+// Wrapped because Safari private mode THROWS on localStorage access rather than
+// returning null.
+function readStoredVolume() {
+  try {
+    const saved = parseFloat(localStorage.getItem(VOLUME_KEY));
+    if (Number.isFinite(saved) && saved >= 0 && saved <= 1) return saved;
+  } catch { /* storage unavailable */ }
+  return SITE_AUDIO_VOLUME;
+}
+
 function AudioPill({ tracks }) {
   const audioRef = useRef(null);
   const interacted = useRef(false);
   const didMount = useRef(false);
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
+  // Visitor's own volume, remembered across pages and visits. Falls back to the
+  // site default. localStorage is wrapped because Safari private mode throws on
+  // access rather than returning null.
+  const [volume, setVolume] = useState(readStoredVolume);
+  // null until probed. iOS Safari ignores volume on media elements entirely
+  // (system volume only), so the slider is detected-then-rendered, never assumed.
+  const [canSetVolume, setCanSetVolume] = useState(false);
   const single = tracks.length <= 1;
   const current = tracks[idx] || tracks[0];
+
+  function applyVolume(v) {
+    setVolume(v);
+    if (audioRef.current) audioRef.current.volume = v;
+    try { localStorage.setItem(VOLUME_KEY, String(v)); } catch { /* non-fatal */ }
+  }
 
   // Mount: attempt autoplay; if blocked, start on the first user gesture.
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return undefined;
-    a.volume = SITE_AUDIO_VOLUME;   // BEFORE any play() so the first note is already at 85%
+    const startVolume = readStoredVolume();
+    a.volume = startVolume;   // BEFORE any play() so the first note is already correct
+    // Probe: write a different value and see whether it stuck. On platforms that
+    // ignore volume the assignment is a silent no-op, so this is the only
+    // reliable check — there is no feature flag for it.
+    const probe = a.volume === 0.5 ? 0.4 : 0.5;
+    a.volume = probe;
+    setCanSetVolume(a.volume === probe);
+    a.volume = startVolume;   // restore after probing
     let cancelled = false;
     const start = () => {
       removeListeners();
@@ -297,6 +336,10 @@ function AudioPill({ tracks }) {
       window.addEventListener('keydown', start);
     });
     return () => { cancelled = true; removeListeners(); a.pause(); };
+    // Genuinely mount-only. Volume changes go straight to the element in
+    // applyVolume — re-running this on every slider tick would restart the whole
+    // autoplay/gesture dance, which is why the start value is read from
+    // readStoredVolume() inside rather than taken from state.
   }, []);
 
   // When the track advances (incl. wrapping back to 0), keep playing the new
@@ -325,10 +368,24 @@ function AudioPill({ tracks }) {
     <>
       <audio ref={audioRef} src={current?.url} loop={single} onEnded={onEnded}
         onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} />
-      <button className="sf-audiopill" onPointerDown={markInteracted} onClick={toggle}
-        aria-label={playing ? 'Pause music' : 'Play music'} title={current?.name || undefined}>
-        {playing ? <Volume2 size={16} /> : <VolumeX size={16} />}
-      </button>
+      <div className="sf-audiodock">
+        <button className="sf-audiopill" onPointerDown={markInteracted} onClick={toggle}
+          aria-label={playing ? 'Pause music' : 'Play music'} title={current?.name || undefined}>
+          {playing ? <Volume2 size={16} /> : <VolumeX size={16} />}
+        </button>
+        {/* Hidden entirely where the platform ignores it (iOS) rather than shown
+            and inert — a control that does nothing is worse than no control. */}
+        {canSetVolume && (
+          <input
+            className="sf-audiovol"
+            type="range" min={0} max={1} step={0.01}
+            value={volume}
+            onChange={e => applyVolume(Number(e.target.value))}
+            aria-label="Music volume"
+            title="Music volume"
+          />
+        )}
+      </div>
     </>
   );
 }
@@ -563,10 +620,32 @@ function StoreStyles() {
       transform-style:preserve-3d; will-change:transform; transition:transform .14s ease-out; }
     @media (prefers-reduced-motion: reduce) { .sf-tiltwrap { transform:none; } }
 
-    /* ── Site audio pill ── */
-    .sf-audiopill {
+    /* ── Site audio dock (play button + visitor volume) ── */
+    /* The dock owns the fixed position now; the button is a normal flex child. */
+    .sf-audiodock {
       position:fixed; right:18px; bottom:18px; z-index:5;
-      width:38px; height:38px; min-width:0; padding:0;
+      display:flex; align-items:center; gap:0;
+      border-radius:var(--r-full);
+    }
+    /* Slider is collapsed until you reach for it, so the resting state stays the
+       small unobtrusive pill it was. Revealed on hover OR focus-within, so
+       keyboard users get it too. */
+    .sf-audiovol {
+      width:0; opacity:0; margin-left:0; padding:0; appearance:auto;
+      accent-color:var(--accent); cursor:pointer; flex-shrink:0;
+      transition:width .22s cubic-bezier(.4,0,.2,1), opacity .18s ease, margin-left .22s ease;
+    }
+    .sf-audiodock:hover .sf-audiovol,
+    .sf-audiodock:focus-within .sf-audiovol { width:84px; opacity:1; margin-left:10px; }
+    /* Touch devices have no hover, so there is nothing to reveal it — show it
+       permanently there instead of leaving it unreachable. */
+    @media (hover: none) {
+      .sf-audiodock .sf-audiovol { width:84px; opacity:1; margin-left:10px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .sf-audiovol { transition:none; } }
+
+    .sf-audiopill {
+      width:38px; height:38px; min-width:0; padding:0; flex-shrink:0;
       display:flex; align-items:center; justify-content:center;
       border-radius:50%; cursor:pointer;
       /* Dark glass so it's visible on ANY background/theme (not a white blob on

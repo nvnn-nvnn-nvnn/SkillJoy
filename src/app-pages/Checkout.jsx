@@ -157,14 +157,25 @@ export default function Checkout() {
     },
   } : { theme: 'flat', variables: { colorPrimary: '#D4522A' } };
 
-  if (status === 'loading') return <Shell pin={pin}><p className="ck-muted">Preparing checkout…</p></Shell>;
-  if (status === 'notfound') return <Shell pin={pin}><p className="ck-muted">This Skill isn’t available.</p></Shell>;
+  const leave = () => navigate(-1);
+  if (status === 'loading') return <Shell pin={pin} onBack={leave}><p className="ck-muted">Preparing checkout…</p></Shell>;
+  if (status === 'notfound') return <Shell pin={pin} onBack={leave}><p className="ck-muted">This Skill isn’t available.</p></Shell>;
   if (status === 'error') return (
-    <Shell pin={pin}><p className="ck-err">{err}</p><BackLink onClick={() => navigate(-1)}>Go back</BackLink></Shell>
+    <Shell pin={pin} onBack={leave}><p className="ck-err">{err}</p></Shell>
   );
 
+  // From the payment step, Back returns to the DETAILS step rather than leaving
+  // the site — a buyer who wants to fix a promo code or untick the add-on should
+  // not have to abandon checkout and start over. Anywhere else it exits.
+  // Hidden entirely on guest-success: going "back" after paying is meaningless,
+  // and that screen already has its own action.
+  const backAction =
+    status === 'guest-success' ? undefined :
+    status === 'pay' ? () => { setErr(''); setStatus('promo'); } :
+    leave;
+
   return (
-    <Shell pin={pin}>
+    <Shell pin={pin} onBack={backAction}>
       <Summary skill={skill} amountCents={amountCents} discounted={!!applied} />
 
       {status === 'promo' && (
@@ -204,9 +215,29 @@ export default function Checkout() {
             </label>
           )}
 
-          <button className="btn btn-primary ck-pay" onClick={toPayment} disabled={continuing}>
-            {continuing ? '…' : `Continue to payment · $${(displayTotal / 100).toFixed(2)}`}
-          </button>
+          {/* Totals sit in a full-width block directly above the button, so the
+              numbers and the CTA share the same left/right edges. Previously the
+              only price near the button was buried INSIDE its centred label,
+              which left the money visually unanchored to anything. */}
+          <div className="ck-foot">
+            <div className="ck-totalrow">
+              <span className="ck-totalrow-k">{skill.title}</span>
+              <span className="ck-totalrow-v">${(amountCents / 100).toFixed(2)}</span>
+            </div>
+            {bumpOn && bumpSkill && (
+              <div className="ck-totalrow">
+                <span className="ck-totalrow-k">{bumpSkill.title}</span>
+                <span className="ck-totalrow-v">+${(bumpCents / 100).toFixed(2)}</span>
+              </div>
+            )}
+            <div className="ck-totalrow ck-totalrow-grand">
+              <span className="ck-totalrow-k">Total</span>
+              <span className="ck-totalrow-v">${(displayTotal / 100).toFixed(2)}</span>
+            </div>
+            <button className="btn btn-primary ck-pay" onClick={toPayment} disabled={continuing}>
+              {continuing ? '…' : 'Continue to payment'}
+            </button>
+          </div>
           {err && <p className="ck-err">{err}</p>}
         </div>
       )}
@@ -286,20 +317,31 @@ function CheckoutForm({ skill, amountCents, onPaid, guest = false }) {
     <form onSubmit={pay} className="ck-form">
       <PaymentElement />
       {err && <p className="ck-err">{err}</p>}
-      <button className="btn btn-primary ck-pay" disabled={!stripe || processing}>
-        {processing ? 'Processing…' : `Pay $${(amountCents / 100).toFixed(2)}`}
-      </button>
-      <p className="ck-fine">Instant access. Secure payment by Stripe.</p>
+      {/* Same footer structure as the details step, so the two stages line up
+          instead of each inventing their own layout. */}
+      <div className="ck-foot">
+        <div className="ck-totalrow ck-totalrow-grand">
+          <span className="ck-totalrow-k">Total</span>
+          <span className="ck-totalrow-v">${(amountCents / 100).toFixed(2)}</span>
+        </div>
+        <button className="btn btn-primary ck-pay" disabled={!stripe || processing}>
+          {processing ? 'Processing…' : `Pay $${(amountCents / 100).toFixed(2)}`}
+        </button>
+        <p className="ck-fine">Instant access. Secure payment by Stripe.</p>
+      </div>
     </form>
   );
 }
 
-function Shell({ pin, children }) {
+function Shell({ pin, onBack, children }) {
   return (
     <div className="ck-wrap" style={pin}>
       {/* Full-page canvas so a dark store gets a dark page, not a dark card on cream. */}
       {pin && <div className="ck-bg" aria-hidden="true" />}
       <title>Checkout — SkillJoy</title>
+      {/* Every checkout state except the post-purchase screen gets a way out.
+          A payment page with no exit reads as a trap and costs trust. */}
+      {onBack && <BackLink onClick={onBack} className="ck-back">Back</BackLink>}
       <h1 className="ck-h1">Checkout</h1>
       {children}
       <style>{`
@@ -334,8 +376,22 @@ function Shell({ pin, children }) {
         .ck-bump-price { color:var(--ck-accent-text, var(--accent)); font-weight:800; }
         .ck-bump-sub { font-size:13px; color:var(--text-secondary); }
         .ck-form { display:flex; flex-direction:column; gap:16px; }
+        /* Purchase footer. Every row and the button are the SAME width and share
+           the same edges, so the money reads as anchored to the CTA rather than
+           floating. gap:0 on purpose — the rows own their vertical rhythm via
+           padding, so they stay evenly spaced whether or not a bump row exists. */
+        .ck-foot { display:flex; flex-direction:column; gap:0; width:100%; }
+        .ck-totalrow { display:flex; align-items:baseline; justify-content:space-between; gap:16px;
+          padding:8px 0; font-size:14px; color:var(--text-secondary); }
+        .ck-totalrow-k { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        /* tabular-nums keeps the decimal points in a column when rows stack —
+           proportional digits make a total look subtly misaligned against a subtotal. */
+        .ck-totalrow-v { font-variant-numeric:tabular-nums; white-space:nowrap; flex-shrink:0; }
+        .ck-totalrow-grand { border-top:1px solid var(--border); margin-top:4px; padding-top:12px;
+          margin-bottom:14px; font-size:17px; font-weight:800; color:var(--text); }
+        .ck-back { margin-bottom:10px; }
         .ck-pay { width:100%; font-size:16px; padding:13px; }
-        .ck-fine { text-align:center; font-size:12px; color:var(--text-muted); }
+        .ck-fine { text-align:center; font-size:12px; color:var(--text-muted); margin-top:10px; }
         .ck-guest { display:flex; flex-direction:column; gap:10px; margin-bottom:6px; }
         .ck-in { width:100%; padding:11px 12px; border:1px solid var(--border-strong); border-radius:var(--r); font-family:inherit; font-size:15px; background:var(--surface); color:var(--text); }
         .ck-in:focus { outline:none; border-color:var(--accent); }

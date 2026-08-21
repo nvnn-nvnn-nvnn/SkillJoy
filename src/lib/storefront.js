@@ -16,6 +16,14 @@ import { supabase } from './supabase';
 // music at exactly the level visitors will hear.
 export const SITE_AUDIO_VOLUME = 0.85;
 
+// Playlist cap. Four is a deliberate product decision, not a technical one:
+// site music is ambience, and every track is a file YOU store and serve on every
+// storefront visit. A 20-track playlist is a hosting bill and a slower page, not
+// a better page. Enforced in the editor (StorefrontEditor) — the theme is a JSON
+// blob the client writes, so this is a guardrail on the creator's own page
+// rather than a security boundary.
+export const MAX_AUDIO_TRACKS = 4;
+
 export const DEFAULT_THEME = {
   accent: '#F5634A',
   layout: 'list',           // 'list' | 'grid'
