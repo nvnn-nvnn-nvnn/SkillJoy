@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useUser } from '@/lib/stores';
+import { useUser, useProfile } from '@/lib/stores';
 import {
   listMySkills, getSkillWithBlocks, updateSkill, deleteSkill,
   addBlock, updateBlock, deleteBlock, reorderBlocks, publishSkill, publishUpdate,
@@ -52,6 +52,39 @@ const SOON_OPTIONS = [
 // ship a broken download, so it doesn't count).
 const hasDelivery = (blocks) => blocks.some(b =>
   b.type === 'file' && (b.file_key || /^https?:\/\/.+/i.test((b.external_url || '').trim())));
+
+// Coaching's equivalent of hasDelivery: can a buyer who pays actually book?
+// Two distinct failure modes, so the message names the one that applies.
+//
+// The native case is the subtle one. generateSlots() falls back to
+// DEFAULT_AVAILABILITY (Mon–Fri 9–5) whenever a creator's availability is null,
+// so a creator who never opened the availability editor still shows buyers a
+// full grid of bookable slots — hours they never agreed to. The buyer books,
+// the creator gets a calendar invite for a time they don't work. Requiring
+// explicitly-saved availability before publish is what closes that.
+function bookingReadiness(blocks, hasSavedAvailability) {
+  const coaching = blocks.filter(b => b.type === 'coaching');
+  if (coaching.length === 0) {
+    return { ok: false, title: 'Add a booking block', message: 'A coaching product needs a Coaching block so buyers can schedule a time.' };
+  }
+  // A block is "link mode" when it carries an external booking URL.
+  const linkBlocks = coaching.filter(b => (b.external_url || '').trim());
+  const badLink = linkBlocks.find(b => !/^https?:\/\/.+/i.test(b.external_url.trim()));
+  if (badLink) {
+    return { ok: false, title: 'Check your booking link', message: 'That booking link isn’t a valid URL, so buyers would hit a dead end after paying. It should start with https://' };
+  }
+  // Every coaching block on a link is fine — no availability needed.
+  if (linkBlocks.length === coaching.length) return { ok: true };
+  // At least one block uses native booking → the creator's own hours must exist.
+  if (!hasSavedAvailability) {
+    return {
+      ok: false,
+      title: 'Set your availability first',
+      message: 'This product uses native booking, but you haven’t saved your weekly hours yet — buyers would be offered a default Mon–Fri 9–5 you never agreed to. Set your hours and timezone under Dashboard → Bookings, then publish.',
+    };
+  }
+  return { ok: true };
+}
 
 // Phase 2 — the make-or-break screen. /build lists my Skills; /build/:skillId
 // edits one (meta + cover + price + reorderable mixed blocks + publish).
@@ -138,7 +171,11 @@ function SkillList({ userId }) {
 // ── Editor view ───────────────────────────────────────────────────────────────
 function SkillEditor({ skillId, userId }) {
   const navigate = useNavigate();
+  const profile = useProfile();
   const { confirm, alert } = useDialog();
+  // Explicitly-saved weekly hours. Null means "never opened the editor", which
+  // is exactly the state bookingReadiness() refuses to publish on.
+  const hasSavedAvailability = !!profile?.booking_availability;
   const [skill, setSkill] = useState(null);
   const [blocks, setBlocks] = useState([]);
   const [loadErr, setLoadErr] = useState('');
@@ -273,7 +310,7 @@ function SkillEditor({ skillId, userId }) {
       if (!skill.title?.trim()) { await alert({ title: 'Add a title first', message: 'Give your product a title before publishing.', tone: 'warning' }); return; }
       if (k === 'course') {
         if (!courseHasLesson) {
-          await alert({ title: 'Add a lesson', message: 'A course needs at least one module with a lesson inside it before publishing.', tone: 'warning' });
+          await alert({ title: 'Add a lesson with content', message: 'A course needs at least one lesson that actually has content in it. Open a lesson marked “No content” and add a video, guide, or file.', tone: 'warning' });
           return;
         }
       } else if (blocks.length === 0) {
@@ -289,6 +326,15 @@ function SkillEditor({ skillId, userId }) {
         return;
       }
 
+      // Coaching's equivalent of "the download exists": a buyer who pays must be
+      // able to actually get on the calendar. Two ways to fail that, so two gates.
+      if (k === 'coaching') {
+        const bookable = bookingReadiness(blocks, hasSavedAvailability);
+        if (!bookable.ok) {
+          await alert({ title: bookable.title, message: bookable.message, tone: 'warning' });
+          return;
+        }
+      }
 
       // if (k === 'membership' )
 
@@ -373,7 +419,12 @@ function SkillEditor({ skillId, userId }) {
 
   const kind = skill.kind ?? 'digital';
   const contentOk = kind === 'course' ? courseHasLesson : blocks.length > 0;
-  const ready = !!skill.title?.trim() && contentOk && (kind !== 'digital' || hasDelivery(blocks));
+  // Keep the checklist honest: `ready` must agree with what togglePublish()
+  // actually enforces, or the Publish step says "ready" and then refuses.
+  const ready = !!skill.title?.trim() && contentOk
+    && (kind !== 'digital' || hasDelivery(blocks))
+    && (kind !== 'lead' || hasDelivery(blocks))
+    && (kind !== 'coaching' || bookingReadiness(blocks, hasSavedAvailability).ok);
   const steps = stepsFor(kind);
   const last = steps.length - 1;
   const midHeading = steps[1]; // Delivery | Scheduling | Content

@@ -111,6 +111,26 @@ export default function BlockEditor({ block, index, total, creatorId, skillId, o
                   </label>
                 </div>
                 <span className="be-hint">Buyers pick a time from your weekly availability (set your hours + timezone on the Dashboard). Buffer adds a gap after each call; minimum notice blocks last-minute bookings.</span>
+
+                {/* Where the call actually happens. A standing room link (Zoom
+                    personal room, a permanent Meet link) rather than a
+                    per-booking generated one — generating unique links needs
+                    calendar WRITE access, which the Google integration
+                    deliberately doesn't request. It's copied onto each booking
+                    at booking time and lands in the confirmation email and the
+                    .ics invite. */}
+                <label className="be-sched-field be-meetfield">
+                  <span className="be-sched-label">Meeting link</span>
+                  <input className="be-field" value={block.meeting_url ?? ''}
+                    onChange={e => onPatch({ meeting_url: e.target.value })}
+                    placeholder="https://zoom.us/j/your-room or meet.google.com/…" />
+                  <span className="be-hint">
+                    {block.meeting_url?.trim()
+                      ? 'Included in the confirmation email and calendar invite.'
+                      : 'Optional, but without it buyers have no idea where to show up.'}
+                  </span>
+                </label>
+
                 <GoogleCalendarConnect />
               </>
             ) : (
@@ -237,6 +257,8 @@ export default function BlockEditor({ block, index, total, creatorId, skillId, o
         .be-native select { padding:5px 8px; }
         .be-schedule { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
         .be-sched-field { display:flex; flex-direction:column; gap:5px; }
+        /* Full width — it sits outside the 3-up scheduling row, not inside it. */
+        .be-meetfield { margin-top:12px; width:100%; }
         .be-sched-label { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); }
         .be-sched-field select { padding:8px 10px; border:1.5px solid var(--border-strong); border-radius:var(--r-sm); background:var(--surface); font-size:14px; font-weight:600; color:var(--text); font-family:inherit; cursor:pointer; }
         .be-sched-field select:focus { outline:none; border-color:var(--accent); }

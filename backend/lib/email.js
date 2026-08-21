@@ -19,12 +19,20 @@ async function getUserEmail(userId) {
     }
 }
 
-async function sendEmail({ to, subject, html }) {
+// `attachments` is optional and passes straight through to Resend:
+//   [{ filename, content }]  — content is a Buffer or a base64 string.
+// Booking mail uses it to attach the .ics invite. Note the deliberate choice
+// NOT to also set a text/calendar Content-Type part: Resend sends the file as a
+// normal attachment, which every client can open, whereas a malformed inline
+// calendar part can make Gmail swallow the message body entirely.
+async function sendEmail({ to, subject, html, attachments }) {
     if (!resend) {
         console.warn('Email skipped — RESEND_API_KEY not set. Would have sent:', subject, '→', to);
         return null;
     }
-    const { data, error } = await resend.emails.send({ from: FROM, to, subject, html });
+    const payload = { from: FROM, to, subject, html };
+    if (attachments?.length) payload.attachments = attachments;
+    const { data, error } = await resend.emails.send(payload);
     if (error) {
         console.error('Resend error:', error);
         throw new Error(error.message || 'Failed to send email');
@@ -151,6 +159,96 @@ function disputeFiled({ recipientName, gigTitle, role }) {
     };
 }
 
+// ── Booking emails (v3 native scheduling) ────────────────────────────────────
+//
+// One shared shell for all four states so a session email always looks the same
+// and only the words change. The reason these matter more than in-app
+// notifications: a booking is a promise about a moment in the future, and the
+// place people check before a call is their inbox and their calendar — not a
+// bell icon in an app they may not open again before the session.
+//
+// `when` is pre-formatted by the caller, which owns the timezone decision:
+// each recipient gets the time rendered in THEIR OWN zone. Formatting here
+// would mean picking one zone and being wrong for one of the two parties.
+function bookingShell({ heading, intro, when, timezoneNote, title, meetingUrl, ctaUrl, ctaLabel, footer, tone = 'normal' }) {
+    const accent = tone === 'danger' ? '#CE4A3E' : '#D4522A';
+    const struck = tone === 'danger' ? 'text-decoration:line-through;opacity:.7;' : '';
+    return `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#1f2937;line-height:1.5;">
+        <h1 style="font-size:22px;margin:0 0 10px;">${esc(heading)}</h1>
+        <p style="margin:0 0 16px;">${intro}</p>
+        <div style="background:#f4f1ea;border-radius:8px;padding:14px 16px;margin:0 0 16px;">
+            <p style="margin:0;font-weight:700;font-size:16px;${struck}">${esc(when)}</p>
+            ${timezoneNote ? `<p style="margin:4px 0 0;color:#6b7280;font-size:12px;">${esc(timezoneNote)}</p>` : ''}
+            <p style="margin:10px 0 0;color:#4b5563;font-size:14px;">${esc(title)}</p>
+        </div>
+        ${meetingUrl ? `<p style="margin:0 0 16px;font-size:14px;">Join the call: <a href="${esc(meetingUrl)}" style="color:${accent};font-weight:600;">${esc(meetingUrl)}</a></p>` : ''}
+        ${ctaUrl ? `<a href="${ctaUrl}" style="display:inline-block;padding:12px 22px;background:${accent};color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">${esc(ctaLabel)}</a>` : ''}
+        ${footer ? `<p style="color:#6b7280;font-size:13px;margin-top:18px;">${footer}</p>` : ''}
+        <p style="color:#9ca3af;font-size:12px;margin-top:24px;">SkillJoy</p>
+    </div>`;
+}
+
+function bookingConfirmed({ recipientName, otherPartyName, isCreator, title, when, timezoneNote, meetingUrl, manageUrl }) {
+    return {
+        subject: `Confirmed: ${title} — ${when}`,
+        html: bookingShell({
+            heading: isCreator ? 'New booking 📅' : 'You’re booked in ✅',
+            intro: isCreator
+                ? `<strong>${esc(otherPartyName)}</strong> booked a session with you.`
+                : `Your session with <strong>${esc(otherPartyName)}</strong> is confirmed.`,
+            when, timezoneNote, title, meetingUrl,
+            ctaUrl: manageUrl, ctaLabel: 'View booking',
+            footer: 'The attached invite adds this to your calendar. Need a different time? Reschedule from your booking rather than cancelling.',
+        }),
+    };
+}
+
+function bookingRescheduled({ recipientName, otherPartyName, isCreator, title, when, previousWhen, timezoneNote, meetingUrl, manageUrl }) {
+    return {
+        subject: `Moved: ${title} — now ${when}`,
+        html: bookingShell({
+            heading: 'Session moved 🔁',
+            intro: isCreator
+                ? `<strong>${esc(otherPartyName)}</strong> moved your session${previousWhen ? ` from <span style="text-decoration:line-through;">${esc(previousWhen)}</span>` : ''}.`
+                : `Your session with <strong>${esc(otherPartyName)}</strong> has moved${previousWhen ? ` from <span style="text-decoration:line-through;">${esc(previousWhen)}</span>` : ''}.`,
+            when, timezoneNote, title, meetingUrl,
+            ctaUrl: manageUrl, ctaLabel: 'View booking',
+            footer: 'The attached invite updates the event already on your calendar — you should not end up with two.',
+        }),
+    };
+}
+
+function bookingCancelled({ recipientName, otherPartyName, isCreator, title, when, timezoneNote, rebookUrl }) {
+    return {
+        subject: `Cancelled: ${title} — ${when}`,
+        html: bookingShell({
+            heading: 'Session cancelled',
+            intro: isCreator
+                ? `<strong>${esc(otherPartyName)}</strong> cancelled this session.`
+                : `Your session with <strong>${esc(otherPartyName)}</strong> was cancelled.`,
+            when, timezoneNote, title,
+            ctaUrl: rebookUrl, ctaLabel: isCreator ? 'View bookings' : 'Book another time',
+            tone: 'danger',
+            footer: 'The attached update removes it from your calendar. You still have access to everything you bought.',
+        }),
+    };
+}
+
+function bookingReminder({ recipientName, otherPartyName, isCreator, title, when, timezoneNote, meetingUrl, manageUrl }) {
+    return {
+        subject: `Tomorrow: ${title} — ${when}`,
+        html: bookingShell({
+            heading: 'Coming up ⏰',
+            intro: isCreator
+                ? `Reminder — you have a session with <strong>${esc(otherPartyName)}</strong>.`
+                : `Reminder — your session with <strong>${esc(otherPartyName)}</strong> is coming up.`,
+            when, timezoneNote, title, meetingUrl,
+            ctaUrl: manageUrl, ctaLabel: 'View booking',
+            footer: 'Can’t make it? Reschedule or cancel as early as you can so the slot can be reused.',
+        }),
+    };
+}
+
 module.exports = {
     sendEmail,
     getUserEmail,
@@ -163,5 +261,9 @@ module.exports = {
         fundsReleasedSeller,
         fundsCleared,
         disputeFiled,
+        bookingConfirmed,
+        bookingRescheduled,
+        bookingCancelled,
+        bookingReminder,
     },
 };

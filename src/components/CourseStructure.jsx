@@ -2,30 +2,41 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   listModules, createModule, updateModule, deleteModule, reorderModules,
-  listLessons, createLesson, deleteLesson, reorderLessons,
+  listLessons, createLesson, deleteLesson, reorderLessons, countLessonBlocks,
 } from '@/lib/course';
 import { useDialog } from '@/components/Dialog';
 
 // Course builder middle step — Modules → Lessons. Self-manages modules + lesson
 // rows via course.js; a lesson's content is edited on its own page
-// (/build/:skillId/lesson/:lessonId). Reports "has ≥1 lesson" up via onReadyChange
-// so the parent's publish gate/checklist stay accurate.
+// (/build/:skillId/lesson/:lessonId). Reports "has ≥1 lesson WITH CONTENT" up via
+// onReadyChange so the parent's publish gate/checklist stay accurate.
+//
+// Why content and not just "a lesson exists": a lesson row is created empty the
+// moment you click "+ Add lesson", so counting rows would let a course of blank
+// lessons publish — the course equivalent of a digital product with no file.
+// Block counts are loaded once for the whole course (countLessonBlocks) and kept
+// in sync locally, so flagging empty lessons costs one extra query, not one
+// per lesson.
 export default function CourseStructure({ skillId, onReadyChange }) {
   const navigate = useNavigate();
   const { confirm, alert } = useDialog();
   const [modules, setModules] = useState([]);
   const [lessons, setLessons] = useState([]);
+  const [blockCounts, setBlockCounts] = useState(new Map()); // lessonId → #blocks
   const [loading, setLoading] = useState(true);
   const titleTimers = useRef({});
 
-  const reportReady = useCallback((mods, less) => {
-    onReadyChange?.(mods.some(m => less.some(l => l.section_id === m.id)));
+  const reportReady = useCallback((mods, less, counts) => {
+    onReadyChange?.(mods.some(m => less.some(l => l.section_id === m.id && (counts.get(l.id) ?? 0) > 0)));
   }, [onReadyChange]);
 
   useEffect(() => {
     let alive = true;
-    Promise.all([listModules(skillId), listLessons(skillId)])
-      .then(([m, l]) => { if (!alive) return; setModules(m); setLessons(l); setLoading(false); reportReady(m, l); })
+    Promise.all([listModules(skillId), listLessons(skillId), countLessonBlocks(skillId)])
+      .then(([m, l, c]) => {
+        if (!alive) return;
+        setModules(m); setLessons(l); setBlockCounts(c); setLoading(false); reportReady(m, l, c);
+      })
       .catch(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [skillId, reportReady]);
@@ -34,7 +45,7 @@ export default function CourseStructure({ skillId, onReadyChange }) {
   async function addModule() {
     try {
       const m = await createModule(skillId, modules.length);
-      const next = [...modules, m]; setModules(next); reportReady(next, lessons);
+      const next = [...modules, m]; setModules(next); reportReady(next, lessons, blockCounts);
     } catch (e) { alert({ title: 'Couldn’t add module', message: e.message, tone: 'danger' }); }
   }
   function patchModuleTitle(id, title) {
@@ -47,7 +58,7 @@ export default function CourseStructure({ skillId, onReadyChange }) {
     if (!ok) return;
     const nextM = modules.filter(m => m.id !== id);
     const nextL = lessons.filter(l => l.section_id !== id);
-    setModules(nextM); setLessons(nextL); reportReady(nextM, nextL);
+    setModules(nextM); setLessons(nextL); reportReady(nextM, nextL, blockCounts);
     try { await deleteModule(id); } catch (e) { console.warn(e.message); }
   }
   async function moveModule(id, dir) {
@@ -62,14 +73,16 @@ export default function CourseStructure({ skillId, onReadyChange }) {
     try {
       const pos = lessons.filter(l => l.section_id === sectionId).length;
       const l = await createLesson(skillId, sectionId, pos);
-      const next = [...lessons, l]; setLessons(next); reportReady(modules, next);
+      const next = [...lessons, l]; setLessons(next); reportReady(modules, next, blockCounts);
       navigate(`/build/${skillId}/lesson/${l.id}`); // jump straight into the new lesson
     } catch (e) { alert({ title: 'Couldn’t add lesson', message: e.message, tone: 'danger' }); }
   }
   async function removeLesson(id) {
     const ok = await confirm({ title: 'Delete this lesson?', message: 'This removes the lesson and all its content. This cannot be undone.', confirmLabel: 'Delete', danger: true });
     if (!ok) return;
-    const next = lessons.filter(l => l.id !== id); setLessons(next); reportReady(modules, next);
+    const next = lessons.filter(l => l.id !== id); setLessons(next);
+    const counts = new Map(blockCounts); counts.delete(id); setBlockCounts(counts);
+    reportReady(modules, next, counts);
     try { await deleteLesson(id); } catch (e) { console.warn(e.message); }
   }
   async function moveLesson(id, sectionId, dir) {
@@ -92,6 +105,7 @@ export default function CourseStructure({ skillId, onReadyChange }) {
 
       {modules.map((mod, mi) => {
         const modLessons = lessons.filter(l => l.section_id === mod.id).sort((a, b) => a.position - b.position);
+        const emptyCount = modLessons.filter(l => (blockCounts.get(l.id) ?? 0) === 0).length;
         return (
           <div key={mod.id} className="cs-section">
             <div className="cs-section-head">
@@ -99,6 +113,13 @@ export default function CourseStructure({ skillId, onReadyChange }) {
               <input className="cs-section-title" value={mod.title ?? ''}
                 onChange={e => patchModuleTitle(mod.id, e.target.value)}
                 placeholder={`Module ${mi + 1} title`} />
+              {modLessons.length > 0 && (
+                <span className={`cs-modcount${emptyCount ? ' warn' : ''}`}
+                  title={emptyCount ? `${emptyCount} lesson${emptyCount === 1 ? '' : 's'} still empty` : 'Every lesson has content'}>
+                  {modLessons.length} lesson{modLessons.length === 1 ? '' : 's'}
+                  {emptyCount > 0 && ` · ${emptyCount} empty`}
+                </span>
+              )}
               <div className="cs-section-actions">
                 <button className="cs-ic" disabled={mi === 0} onClick={() => moveModule(mod.id, -1)} aria-label="Move module up">↑</button>
                 <button className="cs-ic" disabled={mi === modules.length - 1} onClick={() => moveModule(mod.id, 1)} aria-label="Move module down">↓</button>
@@ -108,11 +129,16 @@ export default function CourseStructure({ skillId, onReadyChange }) {
 
             <div className="cs-lessons">
               {modLessons.length === 0 && <p className="cs-lesson-empty">No lessons yet.</p>}
-              {modLessons.map((l, li) => (
+              {modLessons.map((l, li) => {
+                const n = blockCounts.get(l.id) ?? 0;
+                return (
                 <div key={l.id} className="cs-lrow">
-                  <button className="cs-lopen" onClick={() => navigate(`/build/${skillId}/lesson/${l.id}`)}>
-                    <span className="cs-ldot" />
+                  <button className={`cs-lopen${n === 0 ? ' cs-lempty' : ''}`} onClick={() => navigate(`/build/${skillId}/lesson/${l.id}`)}>
+                    <span className={`cs-ldot${n === 0 ? ' off' : ''}`} />
                     <span className="cs-ltitle">{l.title?.trim() || 'Untitled lesson'}</span>
+                    {n === 0
+                      ? <span className="cs-lbadge">No content</span>
+                      : <span className="cs-lcount">{n} block{n === 1 ? '' : 's'}</span>}
                     <span className="cs-ledit">Edit →</span>
                   </button>
                   <div className="cs-lactions">
@@ -121,7 +147,8 @@ export default function CourseStructure({ skillId, onReadyChange }) {
                     <button className="cs-ic cs-del" onClick={() => removeLesson(l.id)} aria-label="Delete lesson">✕</button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
               <button className="cs-addlesson" onClick={() => addLesson(mod.id)}>+ Add lesson</button>
             </div>
           </div>
@@ -149,8 +176,18 @@ export default function CourseStructure({ skillId, onReadyChange }) {
         .cs-lopen { flex:1; min-width:0; display:flex; align-items:center; gap:10px; text-align:left; white-space:normal; border:1px solid var(--border); border-radius:var(--r); background:var(--surface); padding:11px 14px; cursor:pointer; }
         .cs-lopen:hover { border-color:var(--accent-mid); background:var(--surface-alt); }
         .cs-ldot { flex-shrink:0; width:8px; height:8px; border-radius:var(--r-full); background:var(--accent-mid); }
+        .cs-ldot.off { background:var(--border-strong); }
         .cs-ltitle { flex:1; min-width:0; font-size:14px; font-weight:600; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .cs-ledit { flex-shrink:0; font-size:12px; font-weight:700; color:var(--accent-hover); }
+        /* An empty lesson is a publish blocker, so it reads as "unfinished", not
+           "broken" — dashed edge + muted badge, no alarm colouring. */
+        .cs-lopen.cs-lempty { border-style:dashed; }
+        .cs-lbadge { flex-shrink:0; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.05em;
+                     color:var(--text-muted); background:var(--surface-alt); border:1px solid var(--border);
+                     padding:2px 8px; border-radius:var(--r-full); white-space:nowrap; }
+        .cs-lcount { flex-shrink:0; font-size:11.5px; font-weight:600; color:var(--text-muted); white-space:nowrap; }
+        .cs-modcount { flex-shrink:0; font-size:11.5px; font-weight:700; color:var(--text-muted); white-space:nowrap; }
+        .cs-modcount.warn { color:var(--text-secondary); }
         .cs-addlesson { align-self:flex-start; border:1.5px dashed var(--border-strong); background:var(--surface); border-radius:var(--r); padding:8px 16px; font-size:13px; font-weight:700; color:var(--text-secondary); cursor:pointer; }
         .cs-addlesson:hover { border-color:var(--accent); color:var(--accent); }
         .cs-addsection { border:1.5px dashed var(--border-strong); background:var(--surface); border-radius:var(--r); padding:12px 16px; font-size:14px; font-weight:700; color:var(--text-secondary); cursor:pointer; }

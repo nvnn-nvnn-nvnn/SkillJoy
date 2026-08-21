@@ -93,13 +93,31 @@ export async function reorderLessons(orderedIds) {
   if (failed) throw failed.error;
 }
 
-// ── Progress (per lesson) ───────────────────────────────────────────────────
-/** Set of the current buyer's completed lesson ids for a skill. */
-export async function listMyProgress(skillId) {
+/** How many content blocks each lesson of a skill holds → Map<lessonId, count>.
+ *  One query for the whole course (not one per lesson), so the builder can flag
+ *  empty lessons without an N+1. Lessons with no blocks are simply absent. */
+export async function countLessonBlocks(skillId) {
   const { data, error } = await supabase
-    .from('lesson_progress')
+    .from('content_blocks')
     .select('lesson_id')
-    .eq('skill_id', skillId);
+    .eq('skill_id', skillId)
+    .not('lesson_id', 'is', null);
+  if (error) throw error;
+  const counts = new Map();
+  for (const r of data ?? []) counts.set(r.lesson_id, (counts.get(r.lesson_id) ?? 0) + 1);
+  return counts;
+}
+
+// ── Progress (per lesson) ───────────────────────────────────────────────────
+/** Set of the current buyer's completed lesson ids for a skill.
+ *  `userId` is filtered explicitly rather than leaning on RLS alone: if the
+ *  lesson_progress policy is ever loosened, an unscoped query would silently
+ *  count OTHER buyers' rows and show a wrong "8/10 · 80%". Defence in depth —
+ *  RLS stays the security boundary, this keeps the number correct regardless. */
+export async function listMyProgress(skillId, userId) {
+  let q = supabase.from('lesson_progress').select('lesson_id').eq('skill_id', skillId);
+  if (userId) q = q.eq('user_id', userId);
+  const { data, error } = await q;
   if (error) throw error;
   return new Set((data ?? []).map(r => r.lesson_id));
 }

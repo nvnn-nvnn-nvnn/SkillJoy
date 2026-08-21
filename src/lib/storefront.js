@@ -254,9 +254,18 @@ export async function updateStorefront(userId, { bio, location, storefront_theme
 export async function listLinks(creatorId) {
   const { data, error } = await supabase
     .from('store_links')
-    .select('id, label, url, position, is_affiliate')
+    // Explicit column list — anything missing here arrives `undefined` in the UI
+    // with no error anywhere, so new columns must be added in BOTH places
+    // (migration 029 + here). This is the only store_links read that names
+    // columns; addLink's bare .select() picks up new ones on its own.
+    .select('id, label, url, position, is_affiliate, placement, description, cover_url, cta_label, group_label')
     .eq('creator_id', creatorId)
-    .order('position', { ascending: true });
+    // position, then created_at as a tiebreaker. createLink sets
+    // `position: links.length`, so a delete-then-add can produce duplicate
+    // positions — and equal sort keys let Postgres return rows in any order,
+    // which shows up as the list visibly reshuffling between page loads.
+    .order('position', { ascending: true })
+    .order('created_at', { ascending: true });
   if (error) throw error;
   return data;
 }

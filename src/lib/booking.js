@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { apiFetch } from './api';
 
 // ── Native booking data layer (v3, Phase 8) ─────────────────────────────────
 // Creator weekly availability lives on profiles.booking_availability; bookings
@@ -127,34 +128,62 @@ export async function listCreatorBookings(creatorId) {
   return data;
 }
 
-export async function createBooking({ skillId, blockId, creatorId, buyerId, start, end }) {
-  const { data, error } = await supabase
-    .from('bookings')
-    .insert({ skill_id: skillId, block_id: blockId, creator_id: creatorId, buyer_id: buyerId,
-              start_time: start.toISOString(), end_time: end.toISOString() })
-    .select().single();
-  if (error) {
-    // Unique-index or exclusion (overlap) violation = slot taken / clashes.
-    if (/duplicate|unique|exclu|overlap|conflict/i.test(error.message)) throw new Error('That slot was just taken — pick another.');
-    throw error;
-  }
-  // Best-effort notify the creator (client notification inserts are allowed by RLS).
-  supabase.from('notifications').insert({
-    user_id: creatorId, type: 'booking_confirmed', title: 'New booking 📅',
-    message: `Someone booked a session for ${start.toLocaleString()}.`,
-    related_id: skillId, related_type: null,
-  }).then(() => {});
+// ── Mutations (server-side) ─────────────────────────────────────────────────
+// Reads above stay browser→Supabase under RLS. WRITES go through the API,
+// because a booking write has three side effects the browser cannot own:
+// validating the slot against the host's real availability, sending email, and
+// building the .ics invite. See backend/routes/bookings.js.
+
+async function bookingApi(path, body) {
+  const res = await apiFetch(`/api/bookings${path}`, {
+    method: 'POST',
+    body: JSON.stringify(body ?? {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
   return data;
 }
 
-export async function cancelBooking(id, otherPartyId, whenISO) {
-  const { error } = await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', id);
-  if (error) throw error;
-  if (otherPartyId) {
-    supabase.from('notifications').insert({
-      user_id: otherPartyId, type: 'booking_cancelled', title: 'Booking cancelled',
-      message: `A session${whenISO ? ` on ${new Date(whenISO).toLocaleString()}` : ''} was cancelled.`,
-      related_type: null,
-    }).then(() => {});
-  }
+export async function createBooking({ skillId, blockId, start, end }) {
+  return bookingApi('', {
+    skillId, blockId,
+    start: start.toISOString(),
+    end: end.toISOString(),
+    // The server has to name a timezone when it formats times for email, and
+    // only the browser knows the buyer's. Captured once, stored on the row.
+    timezone: localTimezone(),
+  });
+}
+
+/** Move an existing booking. Keeps the row (and so the calendar event) alive. */
+export async function rescheduleBooking(id, start, end) {
+  return bookingApi(`/${id}/reschedule`, {
+    start: start.toISOString(),
+    end: end.toISOString(),
+  });
+}
+
+export async function cancelBooking(id) {
+  return bookingApi(`/${id}/cancel`);
+}
+
+/**
+ * Download a booking's .ics. Fetched rather than linked because the endpoint is
+ * behind auth — a bare <a href> sends no Authorization header, so it would just
+ * 401. Blob + a synthetic click is what turns an authenticated response into a
+ * file the OS will hand to a calendar app.
+ */
+export async function downloadBookingIcs(id) {
+  const res = await apiFetch(`/api/bookings/${id}/calendar.ics`);
+  if (!res.ok) throw new Error('Couldn’t build the calendar invite.');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'session.ics';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoking immediately can cancel the download in Safari; one tick is enough.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

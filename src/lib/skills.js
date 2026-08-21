@@ -67,7 +67,7 @@ export async function getSkillWithBlocks(skillId) {
   if (error) throw error;
   const { data: blocks, error: be } = await supabase
     .from('content_blocks')
-    .select('id, skill_id, section_id, lesson_id, type, position, title, body_text, file_key, external_url, booking_minutes, buffer_minutes, min_notice_minutes, created_at')
+    .select('id, skill_id, section_id, lesson_id, type, position, title, body_text, file_key, external_url, booking_minutes, buffer_minutes, min_notice_minutes, meeting_url, created_at')
     .eq('skill_id', skillId)
     .order('position', { ascending: true });
   if (be) throw be;
@@ -116,7 +116,7 @@ export async function deleteSkill(skillId) {
 export async function listLessonBlocks(lessonId) {
   const { data, error } = await supabase
     .from('content_blocks')
-    .select('id, skill_id, section_id, lesson_id, type, position, title, body_text, file_key, external_url, booking_minutes, buffer_minutes, min_notice_minutes')
+    .select('id, skill_id, section_id, lesson_id, type, position, title, body_text, file_key, external_url, booking_minutes, buffer_minutes, min_notice_minutes, meeting_url')
     .eq('lesson_id', lessonId)
     .order('position', { ascending: true });
   if (error) throw error;

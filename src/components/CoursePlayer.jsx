@@ -14,13 +14,13 @@ export default function CoursePlayer({ skill, user }) {
   const [open, setOpen] = useState(new Set()); // collapsible modules — first open by default
 
   useEffect(() => {
-    Promise.all([listModules(skill.id), listLessons(skill.id), listMyProgress(skill.id)])
+    Promise.all([listModules(skill.id), listLessons(skill.id), listMyProgress(skill.id, user.id)])
       .then(([mods, less, prog]) => {
         setModules(mods); setLessons(less); setDone(prog);
         setOpen(new Set(mods.length ? [mods[0].id] : []));
       })
       .catch(() => { setModules([]); setLessons([]); setDone(new Set()); });
-  }, [skill.id]);
+  }, [skill.id, user.id]);
 
   function toggleModule(modId) {
     setOpen(prev => { const n = new Set(prev); n.has(modId) ? n.delete(modId) : n.add(modId); return n; });

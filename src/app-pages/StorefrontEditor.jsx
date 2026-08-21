@@ -779,6 +779,21 @@ export default function StorefrontEditor() {
                     </div>
                     <input value={l.url} onChange={e => patchLinkLocal(l.id, { url: e.target.value })} onBlur={e => saveLink(l.id, { url: e.target.value })} placeholder="https://…" />
                     <label className="std-check"><input type="checkbox" checked={!!l.is_affiliate} onChange={e => { patchLinkLocal(l.id, { is_affiliate: e.target.checked }); saveLink(l.id, { is_affiliate: e.target.checked }); }} /> Affiliate link</label>
+
+                    {/* Placement — which REGION of the page renders this link.
+                        `|| 'profile'` mirrors the column default so a row that
+                        somehow arrives without it still shows a selected state
+                        instead of an empty segmented control.
+                        Saves immediately (like the affiliate checkbox) rather
+                        than on blur — a segmented control has no blur moment. */}
+                    <div className="std-linkplace">
+                      <span className="std-flabel">Where it shows</span>
+                      <Seg
+                        value={l.placement || 'profile'}
+                        onChange={v => { patchLinkLocal(l.id, { placement: v }); saveLink(l.id, { placement: v }); }}
+                        options={[{ v: 'profile', label: 'Profile' }, { v: 'products', label: 'Featured' }]}
+                      />
+                    </div>
                   </div>
                 ))}
                 <button className="std-addbtn" onClick={createLink}><Plus size={15} /> Add link</button>
@@ -1060,18 +1075,16 @@ function Styles() {
       border-radius:var(--r-sm); background:var(--surface-alt); color:var(--text); border:1px solid var(--border); }
     .std-socialrow input { flex:1; min-width:0; }
     .std-linkcard { border:1px solid var(--border); border-radius:var(--r); padding:14px; margin-bottom:10px; background:var(--surface-alt); }
-    .std-linkcard input { width:100%; margin-bottom:8px; }
-    .std-check { display:flex; align-items:center; gap:7px; font-size:13px; color:var(--text-secondary); font-weight:500; }
-    .std-check input { width:16px; height:16px; accent-color:var(--accent); }
-    .std-addbtn { width:auto; min-width:0; display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:var(--r-full);
-      border:1.5px solid var(--border-strong); background:var(--surface); color:var(--text); font-size:13px; font-weight:700; cursor:pointer; }
-    .std-addbtn:hover { border-color:var(--accent); color:var(--accent); }
+; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
 
-    /* ── Themes tab: preset gallery + import/export ── */
-    .std-panel-lede { font-size:13px; color:var(--text-secondary); line-height:1.55; margin:-6px 0 16px; }
-    .std-themegrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:12px; }
-    .std-theme { display:flex; flex-direction:column; gap:0; padding:0; min-width:0; overflow:hidden; text-align:left;
-      border:1.5px solid var(--border-strong); border-radius:var(--r-lg); background:var(--surface); cursor:pointer;
+    /* Added socials — icon chip + URL field + remove */
+    .std-sociallist { display:flex; flex-direction:column; gap:8px; margin-top:14px; padding-top:14px; border-top:1px solid var(--border); }
+    .std-socialrow { display:flex; align-items:center; gap:9px; }
+    .std-socialicon { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; flex-shrink:0;
+      border-radius:var(--r-sm); background:var(--surface-alt); color:var(--text); border:1px solid var(--border); }
+    .std-socialrow input { flex:1; min-width:0; }
+    .std-linkcard { border:1px solid var(--border); border-radius:var(--r); padding:14px; margin-bottom:10px; background:var(--surface-alt); }
+r-lg); background:var(--surface); cursor:pointer;
       transition:transform .14s ease, border-color .14s ease, box-shadow .14s ease; }
     .std-theme:hover { transform:translateY(-3px); border-color:var(--accent);
       box-shadow:0 10px 24px color-mix(in srgb, var(--accent) 20%, transparent); }

@@ -22,6 +22,7 @@ const skillRoutes = require('./routes/skills.js');
 const marketingRoutes = require('./routes/marketing.js');
 const billingRoutes = require('./routes/billing.js');
 const publicRoutes = require('./routes/public.js');
+const bookingRoutes = require('./routes/bookings.js');
 const rateLimit = require('express-rate-limit');
 const { sendEmail, getUserEmail, templates } = require('./lib/email');
 const { feeCentsFromTotal } = require('./config/fees');
@@ -78,6 +79,8 @@ app.use('/api/guest', strictLimiter, guestRoutes);
 // Google Calendar — auth applied per-route inside (the OAuth callback is open).
 app.use('/api/google', googleRoutes);
 app.use('/api/locker', authMiddleware, lockerRoutes);
+// Native bookings — writes only. Reads still go browser→Supabase under RLS.
+app.use('/api/bookings', authMiddleware, bookingRoutes);
 app.use('/api/skills', authMiddleware, skillRoutes);
 app.use('/api/marketing', strictLimiter, authMiddleware, marketingRoutes);
 // Platform billing — the creator's subscription TO SkillJoy (paywall). Direct
@@ -291,7 +294,10 @@ cron.schedule('0 * * * *', () => {
         const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
         const { data: due, error } = await supabase
             .from('bookings')
-            .select('id, start_time, buyer_id, creator_id, skill:skills(title)')
+            .select(`id, start_time, end_time, buyer_id, creator_id, meeting_url, buyer_timezone,
+                     skill:skills(title),
+                     creator:profiles!bookings_creator_id_fkey(full_name, booking_timezone),
+                     buyer:profiles!bookings_buyer_id_fkey(full_name)`)
             .eq('status', 'booked')
             .eq('reminder_sent', false)
             .gte('start_time', now.toISOString())
@@ -299,15 +305,50 @@ cron.schedule('0 * * * *', () => {
         if (error) { console.error('Booking reminder cron error:', error.message); return; }
         if (!due?.length) { console.log('No bookings to remind.'); return; }
 
+        // Each party's reminder is rendered in THEIR timezone. Formatting once
+        // with toLocaleString() (as this did) silently used the server's zone,
+        // so a Railway box on UTC told everyone the wrong hour.
+        const fmt = (iso, tz) => new Date(iso).toLocaleString('en-US', {
+            timeZone: tz || 'UTC', weekday: 'short', month: 'short', day: 'numeric',
+            hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+        });
+
         for (const b of due) {
-            const when = new Date(b.start_time).toLocaleString();
             const title = b.skill?.title ?? 'your session';
+            const creatorName = b.creator?.full_name || 'your host';
+            const buyerName = b.buyer?.full_name || 'your client';
+            const creatorTz = b.creator?.booking_timezone || 'UTC';
+            const buyerTz = b.buyer_timezone || creatorTz;
+
             await supabase.from('notifications').insert([
                 { user_id: b.buyer_id, type: 'booking_reminder', title: 'Session reminder ⏰',
-                  message: `Your "${title}" session is coming up at ${when}.`, related_type: null },
+                  message: `Your "${title}" session is coming up at ${fmt(b.start_time, buyerTz)}.`, related_type: null },
                 { user_id: b.creator_id, type: 'booking_reminder', title: 'Session reminder ⏰',
-                  message: `You have a "${title}" session at ${when}.`, related_type: null },
+                  message: `You have a "${title}" session at ${fmt(b.start_time, creatorTz)}.`, related_type: null },
             ]);
+
+            // Email is best-effort and must not block the flag below — if a send
+            // throws and we skip the update, the next hourly run re-notifies the
+            // same booking, and it does that every hour until the session starts.
+            const parties = [
+                { id: b.creator_id, isCreator: true, tz: creatorTz, me: creatorName, them: buyerName, cta: `${process.env.FRONTEND_URL || ''}/dashboard` },
+                { id: b.buyer_id, isCreator: false, tz: buyerTz, me: buyerName, them: creatorName, cta: `${process.env.FRONTEND_URL || ''}/locker` },
+            ];
+            for (const p of parties) {
+                try {
+                    const to = await getUserEmail(p.id);
+                    if (!to) continue;
+                    const mail = templates.bookingReminder({
+                        recipientName: p.me, otherPartyName: p.them, isCreator: p.isCreator,
+                        title, when: fmt(b.start_time, p.tz), timezoneNote: `Shown in ${p.tz}`,
+                        meetingUrl: b.meeting_url || '', manageUrl: p.cta,
+                    });
+                    await sendEmail({ to, subject: mail.subject, html: mail.html });
+                } catch (e) {
+                    console.error('Booking reminder email failed:', e.message);
+                }
+            }
+
             await supabase.from('bookings').update({ reminder_sent: true }).eq('id', b.id);
         }
         console.log(`✅ Booking reminders sent for ${due.length} booking(s).`);

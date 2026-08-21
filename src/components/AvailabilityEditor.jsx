@@ -34,7 +34,13 @@ export default function AvailabilityEditor() {
     }
   }, [profile]);
 
-  function dayWindow(key) { return av.weekly?.[key]?.[0]; }
+  // weekly[day] has ALWAYS been an array of windows — generateSlots() already
+  // loops `for (const r of rules)`. Only this editor was capped at one window,
+  // so a coach who works 9–12 and 2–5 had to publish their lunch break as
+  // bookable. Reading/writing the whole array is the entire change; the slot
+  // engine and storage format need nothing.
+  function dayWindows(key) { return av.weekly?.[key] ?? null; }
+
   function toggleDay(key) {
     setAv(prev => {
       const weekly = { ...prev.weekly };
@@ -43,13 +49,70 @@ export default function AvailabilityEditor() {
       return { ...prev, weekly };
     });
   }
-  function setTime(key, field, value) {
-    setAv(prev => ({ ...prev, weekly: { ...prev.weekly, [key]: [{ ...prev.weekly[key][0], [field]: value }] } }));
+
+  function setTime(key, idx, field, value) {
+    setAv(prev => ({
+      ...prev,
+      weekly: {
+        ...prev.weekly,
+        [key]: prev.weekly[key].map((w, i) => i === idx ? { ...w, [field]: value } : w),
+      },
+    }));
   }
+
+  // New windows start after the last one ends, so the common case (add an
+  // afternoon block) needs no editing — and it never opens a window that
+  // overlaps the one above it.
+  function addWindow(key) {
+    setAv(prev => {
+      const cur = prev.weekly[key] ?? [];
+      const lastEnd = cur.length ? cur[cur.length - 1].end : '09:00';
+      const [h, m] = lastEnd.split(':').map(Number);
+      const startH = Math.min(h + 1, 22);
+      const start = `${String(startH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      const end = `${String(Math.min(startH + 3, 23)).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      return { ...prev, weekly: { ...prev.weekly, [key]: [...cur, { start, end }] } };
+    });
+  }
+
+  function removeWindow(key, idx) {
+    setAv(prev => {
+      const next = (prev.weekly[key] ?? []).filter((_, i) => i !== idx);
+      const weekly = { ...prev.weekly };
+      // Removing the last window means the day is off — same state as unchecking
+      // it, so it collapses rather than leaving an empty array that renders as
+      // "available, zero hours".
+      if (next.length === 0) delete weekly[key];
+      else weekly[key] = next;
+      return { ...prev, weekly };
+    });
+  }
+
   function setMinutes(m) { setAv(prev => ({ ...prev, slot_minutes: m })); }
+
+  // Windows that start before they end, or overlap a sibling, silently produce
+  // zero slots in generateSlots() — the creator sees a working editor and an
+  // empty calendar. Surfacing it here is far cheaper than debugging that later.
+  function dayProblem(windows) {
+    if (!windows) return null;
+    for (const w of windows) if (w.start >= w.end) return 'Ends before it starts';
+    const sorted = [...windows].sort((a, b) => a.start.localeCompare(b.start));
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].start < sorted[i - 1].end) return 'Windows overlap';
+    }
+    return null;
+  }
 
   async function save() {
     setErr('');
+    // Refuse to persist hours that can only generate zero slots. Saving them
+    // "works" and then the booking page is silently empty — the worst failure
+    // mode, because nothing looks broken.
+    const broken = DAYS.filter(d => dayProblem(av.weekly?.[d.key]));
+    if (broken.length) {
+      setErr(`Fix ${broken.map(d => d.label).join(', ')} — a window ends before it starts or overlaps another.`);
+      return;
+    }
     try {
       await saveAvailability(user.id, av, tz);
       if (profile) setProfile({ ...profile, booking_availability: av, booking_timezone: tz });
@@ -84,18 +147,29 @@ export default function AvailabilityEditor() {
 
       <div className="av-days">
         {DAYS.map(d => {
-          const w = dayWindow(d.key);
+          const windows = dayWindows(d.key);
+          const problem = dayProblem(windows);
           return (
-            <div key={d.key} className={`av-day${w ? ' on' : ''}`}>
+            <div key={d.key} className={`av-day${windows ? ' on' : ''}${problem ? ' bad' : ''}`}>
               <label className="av-daytoggle">
-                <input type="checkbox" checked={!!w} onChange={() => toggleDay(d.key)} />
+                <input type="checkbox" checked={!!windows} onChange={() => toggleDay(d.key)} />
                 <span>{d.label}</span>
               </label>
-              {w ? (
-                <div className="av-times">
-                  <input type="time" value={w.start} onChange={e => setTime(d.key, 'start', e.target.value)} />
-                  <span>–</span>
-                  <input type="time" value={w.end} onChange={e => setTime(d.key, 'end', e.target.value)} />
+              {windows ? (
+                <div className="av-windows">
+                  {windows.map((w, i) => (
+                    <div key={i} className="av-times">
+                      <input type="time" value={w.start} onChange={e => setTime(d.key, i, 'start', e.target.value)} />
+                      <span>–</span>
+                      <input type="time" value={w.end} onChange={e => setTime(d.key, i, 'end', e.target.value)} />
+                      <button type="button" className="av-wbtn av-wdel" onClick={() => removeWindow(d.key, i)}
+                        aria-label={`Remove ${d.label} window ${i + 1}`}>✕</button>
+                    </div>
+                  ))}
+                  <div className="av-wfoot">
+                    <button type="button" className="av-wbtn av-wadd" onClick={() => addWindow(d.key)}>+ Add window</button>
+                    {problem && <span className="av-problem">{problem}</span>}
+                  </div>
                 </div>
               ) : <span className="av-off">Unavailable</span>}
             </div>
@@ -116,11 +190,20 @@ export default function AvailabilityEditor() {
         .av-sub { color:var(--text-muted); font-size:13px; margin:2px 0 14px; }
         .av-slot { display:flex; align-items:center; gap:10px; margin-bottom:14px; font-size:14px; font-weight:600; }
         .av-days { display:flex; flex-direction:column; gap:8px; }
-        .av-day { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--r); }
+        .av-day { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--r); }
         .av-day.on { border-color:var(--accent-mid); background:var(--accent-light); }
-        .av-daytoggle { display:flex; align-items:center; gap:8px; font-weight:600; cursor:pointer; }
+        .av-day.bad { border-color:var(--danger-mid, #f0b8b0); background:var(--danger-light, #FBE4E0); }
+        .av-daytoggle { display:flex; align-items:center; gap:8px; font-weight:600; cursor:pointer; padding-top:6px; }
+        .av-windows { display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
         .av-times { display:flex; align-items:center; gap:6px; }
         .av-times input { padding:5px 8px; }
+        .av-wfoot { display:flex; align-items:center; gap:10px; }
+        .av-wbtn { border:1px solid var(--border-strong); background:var(--surface); border-radius:var(--r-sm);
+                   font-size:12px; font-weight:700; color:var(--text-secondary); cursor:pointer; padding:4px 10px; }
+        .av-wbtn:hover { border-color:var(--accent); color:var(--accent); }
+        .av-wdel { width:28px; padding:4px 0; flex-shrink:0; }
+        .av-wdel:hover { border-color:#CE4A3E; color:#CE4A3E; }
+        .av-problem { font-size:11.5px; font-weight:700; color:#CE4A3E; }
         .av-off { color:var(--text-muted); font-size:13px; }
         .av-err { color:var(--accent); font-size:13px; margin-top:10px; }
       `}</style>

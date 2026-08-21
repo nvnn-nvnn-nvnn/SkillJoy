@@ -119,7 +119,7 @@ Think through each addition and what it's for:
 > gets whatever default you choose. Pick the one where live storefronts render
 > **exactly as they do today** after the migration. New behaviour should be opt-in.
 
-Write the migration as `028_link_placement.sql`. Copy the house style from
+Write the migration as `029_link_placement.sql`. Copy the house style from
 `026_product_groups.sql`: `ADD COLUMN IF NOT EXISTS`, idempotent, a comment
 saying *why*.
 
@@ -140,13 +140,21 @@ same groups.
 Sit with this before coding. The questions, in order:
 
 1. **What is the unit being sorted?** Right now it's a skill. It needs to become
-   something that could be either. What's the minimum shape both can wear —
-   `{ id, sortKey, render }`? Something richer?
+   something that could be either. What's the minimum shape both can wear?
+   > ✅ **ANSWERED — plan 03 §3.** `{ type, group, data }`. No `sortKey`: see #2.
+   > `type` is what the renderer switches on at the leaf, `group` is the merge
+   > key, `data` is the raw row.
 2. **How do the two orderings interleave?** Skills have `sort_order`, links have
    their own. Two independent sequences both starting at 0. If a skill and a
-   link both say `sort_order: 2`, who wins — and is that *stable* across
-   reloads? (An unstable sort here means the page visibly reshuffles between
-   visits. Ask what the tiebreaker is.)
+   link both say `2`, who wins — and is that *stable* across reloads?
+   > ✅ **ANSWERED — they don't interleave.** Within a group: all products first
+   > (`sort_order`), then all links (`position`). The two sequences were never
+   > coordinated, so *any* interleaving rule yields an order the creator can
+   > neither predict nor control. Removing the ambiguity beats picking a
+   > tiebreaker. A creator who wants a link first puts it in its own section.
+   > Note both lists **already arrive sorted** from the DB, so nothing is sorted
+   > client-side — you bucket by group preserving arrival order, then
+   > concatenate products-then-links.
 3. **What creates a group?** Today a group exists because a skill has that
    label. Should a group with *only* links appear? What about a link whose label
    matches no existing group — new section, or dropped?
