@@ -192,7 +192,7 @@ export default function AvailabilityEditor() {
         .av-days { display:flex; flex-direction:column; gap:8px; }
         .av-day { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--r); }
         .av-day.on { border-color:var(--accent-mid); background:var(--accent-light); }
-        .av-day.bad { border-color:var(--danger-mid, #f0b8b0); background:var(--danger-light, #FBE4E0); }
+        .av-day.bad { border-color:var(--danger-mid, var(--danger-mid)); background:var(--danger-light, var(--danger-light)); }
         .av-daytoggle { display:flex; align-items:center; gap:8px; font-weight:600; cursor:pointer; padding-top:6px; }
         .av-windows { display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
         .av-times { display:flex; align-items:center; gap:6px; }
@@ -202,8 +202,8 @@ export default function AvailabilityEditor() {
                    font-size:12px; font-weight:700; color:var(--text-secondary); cursor:pointer; padding:4px 10px; }
         .av-wbtn:hover { border-color:var(--accent); color:var(--accent); }
         .av-wdel { width:28px; padding:4px 0; flex-shrink:0; }
-        .av-wdel:hover { border-color:#CE4A3E; color:#CE4A3E; }
-        .av-problem { font-size:11.5px; font-weight:700; color:#CE4A3E; }
+        .av-wdel:hover { border-color:var(--danger); color:var(--danger); }
+        .av-problem { font-size:11.5px; font-weight:700; color:var(--danger); }
         .av-off { color:var(--text-muted); font-size:13px; }
         .av-err { color:var(--accent); font-size:13px; margin-top:10px; }
       `}</style>

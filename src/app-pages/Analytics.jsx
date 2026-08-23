@@ -1,12 +1,14 @@
 import { useUser } from '@/lib/stores';
 import TrendChart from '@/components/TrendChart';
 import AnalyticsCards from '@/components/AnalyticsCards';
+import { useAuthGate } from '@/lib/useAuthGate';
 
 // Dedicated analytics page (its own header-nav destination). The daily trend
 // line is the headline; the funnel + engagement cards sit below it.
 export default function Analytics() {
   const user = useUser();
-  if (!user) return <div className="an-wrap"><p className="an-muted">Please log in.</p><Styles /></div>;
+  const gate = useAuthGate();
+  if (gate) return gate;
 
   return (
     <div className="an-wrap">

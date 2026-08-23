@@ -1,424 +1,243 @@
 import { Link } from 'react-router-dom';
+import {
+    FileText, GraduationCap, CalendarClock, Repeat, Video, Magnet,
+    Palette, CreditCard, BarChart3, Mail, Check, ArrowRight,
+} from 'lucide-react';
+
+// About — what SkillJoy actually is, described from the shipped feature set.
+//
+// Rewritten 2026-08-21 for two reasons:
+//  1. Same hardcoded-colour bug as the legal pages (note 169). This page had
+//     literal section backgrounds (#E0D5C3, #EDE6D8) that never responded to
+//     data-theme="dark", plus a footer whose buttons were rgba(255,255,255,…)
+//     over a section with no background — white on cream, invisible in LIGHT
+//     mode, which is how long it had been broken without anyone noticing.
+//  2. The copy predated most of the product. It described "files, videos,
+//     prompts, guides" as the whole offer, with no mention of courses with
+//     progress tracking, native 1:1 booking, memberships, or the growth tools.
+//     Everything below is a feature that exists today.
+
+const SELLS = [
+    { icon: FileText, label: 'Digital products', blurb: 'Files, templates, presets — delivered instantly after checkout.' },
+    { icon: GraduationCap, label: 'Courses', blurb: 'Modules and lessons with per-lesson progress tracking.' },
+    { icon: CalendarClock, label: '1:1 coaching', blurb: 'Bookable slots from your own weekly availability.' },
+    { icon: Repeat, label: 'Memberships', blurb: 'Recurring access that renews on its own.' },
+    { icon: Video, label: 'Webinars', blurb: 'Ticketed live or evergreen events.' },
+    { icon: Magnet, label: 'Lead magnets', blurb: 'Free downloads that grow your email list.' },
+];
+
+const RUNS = [
+    { icon: Palette, label: 'A page that looks like you', points: ['Themes, fonts, colours and effects', 'Links, socials and products in one place', 'Group products under your own headings'] },
+    { icon: CreditCard, label: 'Checkout that just works', points: ['Stripe checkout, including guest buyers', 'Discount codes and order bumps', 'Payouts straight to your bank'] },
+    { icon: BarChart3, label: 'Numbers you can act on', points: ['Views, sales and revenue over time', 'Your own tracking pixels', 'Buyer reviews on every product'] },
+    { icon: Mail, label: 'An audience you own', points: ['Capture emails from your page', 'Send broadcasts to your list', 'Free lead magnets to grow it'] },
+];
 
 export default function AboutPage() {
     return (
         <>
             <title>About — SkillJoy</title>
 
-            <main className="ab-main">
-
-                {/* ── Header ── */}
-                <section className="ab-header">
-                    <Link to="/" className="ab-back">← Back to Home</Link>
+            <main className="ab">
+                {/* ── Hero ── */}
+                <section className="ab-hero">
+                    <Link to="/" className="ab-back">← Back to home</Link>
                     <p className="ab-eyebrow">About SkillJoy</p>
                     <h1 className="ab-title">Everything you sell.<br /><em>One link.</em></h1>
-                    <p className="ab-subtitle">
-                        SkillJoy is the creator storefront for turning what you know into income — courses,
-                        templates, prompts, and coaching, all from a single link you share everywhere.
+                    <p className="ab-sub">
+                        SkillJoy is a storefront for people who know things. Package what you know into
+                        products, courses and coaching, put it all behind a single link, and get paid —
+                        without stitching together five different tools.
+                    </p>
+                    <div className="ab-herocta">
+                        <Link to="/login" className="ab-btn ab-btn-primary">Start your store <ArrowRight size={15} /></Link>
+                        <Link to="/how-it-works" className="ab-btn">How it works</Link>
+                    </div>
+                </section>
+
+                {/* ── What you can sell ── */}
+                <section className="ab-band">
+                    <div className="ab-wrap">
+                        <p className="ab-label">What you can sell</p>
+                        <h2 className="ab-h2">Six kinds of product, one builder</h2>
+                        <p className="ab-lede">
+                            Every product is built from the same content blocks — video, files, written guides,
+                            prompts, and booking. Mix them however the thing you&rsquo;re selling needs.
+                        </p>
+                        <div className="ab-grid">
+                            {/* Icon assigned as a VARIABLE, not destructured in the
+                                param list: eslint's varsIgnorePattern ^[A-Z_] covers
+                                variables but not args, so the destructured form trips
+                                no-unused-vars. Same shape AddProduct.jsx already uses. */}
+                            {SELLS.map(s => {
+                                const Icon = s.icon;
+                                return (
+                                    <div key={s.label} className="ab-card">
+                                        <span className="ab-cardicon"><Icon size={19} /></span>
+                                        <h3 className="ab-cardtitle">{s.label}</h3>
+                                        <p className="ab-cardblurb">{s.blurb}</p>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </section>
+
+                {/* ── The business side ── */}
+                <section className="ab-wrap ab-section">
+                    <p className="ab-label">The rest of the business</p>
+                    <h2 className="ab-h2">Not just a page — the whole shop</h2>
+                    <div className="ab-runs">
+                        {RUNS.map(r => {
+                            const Icon = r.icon;
+                            return (
+                                <div key={r.label} className="ab-run">
+                                    <span className="ab-runicon"><Icon size={18} /></span>
+                                    <div>
+                                        <h3 className="ab-cardtitle">{r.label}</h3>
+                                        <ul className="ab-runlist">
+                                            {r.points.map(p => (
+                                                <li key={p}><Check size={13} strokeWidth={3} /> {p}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <p className="ab-fee">
+                        Building and customizing your page is free. Selling runs on a platform plan with a
+                        14-day free trial — and you keep the bulk of every sale, with the fee shown plainly
+                        at checkout.
                     </p>
                 </section>
 
-                {/* ── Two value props ── */}
-                <section className="ab-modes">
-                    <div className="ab-container">
-
-                        {/* Sell anything */}
-                        <div className="ab-mode ab-mode-swap">
-                            <div className="ab-mode-badge">Create</div>
-                            <div className="ab-mode-icon" aria-hidden="true">🧩</div>
-                            <h2 className="ab-mode-title">Sell what you know</h2>
-                            <p className="ab-mode-desc">
-                                Package your expertise into Skills — mix files, videos, prompts, guides, and live
-                                coaching into one product, set a price, and publish in minutes.
-                            </p>
-
-                            <ul className="ab-mode-list">
-                                <li>
-                                    <span className="ab-check">✓</span>
-                                    <span>Digital downloads, <strong>courses</strong>, and <strong>coaching</strong> calls</span>
-                                </li>
-                                <li>
-                                    <span className="ab-check">✓</span>
-                                    <span>Build a Skill from drag-and-drop content blocks</span>
-                                </li>
-                                <li>
-                                    <span className="ab-check">✓</span>
-                                    <span>One-time prices or recurring memberships</span>
-                                </li>
-                                <li>
-                                    <span className="ab-check">✓</span>
-                                    <span>Push updates to buyers and keep earning over time</span>
-                                </li>
-                            </ul>
-
-                            <div className="ab-mode-example">
-                                <span className="ab-example-chip ab-chip-teach">skilljoy.me/@you</span>
-                                <span className="ab-example-arrow">→</span>
-                                <span className="ab-example-chip ab-chip-learn">your storefront</span>
-                            </div>
-
-                            <Link to="/login" className="ab-mode-cta ab-cta-swap">Start your store →</Link>
-                        </div>
-
-                        {/* Run your business */}
-                        <div className="ab-mode ab-mode-gig">
-                            <div className="ab-mode-badge ab-badge-gig">Grow</div>
-                            <div className="ab-mode-icon" aria-hidden="true">📈</div>
-                            <h2 className="ab-mode-title">Run your whole business</h2>
-                            <p className="ab-mode-desc">
-                                Your storefront comes with everything you need to sell and grow — secure checkout,
-                                analytics, an email audience, and automatic payouts.
-                            </p>
-
-                            <ul className="ab-mode-list">
-                                <li>
-                                    <span className="ab-check ab-check-gig">✓</span>
-                                    <span>One-tap checkout powered by <strong>Stripe</strong></span>
-                                </li>
-                                <li>
-                                    <span className="ab-check ab-check-gig">✓</span>
-                                    <span>Sales analytics, discount codes, and upsells</span>
-                                </li>
-                                <li>
-                                    <span className="ab-check ab-check-gig">✓</span>
-                                    <span>Build an email list and capture leads automatically</span>
-                                </li>
-                                <li>
-                                    <span className="ab-check ab-check-gig">✓</span>
-                                    <span>Earnings paid out straight to your bank</span>
-                                </li>
-                            </ul>
-
-                            <div className="ab-escrow-note">
-                                <span className="ab-escrow-icon">🔒</span>
-                                <span>Keep the bulk of every sale — SkillJoy charges only a small platform fee, shown transparently at checkout.</span>
-                            </div>
-
-                            <Link to="/how-it-works" className="ab-mode-cta ab-cta-gig">See how it works →</Link>
-                        </div>
-
-                    </div>
-                </section>
-
-                {/* ── Origin story ── */}
-                <section className="ab-story">
-                    <div className="ab-container ab-story-inner">
+                {/* ── Story ── */}
+                <section className="ab-band">
+                    <div className="ab-wrap ab-story">
                         <div>
-                            <p className="ab-section-label">The story</p>
-                            <h2 className="ab-story-title">Built for creators.<br />Kept going.</h2>
-                            <p className="ab-story-body">
-                                SkillJoy started with a simple observation: the people who teach, design, and create
-                                the most online often have the hardest time getting paid for it — juggling link-in-bios,
-                                checkout tools, and payment processors. We built one place to do it all: a storefront
-                                where you can package your expertise, sell it from a single link, and get paid.
+                            <p className="ab-label">The story</p>
+                            <h2 className="ab-h2">Built for creators. Kept going.</h2>
+                            <p className="ab-storybody">
+                                SkillJoy started from a simple observation: the people who teach, design and
+                                create the most online often have the hardest time getting paid for it —
+                                juggling a link-in-bio here, a checkout tool there, a payment processor
+                                somewhere else. We built one place to do all of it: package your expertise,
+                                sell it from a single link, get paid.
                             </p>
                         </div>
                         <div className="ab-founder">
-                            <div className="ab-founder-avatar">RC</div>
+                            <div className="ab-avatar">RC</div>
                             <div>
-                                <div className="ab-founder-name">Ryan Chang</div>
-                                <div className="ab-founder-role">Founder · Designer · Developer</div>
-                                <div className="ab-founder-award">🏆 3rd place — Northland Hackathon</div>
+                                <div className="ab-fname">Ryan Chang</div>
+                                <div className="ab-frole">Founder · Designer · Developer</div>
+                                <div className="ab-faward">🏆 3rd place — Northland Hackathon</div>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                {/* ── Footer links ── */}
-                <section className="ab-footer-links">
-                    <div className="ab-container">
-                        <Link to="/login" className="ab-footer-btn ab-footer-btn-primary">Start your store</Link>
-                        <Link to="/how-it-works" className="ab-footer-btn">How it works</Link>
-                        <Link to="/contact" className="ab-footer-btn">Contact</Link>
+                {/* ── Footer CTA ── */}
+                <section className="ab-wrap ab-footer">
+                    <h2 className="ab-h2 ab-center">Ready to claim your link?</h2>
+                    <div className="ab-footerbtns">
+                        <Link to="/login" className="ab-btn ab-btn-primary">Start your store <ArrowRight size={15} /></Link>
+                        <Link to="/how-it-works" className="ab-btn">How it works</Link>
+                        <Link to="/contact" className="ab-btn">Contact</Link>
                     </div>
                 </section>
-
             </main>
 
-            <style>{`
-                .ab-main { display: flex; flex-direction: column; min-height: 100vh; }
-                .ab-container { max-width: 1000px; margin: 0 auto; padding: 0 24px; width: 100%; }
-
-                /* Header */
-                .ab-header {
-                    padding: 48px 24px 64px;
-                    max-width: 1000px;
-                    margin: 0 auto;
-                    width: 100%;
-                    background: var(--bg);
-                }
-                .ab-back {
-                    display: inline-block;
-                    font-size: 13px;
-                    font-weight: 500;
-                    color: var(--text);
-                    background: var(--surface);
-                    border: 1px solid var(--border);
-                    border-radius: var(--r-full);
-                    padding: 6px 14px;
-                    text-decoration: none;
-                    margin-bottom: 36px;
-                    transition: all 0.15s;
-                }
-                .ab-back:hover { border-color: var(--border-strong); text-decoration: none; box-shadow: var(--shadow-sm); }
-                .ab-eyebrow {
-                    font-size: 11px;
-                    font-weight: 700;
-                    letter-spacing: 0.12em;
-                    text-transform: uppercase;
-                    color: rgba(0,0,0,0.45);
-                    margin-bottom: 14px;
-                }
-                .ab-title {
-                    font-size: clamp(32px, 5vw, 56px);
-                    line-height: 1.08;
-                    letter-spacing: -0.02em;
-                    color: var(--text);
-                    margin-bottom: 16px;
-                }
-                .ab-title em { font-style: italic; color: var(--text-secondary); }
-                .ab-subtitle {
-                    font-size: clamp(15px, 2vw, 17px);
-                    color: var(--text-secondary);
-                    line-height: 1.65;
-                    max-width: 520px;
-                }
-
-                /* Two modes */
-                .ab-modes {
-                    background: #E0D5C3;
-                    padding: 64px 0;
-                    border-top: 1px solid var(--border);
-                }
-                .ab-modes .ab-container {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 20px;
-                }
-                .ab-mode {
-                    border: 1px solid var(--border);
-                    border-radius: var(--r-xl);
-                    padding: 36px;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 0;
-                    position: relative;
-                    background: #EDE6D8;
-                    transition: box-shadow 0.2s;
-                }
-                .ab-mode:hover { box-shadow: var(--shadow); }
-                .ab-mode-swap { border-top: 3px solid #000; }
-                .ab-mode-gig  { border-top: 3px solid #000; }
-
-                .ab-mode-badge {
-                    display: inline-flex;
-                    align-items: center;
-                    font-size: 10px;
-                    font-weight: 700;
-                    letter-spacing: 0.1em;
-                    text-transform: uppercase;
-                    background: var(--surface-alt);
-                    border: 1px solid var(--border);
-                    color: var(--text-secondary);
-                    border-radius: var(--r-full);
-                    padding: 3px 10px;
-                    width: fit-content;
-                    margin-bottom: 20px;
-                }
-                .ab-badge-gig { background: var(--accent-light); border-color: var(--accent-mid); color: var(--accent); }
-
-                .ab-mode-icon { font-size: 32px; margin-bottom: 14px; line-height: 1; }
-                .ab-mode-title { font-size: 26px; margin-bottom: 12px; color: var(--text); }
-                .ab-mode-desc  { font-size: 14px; line-height: 1.7; color: var(--text-secondary); margin-bottom: 24px; }
-
-                .ab-mode-list {
-                    list-style: none;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 10px;
-                    margin-bottom: 24px;
-                }
-                .ab-mode-list li {
-                    display: flex;
-                    align-items: flex-start;
-                    gap: 10px;
-                    font-size: 14px;
-                    color: var(--text-secondary);
-                    line-height: 1.5;
-                }
-                .ab-check {
-                    font-size: 12px;
-                    font-weight: 700;
-                    color: var(--surface);
-                    background: var(--text);
-                    border-radius: 50%;
-                    width: 20px; height: 20px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    flex-shrink: 0;
-                    margin-top: 1px;
-                }
-                .ab-check-gig { background: var(--accent); }
-
-                /* Swap example chips */
-                .ab-mode-example {
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                    flex-wrap: wrap;
-                    padding: 14px 16px;
-                    background: var(--surface-alt);
-                    border: 1px solid var(--border);
-                    border-radius: var(--r);
-                    margin-bottom: 24px;
-                }
-                .ab-example-chip {
-                    font-size: 12px;
-                    font-weight: 600;
-                    padding: 4px 12px;
-                    border-radius: var(--r-full);
-                }
-                .ab-chip-teach { background: var(--primary-light); border: 1px solid var(--primary-mid); color: var(--text); }
-                .ab-chip-learn { background: var(--green-light); border: 1px solid var(--green-mid); color: var(--green); }
-                .ab-example-arrow { font-size: 16px; color: var(--text-muted); }
-
-                /* Escrow note */
-                .ab-escrow-note {
-                    display: flex;
-                    align-items: flex-start;
-                    gap: 10px;
-                    font-size: 13px;
-                    color: var(--text-secondary);
-                    line-height: 1.55;
-                    background: var(--accent-light);
-                    border: 1px solid var(--accent-mid);
-                    border-radius: var(--r);
-                    padding: 12px 14px;
-                    margin-bottom: 24px;
-                }
-                .ab-escrow-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
-
-                /* Local disclaimer */
-                .ab-local-note {
-                    display: flex;
-                    align-items: flex-start;
-                    gap: 10px;
-                    font-size: 12px;
-                    color: var(--text-secondary);
-                    line-height: 1.55;
-                    background: var(--surface-alt);
-                    border: 1px solid var(--border);
-                    border-radius: var(--r);
-                    padding: 11px 13px;
-                    margin-bottom: 24px;
-                }
-                .ab-local-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
-
-                /* CTAs */
-                .ab-mode-cta {
-                    font-size: 14px;
-                    font-weight: 600;
-                    padding: 12px 20px;
-                    border-radius: var(--r-full);
-                    text-decoration: none;
-                    display: inline-flex;
-                    align-items: center;
-                    transition: all 0.15s;
-                    width: fit-content;
-                    margin-top: auto;
-                }
-                .ab-cta-swap { background: var(--text); color: var(--surface); }
-                .ab-cta-swap:hover { background: #222; text-decoration: none; color: var(--surface); }
-                .ab-cta-gig  { background: var(--accent); color: #fff; }
-                .ab-cta-gig:hover  { background: var(--accent-hover); text-decoration: none; color: #fff; }
-
-                /* Story */
-                .ab-story {
-                    background: var(--surface-alt);
-                    border-top: 1px solid var(--border);
-                    border-bottom: 1px solid var(--border);
-                    padding: 64px 0;
-                }
-                .ab-story-inner {
-                    display: grid;
-                    grid-template-columns: 1fr auto;
-                    gap: 48px;
-                    align-items: start;
-                }
-                .ab-section-label {
-                    font-size: 11px;
-                    font-weight: 700;
-                    letter-spacing: 0.12em;
-                    text-transform: uppercase;
-                    color: var(--accent);
-                    margin-bottom: 12px;
-                }
-                .ab-story-title { font-size: clamp(24px, 3vw, 36px); color: var(--text); margin-bottom: 16px; letter-spacing: -0.015em; }
-                .ab-story-body  { font-size: 15px; line-height: 1.75; color: var(--text-secondary); max-width: 520px; }
-
-                .ab-founder {
-                    display: flex;
-                    align-items: center;
-                    gap: 16px;
-                    background: var(--surface);
-                    border: 1px solid var(--border);
-                    border-radius: var(--r-lg);
-                    padding: 20px 24px;
-                    flex-shrink: 0;
-                    min-width: 240px;
-                }
-                .ab-founder-avatar {
-                    width: 52px; height: 52px;
-                    border-radius: 50%;
-                    background: var(--text);
-                    color: var(--surface);
-                    font-size: 18px;
-                    font-weight: 700;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    flex-shrink: 0;
-                }
-                .ab-founder-name  { font-size: 16px; font-weight: 700; margin-bottom: 2px; }
-                .ab-founder-role  { font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
-                .ab-founder-award { font-size: 12px; color: var(--text-muted); }
-
-                /* Footer links */
-                .ab-footer-links {
-                    padding: 40px 0 56px;
-                }
-                .ab-footer-links .ab-container {
-                    display: flex;
-                    gap: 10px;
-                    flex-wrap: wrap;
-                }
-                .ab-footer-btn {
-                    font-size: 14px;
-                    font-weight: 500;
-                    padding: 10px 20px;
-                    border-radius: var(--r-full);
-                    border: 1px solid rgba(255,255,255,0.3);
-                    color: rgba(255,255,255,0.85);
-                    background: rgba(255,255,255,0.1);
-                    text-decoration: none;
-                    transition: all 0.15s;
-                    backdrop-filter: blur(4px);
-                }
-                .ab-footer-btn:hover { background: rgba(255,255,255,0.2); text-decoration: none; color: #fff; }
-                .ab-footer-btn-primary { background: var(--surface); color: var(--text); border-color: transparent; }
-                .ab-footer-btn-primary:hover { background: #fffff5; color: var(--text); }
-
-                /* Mobile */
-                @media (max-width: 700px) {
-                    .ab-header { padding: 36px 16px 48px; }
-                    .ab-modes .ab-container { grid-template-columns: 1fr; }
-                    .ab-story-inner { grid-template-columns: 1fr; gap: 32px; }
-                    .ab-founder { min-width: unset; }
-                    .ab-mode { padding: 24px; }
-                    .ab-footer-links .ab-container { padding: 0 16px; }
-                }
-            `}</style>
+            <Styles />
         </>
     );
+}
+
+function Styles() {
+    return <style>{`
+    .ab { display:flex; flex-direction:column; }
+    .ab-wrap { max-width:960px; margin:0 auto; padding:0 24px; width:100%; }
+
+    /* ── Hero ── */
+    .ab-hero { max-width:960px; margin:0 auto; padding:52px 24px 64px; width:100%; }
+    .ab-back { display:inline-block; font-size:13px; font-weight:600; color:var(--text-secondary);
+      background:var(--surface); border:1px solid var(--border); border-radius:var(--r-full);
+      padding:7px 15px; text-decoration:none; margin-bottom:34px; transition:border-color .15s ease, color .15s ease; }
+    .ab-back:hover { border-color:var(--accent); color:var(--accent); }
+    .ab-eyebrow { font-size:11px; font-weight:800; letter-spacing:.12em; text-transform:uppercase;
+      color:var(--accent); margin-bottom:14px; }
+    .ab-title { font-size:clamp(34px,5.5vw,58px); line-height:1.06; letter-spacing:-.03em;
+      color:var(--text); font-family:var(--font-display); font-weight:800; margin:0 0 18px; }
+    .ab-title em { font-style:italic; font-weight:700; color:var(--accent); }
+    .ab-sub { font-size:clamp(15px,2vw,17.5px); color:var(--text-secondary); line-height:1.7; max-width:56ch; margin:0; }
+    .ab-herocta { display:flex; flex-wrap:wrap; gap:10px; margin-top:30px; }
+
+    .ab-btn { display:inline-flex; align-items:center; gap:7px; padding:12px 22px; border-radius:var(--r-full);
+      border:1.5px solid var(--border-strong); background:var(--surface); color:var(--text);
+      font-size:14.5px; font-weight:700; text-decoration:none; transition:border-color .15s ease, color .15s ease, background .15s ease; }
+    .ab-btn:hover { border-color:var(--accent); color:var(--accent); text-decoration:none; }
+    /* Was rgba(255,255,255,…) over a section with NO background — white on cream,
+       i.e. invisible in light mode. Tokens now, so both themes work. */
+    .ab-btn-primary { background:var(--accent); border-color:var(--accent); color:var(--accent-foreground); }
+    .ab-btn-primary:hover { background:var(--accent-hover); border-color:var(--accent-hover); color:var(--accent-foreground); }
+
+    /* ── Bands ── */
+    .ab-band { background:var(--surface-alt); border-top:1px solid var(--border);
+      border-bottom:1px solid var(--border); padding:62px 0; }
+    .ab-section { padding:62px 24px; }
+    .ab-label { font-size:11px; font-weight:800; letter-spacing:.12em; text-transform:uppercase;
+      color:var(--accent); margin:0 0 12px; }
+    .ab-h2 { font-size:clamp(24px,3.2vw,34px); font-weight:800; letter-spacing:-.02em; line-height:1.2;
+      color:var(--text); font-family:var(--font-display); margin:0 0 14px; }
+    .ab-center { text-align:center; }
+    .ab-lede { font-size:15.5px; line-height:1.7; color:var(--text-secondary); max-width:60ch; margin:0 0 30px; }
+
+    /* ── Product grid ── */
+    .ab-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; }
+    .ab-card { padding:22px; border:1px solid var(--border); border-radius:var(--r-lg);
+      background:var(--surface); transition:border-color .15s ease, transform .15s ease, box-shadow .15s ease; }
+    .ab-card:hover { border-color:var(--accent-mid); transform:translateY(-2px); box-shadow:var(--shadow); }
+    .ab-cardicon { display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px;
+      border-radius:var(--r); background:var(--accent-light); color:var(--accent-hover); margin-bottom:13px; }
+    .ab-cardtitle { font-size:16px; font-weight:750; color:var(--text); margin:0 0 6px; }
+    .ab-cardblurb { font-size:13.5px; line-height:1.6; color:var(--text-secondary); margin:0; }
+
+    /* ── Business list ── */
+    .ab-runs { display:grid; grid-template-columns:1fr 1fr; gap:26px 40px; margin-top:26px; }
+    .ab-run { display:flex; gap:14px; align-items:flex-start; }
+    .ab-runicon { flex-shrink:0; display:inline-flex; align-items:center; justify-content:center;
+      width:38px; height:38px; border-radius:var(--r); background:var(--accent-light); color:var(--accent-hover); }
+    .ab-runlist { list-style:none; margin:8px 0 0; padding:0; display:flex; flex-direction:column; gap:7px; }
+    .ab-runlist li { display:flex; gap:8px; align-items:flex-start; font-size:13.5px; line-height:1.5; color:var(--text-secondary); }
+    .ab-runlist svg { flex-shrink:0; margin-top:3px; color:var(--accent); }
+    .ab-fee { margin:34px 0 0; padding:15px 18px; border-radius:var(--r); background:var(--accent-light);
+      border:1px solid var(--accent-mid); font-size:13.5px; line-height:1.65; color:var(--text-secondary); }
+
+    /* ── Story ── */
+    .ab-story { display:grid; grid-template-columns:1fr auto; gap:44px; align-items:start; }
+    .ab-storybody { font-size:15px; line-height:1.78; color:var(--text-secondary); max-width:56ch; margin:0; }
+    .ab-founder { display:flex; align-items:center; gap:15px; background:var(--surface);
+      border:1px solid var(--border); border-radius:var(--r-lg); padding:20px 24px; flex-shrink:0; min-width:250px; }
+    .ab-avatar { width:52px; height:52px; border-radius:var(--r-full); background:var(--accent);
+      color:var(--accent-foreground); font-size:18px; font-weight:800; display:flex; align-items:center;
+      justify-content:center; flex-shrink:0; }
+    .ab-fname { font-size:16px; font-weight:750; color:var(--text); }
+    .ab-frole { font-size:13px; color:var(--text-secondary); margin-top:2px; }
+    .ab-faward { font-size:12px; color:var(--text-muted); margin-top:6px; }
+
+    /* ── Footer ── */
+    .ab-footer { padding:62px 24px 84px; }
+    .ab-footerbtns { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:22px; }
+
+    @media (max-width:760px) {
+      .ab-hero { padding:34px 18px 46px; }
+      .ab-wrap { padding:0 18px; }
+      .ab-band { padding:44px 0; }
+      .ab-section, .ab-footer { padding:44px 18px; }
+      .ab-runs { grid-template-columns:1fr; gap:22px; }
+      .ab-story { grid-template-columns:1fr; gap:28px; }
+      .ab-founder { min-width:0; }
+    }
+    @media (prefers-reduced-motion: reduce) { .ab-card:hover { transform:none; } }
+  `}</style>;
 }

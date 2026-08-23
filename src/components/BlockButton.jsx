@@ -81,7 +81,7 @@ export default function BlockButton({ userId, initialState = false, onBlock, onU
                     color: 'var(--text-muted)', cursor: 'pointer',
                     fontFamily: 'inherit', transition: 'color 0.15s, border-color 0.15s',
                 }}
-                onMouseOver={e => { e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fca5a5'; }}
+                onMouseOver={e => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.borderColor = 'var(--danger-mid)'; }}
                 onMouseOut={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
             >
                 🚫 Block user
@@ -103,7 +103,7 @@ export default function BlockButton({ userId, initialState = false, onBlock, onU
                                 disabled={loading}
                                 onClick={handleBlock}
                                 style={{
-                                    flex: 1, background: '#dc2626', border: 'none', color: '#fff',
+                                    flex: 1, background: 'var(--danger-solid)', border: 'none', color: '#fff',
                                     padding: '10px 18px', borderRadius: 8, fontSize: 14,
                                     fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
                                     opacity: loading ? 0.6 : 1,

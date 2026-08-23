@@ -63,7 +63,7 @@ export default function VerifyCollegePage() {
             )}
 
             {status === 'error' && (
-                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 16, padding: '40px 32px' }}>
+                <div style={{ background: 'var(--danger-light)', border: '1px solid #fecaca', borderRadius: 16, padding: '40px 32px' }}>
                     <div style={{ fontSize: 48, marginBottom: 16 }}>❌</div>
                     <h2 style={{ fontWeight: 700, marginBottom: 8 }}>Verification failed</h2>
                     <p style={{ color: '#991b1b', marginBottom: 24 }}>{message}</p>

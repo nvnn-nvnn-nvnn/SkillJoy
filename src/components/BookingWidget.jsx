@@ -192,7 +192,7 @@ function BWStyles() {
                background:var(--accent); color:var(--accent-foreground); font-size:14px; font-weight:700; text-decoration:none; }
     .bw-join:hover { background:var(--accent-hover); }
     .bw-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-    .bw-cancel:hover { color:#CE4A3E; }
+    .bw-cancel:hover { color:var(--danger); }
     .bw-moving { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
                  background:var(--accent-light); border:1px solid var(--accent-mid); border-radius:var(--r);
                  padding:10px 12px; margin-bottom:12px; font-size:13.5px; color:var(--accent-hover); }

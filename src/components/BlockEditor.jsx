@@ -247,7 +247,7 @@ export default function BlockEditor({ block, index, total, creatorId, skillId, o
         /* Link field — icon prefix so it reads as a URL input. */
         .be-linkfield { display:flex; align-items:center; gap:8px; border:1.5px solid var(--border-strong); border-radius:var(--r); padding:0 12px; background:var(--surface); }
         .be-linkfield:focus-within { border-color:var(--accent); }
-        .be-linkfield.bad { border-color:#CE4A3E; }
+        .be-linkfield.bad { border-color:var(--danger); }
         .be-linkfield-icon { color:var(--text-muted); flex-shrink:0; }
         .be-linkinput { flex:1; border:none; padding:10px 0; background:transparent; font-size:14px; }
         .be-linkinput:focus { outline:none; }

@@ -100,7 +100,7 @@ function LivePreview({ theme, name, handle, avatar, bio, location, socials, skil
   ].filter(Boolean).join(' ');
   const style = {
     '--accent': theme.accent,
-    '--lp-card-bg': `color-mix(in srgb, var(--lp-surface) ${theme.card_opacity ?? 100}%, transparent)`,
+    '--lp-card-bg': `color-mix(in srgb, ${theme.card_color || 'var(--lp-surface)'} ${theme.card_opacity ?? 100}%, transparent)`,
     '--lp-card-blur': `${theme.card_blur ?? 0}px`,
     '--lp-item-bg': `color-mix(in srgb, var(--lp-surface) ${theme.product_opacity ?? 100}%, transparent)`,
     '--lp-item-blur': `${theme.product_blur ?? 0}px`,
@@ -112,6 +112,10 @@ function LivePreview({ theme, name, handle, avatar, bio, location, socials, skil
     '--lp-glow': glowOn ? `${(theme.glow_intensity ?? 0) * 0.65}px` : '0px',
     '--lp-glow-strong': glowOn ? `${(theme.glow_intensity ?? 0) * 1.4}px` : '0px',
     '--lp-icon-glow': glowOn ? `${(theme.icon_glow ?? 10) * 0.65}px` : '0px', // preview ~65% scale
+    // Cover-banner height at preview scale. Set here rather than in CSS so it
+    // stays next to the other preview-scale factors — 150 is ~0.5 of the live
+    // 300px, matching the preview frame's own reduction.
+    '--lp-cover-h': '150px',
   };
   if (theme.text_color) style['--lp-text'] = theme.text_color;
   if (theme.title_color) style['--lp-title'] = theme.title_color;
@@ -131,7 +135,7 @@ function LivePreview({ theme, name, handle, avatar, bio, location, socials, skil
       {theme.banner_url && theme.banner_style === 'cover' && (
         <div className="lp-coverbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} aria-hidden="true" />
       )}
-      <div className={`lp-inner${theme.banner_url && theme.banner_style !== 'cover' ? ' lp-hasbanner' : ''}${theme.card_opacity === 0 ? ' lp-ghost' : ''}${theme.profile_fx && theme.profile_fx !== 'none' ? ` lp-pfx-${theme.profile_fx}` : ''}`}>
+      <div className={`lp-inner${theme.banner_url && theme.banner_style !== 'cover' ? ' lp-hasbanner' : ''}${theme.banner_url && theme.banner_style === 'cover' ? ' lp-inner-cover' : ''}${theme.card_opacity === 0 ? ' lp-ghost' : ''}${theme.profile_fx && theme.profile_fx !== 'none' ? ` lp-pfx-${theme.profile_fx}` : ''}`}>
         {theme.banner_url && theme.banner_style !== 'cover' && (
           <div className="lp-panelbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} />
         )}
@@ -188,6 +192,7 @@ export default function StorefrontEditor() {
   const [savingBgVideo, setSavingBgVideo] = useState(false);
   const [savingAudio, setSavingAudio] = useState(false);
   const [savingCursor, setSavingCursor] = useState(false);
+  const [savingLinkCover, setSavingLinkCover] = useState(null); // id of the link uploading, or null
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState('');
   const [subTab, setSubTab] = useState('customize');
@@ -332,6 +337,25 @@ export default function StorefrontEditor() {
   async function createLink() { try { const l = await addLink(user.id, { label: 'New link', url: '', position: links.length }); setLinks([...links, l]); } catch (e) { setErr(e.message); } }
   function patchLinkLocal(id, patch) { setLinks(ls => ls.map(l => l.id === id ? { ...l, ...patch } : l)); }
   async function saveLink(id, patch) { try { await updateLink(id, patch); } catch (e) { setErr(e.message); } }
+  // Per-link cover upload. Can't reuse uploadTo(): that writes a THEME key, while
+  // this writes a row. Holds the id of the link currently uploading (not a bool)
+  // so only that row shows "Uploading…" instead of every row at once.
+  async function onLinkCover(id, e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Same rule as a product cover — it is the same kind of asset in the same
+    // bucket, so it gets the same 5MB / images-only limit (note 159).
+    const check = validateUpload('cover', file);
+    if (!check.ok) { setErr(check.error); e.target.value = ''; return; }
+    setErr('');
+    setSavingLinkCover(id);
+    try {
+      const url = await uploadBanner(user.id, file);
+      patchLinkLocal(id, { cover_url: url });
+      await saveLink(id, { cover_url: url });
+    } catch (err2) { setErr(err2.message); }
+    finally { setSavingLinkCover(null); if (e.target) e.target.value = ''; }
+  }
   async function removeLinkRow(id) { setLinks(ls => ls.filter(l => l.id !== id)); try { await deleteLink(id); } catch (e) { setErr(e.message); } }
 
   // ── Sections ──────────────────────────────────────────────────────────────
@@ -474,6 +498,21 @@ export default function StorefrontEditor() {
                 <Field label="Bio weight"><Slider value={theme.bio_weight ?? 400} min={300} max={800} step={100} onChange={v => set({ bio_weight: v })} /></Field>
                 <Field label="Bio glow"><Slider value={theme.bio_glow ?? 0} min={0} max={20} suffix="px" onChange={v => set({ bio_glow: v })} /></Field>
                 <p className="std-note">Size, boldness &amp; accent glow for your bio.</p>
+                <Field label="Profile card colour">
+                  <div className="std-colorrow">
+                    <input type="color" value={theme.card_color || (theme.mode === 'dark' ? '#191B1F' : '#FFFFFF')}
+                      onChange={e => set({ card_color: e.target.value })} />
+                    <span>{theme.card_color || 'Theme surface'}</span>
+                    {theme.card_color && (
+                      <button className="std-removebtn" onClick={() => set({ card_color: '' })}><X size={13} /> Reset</button>
+                    )}
+                  </div>
+                  <p className="std-note" style={{ marginTop: 6 }}>
+                    {theme.card_color
+                      ? 'Fixed colour — it no longer follows light/dark mode, so check both.'
+                      : 'Following your theme surface, which adapts to light and dark.'}
+                  </p>
+                </Field>
                 <Field label="Profile card opacity"><Slider value={theme.card_opacity ?? 100} min={0} max={100} suffix="%" onChange={v => set({ card_opacity: v })} /></Field>
                 <Field label="Profile card blur (glass)"><Slider value={theme.card_blur ?? 0} min={0} max={24} suffix="px" onChange={v => set({ card_blur: v })} /></Field>
                 <Field label="Profile card motion"><Seg value={theme.profile_fx || 'none'} onChange={v => set({ profile_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'glow', label: 'Glow' }, { v: 'float', label: 'Float' }]} /></Field>
@@ -844,6 +883,62 @@ export default function StorefrontEditor() {
                         options={[{ v: 'profile', label: 'Profile' }, { v: 'products', label: 'Featured' }]}
                       />
                     </div>
+
+                    {/* Card-only fields. Hidden on a profile pill because it
+                        renders NONE of them — showing a cover uploader there
+                        would promise something that can never appear. */}
+                    {l.placement === 'products' && (
+                      <div className="std-subgroup">
+                        <Field label="Subheader">
+                          <input
+                            value={l.description ?? ''}
+                            onChange={e => patchLinkLocal(l.id, { description: e.target.value })}
+                            onBlur={e => saveLink(l.id, { description: e.target.value.trim() || null })}
+                            placeholder="One line under the title"
+                            maxLength={120}
+                          />
+                        </Field>
+
+                        <Field label="Image">
+                          <div className="std-linkcover">
+                            <div
+                              className={`std-linkcover-prev${l.cover_url ? '' : ' empty'}`}
+                              style={l.cover_url ? { backgroundImage: `url(${l.cover_url})` } : {}}
+                              aria-hidden="true"
+                            >
+                              {/* Mirrors the storefront's fallback exactly (LinkCard
+                                  renders Link2 when cover_url is empty), so the
+                                  editor shows what visitors will actually see. */}
+                              {!l.cover_url && <Link2 size={20} strokeWidth={1.5} />}
+                            </div>
+                            <div className="std-linkcover-actions">
+                              <label className="std-addbtn std-linkcover-btn">
+                                <input type="file" accept="image/*" hidden
+                                  onChange={e => onLinkCover(l.id, e)} disabled={savingLinkCover === l.id} />
+                                {savingLinkCover === l.id ? 'Uploading…' : <><Camera size={14} /> {l.cover_url ? 'Change' : 'Upload'}</>}
+                              </label>
+                              {l.cover_url && (
+                                <button className="std-removebtn"
+                                  onClick={() => { patchLinkLocal(l.id, { cover_url: null }); saveLink(l.id, { cover_url: null }); }}>
+                                  <X size={13} /> Remove
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="std-note">No image? The card shows a link icon instead.</p>
+                        </Field>
+
+                        <Field label="Button text">
+                          <input
+                            value={l.cta_label ?? ''}
+                            onChange={e => patchLinkLocal(l.id, { cta_label: e.target.value })}
+                            onBlur={e => saveLink(l.id, { cta_label: e.target.value.trim() || null })}
+                            placeholder="Open"
+                            maxLength={24}
+                          />
+                        </Field>
+                      </div>
+                    )}
                   </div>
                 ))}
                 <button className="std-addbtn" onClick={createLink}><Plus size={15} /> Add link</button>
@@ -994,7 +1089,7 @@ function Styles() {
     .std-save { width:auto; min-width:0; display:inline-flex; align-items:center; gap:6px; padding:10px 20px; border-radius:var(--r-full); border:none;
       background:var(--accent); color:#fff; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 6px 18px color-mix(in srgb, var(--accent) 32%, transparent); }
     .std-save:hover { background:var(--accent-hover); }
-    .std-err { color:#b91c1c; background:#fef2f2; border:1px solid #fecaca; border-radius:var(--r); padding:9px 13px; font-size:13px; margin-bottom:12px; }
+    .std-err { color:#b91c1c; background:var(--danger-light); border:1px solid #fecaca; border-radius:var(--r); padding:9px 13px; font-size:13px; margin-bottom:12px; }
 
     /* Body: subnav | main | preview */
     .std-body { display:grid; grid-template-columns:minmax(0,1fr) 396px; gap:22px; align-items:start; }
@@ -1072,8 +1167,21 @@ function Styles() {
     /* Settings that only exist while their parent toggle is ON. The rule + inset
        make the dependency visible instead of leaving orphaned sliders floating
        at the same level as the switch that controls them. */
-    .std-subgroup { margin:4px 0 0 6px; padding:16px 0 2px 18px; border-left:2px solid color-mix(in srgb, var(--accent) 26%, transparent); }
-    .std-subgroup .std-field:last-child { margin-bottom:14px; }
+    /* Settings that only exist while their parent toggle/mode is active.
+       Reads as a contained block, not just indented text: solid accent rule,
+       real padding on all sides, rounded outer corners, and a darker fill so it
+       separates from whatever it sits inside.
+       The fill is a black OVERLAY rather than a fixed colour because this is
+       used inside two different parents (the glass .std-panel and the
+       --surface-alt .std-linkcard) — an overlay darkens both correctly instead
+       of matching one and clashing with the other. */
+    .std-subgroup { margin:10px 0 2px; padding:16px 16px 4px;
+      border-left:3px solid var(--accent); border-radius:0 var(--r) var(--r) 0;
+      background:rgb(0 0 0 / 0.055); }
+    /* A 5% black wash is invisible on an already-dark surface, so dark mode
+       needs a much heavier overlay to read as the same amount of separation. */
+    :root[data-theme="dark"] .std-subgroup { background:rgb(0 0 0 / 0.26); }
+    .std-subgroup .std-field:last-child { margin-bottom:12px; }
 
     /* ── Sections (creator-named product groups) ── */
     .std-sec { border:1.5px solid var(--border); border-radius:var(--r); padding:10px 12px 6px; margin-bottom:10px; transition:border-color .13s ease, background .13s ease; }
@@ -1161,6 +1269,19 @@ function Styles() {
     .std-linkplace { display:flex; flex-direction:column; gap:6px; margin-top:12px;
       padding-top:12px; border-top:1px solid var(--border); }
 
+    /* Cover row: a live preview beside the actions, so the icon fallback is
+       visible BEFORE uploading rather than being a surprise on the live page. */
+    .std-linkcover { display:flex; align-items:center; gap:12px; }
+    .std-linkcover-prev { flex-shrink:0; width:64px; height:64px; border-radius:var(--r);
+      background:var(--surface-alt) center/cover no-repeat; border:1px solid var(--border); }
+    .std-linkcover-prev.empty { display:flex; align-items:center; justify-content:center;
+      color:var(--text-muted); border-style:dashed; }
+    .std-linkcover-actions { display:flex; flex-direction:column; gap:6px; min-width:0; }
+    .std-linkcover-btn { width:auto; padding:8px 14px; }
+    /* The shared .std-removebtn right-aligns itself with margin-left:auto, which
+       shoves it off in this narrow column — pin it back to the left edge. */
+    .std-linkcover-actions .std-removebtn { margin:0; }
+
     .std-panel-lede { font-size:13px; color:var(--text-secondary); line-height:1.55; margin:0 0 14px; }
     .std-upload-wide { width:100%; aspect-ratio:3 / 1; }
 
@@ -1215,7 +1336,7 @@ function Styles() {
     .std-track-move .std-icobtn { width:24px; height:20px; padding:0; }
     .std-track-move .std-icobtn:disabled { opacity:.32; cursor:default; }
     .std-track-full { text-align:center; padding:11px; border:1px dashed var(--border-strong); border-radius:var(--r); }
-    .std-track-err { color:var(--danger, #dc2626); }
+    .std-track-err { color:var(--danger, var(--danger)); }
     .std-track-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:7px; }
     .std-track-name { font-size:13.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .std-track-audio { width:100%; height:32px; }
@@ -1283,10 +1404,19 @@ function Styles() {
       box-shadow:var(--shadow-lg), 0 0 var(--lp-glow-strong, 0px) color-mix(in srgb, var(--accent) 62%, transparent);
       display:flex; flex-direction:column; align-items:center; }
     .lp-panelbanner { height:78px; margin:-24px -16px 12px; background:var(--surface-alt) center/cover no-repeat; align-self:stretch; }
-    .lp-coverbanner { position:absolute; top:0; left:0; right:0; height:170px; z-index:0;
+    /* Mirrors .sf-coverbanner on the live page, at preview scale. Same single
+       driving variable and the same 0.62 card offset, so what the creator sees
+       here is the proportion they'll get — a preview with different geometry is
+       worse than no preview, because it's confidently wrong.
+       No 100vw breakout needed: the preview frame is already the full width of
+       its own container, so left/right:0 IS full bleed here. */
+    .lp-coverbanner { position:absolute; top:0; left:0; right:0; height:var(--lp-cover-h); z-index:0;
       background:center top/cover no-repeat; pointer-events:none;
-      -webkit-mask-image:linear-gradient(180deg, #000 0%, #000 45%, transparent 100%);
-      mask-image:linear-gradient(180deg, #000 0%, #000 45%, transparent 100%); }
+      -webkit-mask-image:linear-gradient(180deg, #000 0%, #000 46%, transparent 100%);
+              mask-image:linear-gradient(180deg, #000 0%, #000 46%, transparent 100%); }
+    /* Overrides the margin shorthand on .lp-inner. Same specificity, declared
+       later, so it wins on order — no !important needed. */
+    .lp-inner-cover { margin-top:calc(var(--lp-cover-h) * 0.62); }
     .lp-hasbanner .lp-avatar { margin-top:-42px; position:relative; z-index:1; }
     .lp-avatar { width:var(--lp-avatar-size, 67px); height:var(--lp-avatar-size, 67px); border-radius:var(--lp-avatar-radius, 50%); background:color-mix(in srgb, var(--accent) 16%, #fff) center/cover no-repeat;
       display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(var(--lp-avatar-size, 67px) * 0.35); color:var(--accent); border:3px solid var(--lp-surface); box-shadow:var(--shadow), 0 0 var(--lp-glow-strong, 0px) color-mix(in srgb, var(--accent) 85%, transparent); }

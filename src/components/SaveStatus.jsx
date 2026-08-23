@@ -29,11 +29,11 @@ export default function SaveStatus({ status, error, onRetry }) {
         .svst-saved  { color:var(--green, #3d8168); }
         /* Error is the one state allowed to wrap and take space — it carries a
            message and an action, and must not be squeezed to an ellipsis. */
-        .svst-error  { color:#CE4A3E; background:#FBE4E0; border:1px solid #f0b8b0;
+        .svst-error  { color:var(--danger); background:var(--danger-light); border:1px solid var(--danger-mid);
                        border-radius:var(--r-full); padding:4px 10px; white-space:normal; }
         .svst-msg { font-weight:600; }
         .svst-retry { border:none; background:none; padding:0 0 0 2px; font-size:12.5px; font-weight:800;
-                      color:#CE4A3E; text-decoration:underline; cursor:pointer; }
+                      color:var(--danger); text-decoration:underline; cursor:pointer; }
         .svst-spin { animation:svst-rot 0.8s linear infinite; }
         @keyframes svst-rot { to { transform:rotate(360deg); } }
         @media (prefers-reduced-motion: reduce) { .svst-spin { animation:none; } }

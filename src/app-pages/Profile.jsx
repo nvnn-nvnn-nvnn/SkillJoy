@@ -6,8 +6,10 @@ import { listPublishedSkills } from '@/lib/skills';
 import { apiFetch } from '@/lib/api';
 import ReportModal from '@/components/ReportModal';
 import BlockButton from '@/components/BlockButton';
-import { Camera, Check, Pencil, ExternalLink, Store, Settings, LogOut, Flag, RefreshCw, Eye, EyeOff, Mail, Phone } from 'lucide-react';
+import { Camera, Check, Pencil, ExternalLink, Store, Settings, LogOut, Flag, RefreshCw, Eye, EyeOff, Mail, Phone, Sparkles } from 'lucide-react';
 import { PROFILE_CARD_COLORS, cardColorVars } from '@/lib/profileCard';
+import { getBillingStatus, trialDaysLeft } from '@/lib/billing';
+import SetupChecklist from '@/components/SetupChecklist';
 
 // Partial masks. These keep enough shape to identify WHICH value is on file
 // (the domain, the last four digits) while hiding the part that identifies the
@@ -60,6 +62,7 @@ export default function ProfilePage() {
     const [showContact, setShowContact] = useState(false);
 
     const [stripeStatus, setStripeStatus] = useState(null);
+    const [billing, setBilling] = useState(null);   // null = still loading
     const [stripeEarnings, setStripeEarnings] = useState(null);
 
     const isOwnProfile = !userId || userId === user?.id;
@@ -138,12 +141,21 @@ export default function ProfilePage() {
         }
     }
 
-    async function handleStripeOnboard() {
-        const res = await apiFetch('/api/stripe-connect/onboard', { method: 'POST' });
-        const data = await res.json();
-        if (!res.ok) { console.error(data.error); return; }
-        window.location.href = data.url;
-    }
+    // (Stripe Connect onboarding used to be kicked off from here. It now lives
+    // in SetupChecklist, alongside the platform plan, so the two Stripe
+    // relationships are set up from one place — see note 172.)
+
+    // Plan badge. `null` while billing is still resolving — deliberately NOT
+    // defaulted to "Free", which would flash the wrong answer at a paying user
+    // for as long as the request takes.
+    const planBadge = (!isOwnProfile || billing === null) ? null
+        : billing.status === 'active'
+            ? { tone: 'pro', label: 'Pro', title: 'Pro plan active' }
+        : billing.status === 'trialing'
+            ? { tone: 'trial', label: `Pro trial · ${trialDaysLeft(billing.trial_ends_at)}d left`, title: 'Free trial of Pro' }
+        : ['past_due', 'unpaid'].includes(billing.status)
+            ? { tone: 'warn', label: 'Payment issue', title: 'Your storefront is paused' }
+        : { tone: 'free', label: 'Free plan', title: 'Upgrade to sell' };
 
     // Handle-change cooldown (server-enforced; this is display logic only).
     const USERNAME_COOLDOWN_DAYS = 15;
@@ -216,6 +228,7 @@ export default function ProfilePage() {
             window.history.replaceState({}, '', '/profile');
         }
         checkStripeStatus(); // eslint-disable-line react-hooks/set-state-in-effect
+        getBillingStatus().then(setBilling).catch(() => setBilling({ status: 'none' }));
     }, [isOwnProfile]);
 
     useEffect(() => {
@@ -275,11 +288,23 @@ export default function ProfilePage() {
 
                     <div className="pf-id">
                         {isOwnProfile && editMode ? (
-                            <input className="pf-nameinput" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Your name" />
+                            <input className="pf-nameinput" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Preferred name" />
                         ) : (
                             <div className="pf-namerow">
                                 <h1 className="pf-name">{profile.full_name || 'Unnamed'}</h1>
                                 {profile.stripe_onboarded && <span className="pf-verified"><Check size={12} /> Verified</span>}
+                                {/* Plan badge — own profile only. Another user's
+                                    billing row is owner-read under RLS, so there is
+                                    genuinely nothing to render for a visitor. It
+                                    shows "Free" rather than hiding: the ask was to
+                                    see whether you're Pro *or not*, and an absent
+                                    badge is ambiguous with "still loading". */}
+                                {isOwnProfile && planBadge && (
+                                    <span className={`pf-plan pf-plan-${planBadge.tone}`} title={planBadge.title}>
+                                        {planBadge.tone === 'pro' && <Sparkles size={11} />}
+                                        {planBadge.label}
+                                    </span>
+                                )}
                             </div>
                         )}
                         {profile.username && !editMode && (
@@ -364,6 +389,13 @@ export default function ProfilePage() {
                     </div>
                 )}
 
+                {/* ── Ready to sell ──
+                    Sits ABOVE payouts on purpose: the payouts card alone made
+                    creators think Stripe Connect was the only money setup, then
+                    a paywall appeared at publish with no explanation. This shows
+                    both Stripe relationships side by side, labelled by direction. */}
+                {isOwnProfile && <SetupChecklist />}
+
                 {/* ── Contact details (own only) ──
                     Masked by default. The mask keeps the shape of the value
                     (domain, last 4 digits) so you can confirm WHICH address or
@@ -414,12 +446,17 @@ export default function ProfilePage() {
                     </section>
                 )}
 
-                {/* ── Payouts (own only) ── */}
-                {isOwnProfile && (
+                {/* ── Payouts (own only) ──
+                    Renders ONLY once payouts are connected. The "Set up payouts"
+                    CTA that used to live here is now one row of SetupChecklist
+                    above — two cards asking for the same thing, three inches
+                    apart, reads as two different requirements. What this card
+                    still uniquely offers is the earnings breakdown and the
+                    Stripe dashboard link, neither of which belongs in a
+                    checklist. */}
+                {isOwnProfile && stripeStatus?.onboarded && (
                     <section className="pf-card">
                         <h2 className="pf-cardtitle">Payouts</h2>
-                        {stripeStatus?.onboarded ? (
-                            <>
                                 <div className="pf-payhead">
                                     <span className="pf-ok"><Check size={14} /> Payouts active</span>
                                     <button className="pf-icobtn" onClick={checkStripeStatus} title="Refresh"><RefreshCw size={14} /></button>
@@ -445,13 +482,6 @@ export default function ProfilePage() {
                                     const data = await res.json();
                                     if (data.url) window.open(data.url, '_blank');
                                 }}>Open Stripe dashboard <ExternalLink size={13} /></button>
-                            </>
-                        ) : (
-                            <>
-                                <p className="pf-muted">Connect Stripe to receive money from your sales — it handles bank transfers for you.</p>
-                                <button className="btn btn-primary" onClick={handleStripeOnboard}>Set up payouts</button>
-                            </>
-                        )}
                     </section>
                 )}
             </div>
@@ -517,6 +547,10 @@ function Styles() {
         .pf-id { flex: 1; min-width: 0; padding-top: 4px; }
         .pf-namerow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .pf-name { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; margin: 0; color: var(--text); }
+        .pf-plan { display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; padding:3px 10px; border-radius:var(--r-full); border:1px solid var(--border); background:var(--surface-alt); color:var(--text-muted); white-space:nowrap; }
+        .pf-plan-pro   { background:var(--accent); border-color:var(--accent); color:var(--accent-foreground); }
+        .pf-plan-trial { background:var(--accent-light); border-color:var(--accent-mid); color:var(--accent-hover); }
+        .pf-plan-warn  { background:var(--danger-light); border-color:var(--danger-mid); color:var(--danger); }
         .pf-verified { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--accent-hover); background: var(--accent-light); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); padding: 3px 10px; border-radius: var(--r-full); }
         .pf-handle { display: inline-block; margin-top: 5px; font-size: 14px; font-weight: 600; color: var(--accent); text-decoration: none; }
         .pf-handle:hover { text-decoration: underline; }
@@ -534,7 +568,7 @@ function Styles() {
         .pf-stat { display: flex; flex-direction: column; gap: 2px; }
         .pf-statv { font-size: 22px; font-weight: 800; color: var(--text); }
         .pf-statl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
-        .pf-err { margin-top: 16px; color: #dc2626; font-size: 14px; }
+        .pf-err { margin-top: 16px; color: var(--danger); font-size: 14px; }
 
         .pf-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
         .pf-actbtn { display: inline-flex; align-items: center; gap: 7px; min-width: 0; width: auto; padding: 9px 16px; border-radius: var(--r-full); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font-size: 13.5px; font-weight: 600; cursor: pointer; text-decoration: none; transition: border-color .14s, color .14s, transform .14s; }

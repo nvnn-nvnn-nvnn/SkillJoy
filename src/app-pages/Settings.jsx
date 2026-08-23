@@ -41,6 +41,10 @@ export default function SettingsPage() {
     // (you'd be typing into dots), so this flips the input TYPE instead —
     // the familiar password-reveal affordance, applied to both at once.
     const [showContact, setShowContact] = useState(false);
+    // Separate from showContact on purpose: revealing your email is a much
+    // smaller exposure than revealing a password you're mid-way through typing,
+    // so one control shouldn't unmask both.
+    const [showPasswords, setShowPasswords] = useState(false);
     const [billingModal, setBillingModal] = useState(null); // null | 'no-account' | 'has-products'
     const [billingErr, setBillingErr] = useState('');
     const [theme, setThemeState] = useState(getTheme());
@@ -227,10 +231,26 @@ export default function SettingsPage() {
                 <div className="sj-divider" />
 
                 <div className="sj-field">
-                    <label className="sj-label">Change password</label>
-                    <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="Current password" className="sj-input" style={{ marginBottom: 8 }} />
-                    <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="New password" className="sj-input" style={{ marginBottom: 8 }} />
-                    <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirm new password" className="sj-input" style={{ marginBottom: 12 }} />
+                    <div className="sj-section-head" style={{ marginBottom: 8 }}>
+                        <label className="sj-label" style={{ margin: 0 }}>Change password</label>
+                        {/* One toggle for all three fields. Revealing only "new"
+                            while "confirm" stays masked is the worst of both — you
+                            still can't verify they match, which is the actual reason
+                            people want to see a password in the first place. */}
+                        <button
+                            type="button"
+                            className="sj-eye"
+                            onClick={() => setShowPasswords(v => !v)}
+                            aria-pressed={showPasswords}
+                            aria-label={showPasswords ? 'Hide passwords' : 'Show passwords'}
+                        >
+                            {showPasswords ? <EyeOff size={15} /> : <Eye size={15} />}
+                            {showPasswords ? 'Hide' : 'Show'}
+                        </button>
+                    </div>
+                    <input type={showPasswords ? 'text' : 'password'} value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="Current password" className="sj-input" autoComplete="current-password" style={{ marginBottom: 8 }} />
+                    <input type={showPasswords ? 'text' : 'password'} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="New password" className="sj-input" autoComplete="new-password" style={{ marginBottom: 8 }} />
+                    <input type={showPasswords ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirm new password" className="sj-input" autoComplete="new-password" style={{ marginBottom: 12 }} />
                     <button className="sj-btn sj-btn-ghost" onClick={updatePassword} disabled={saving || !currentPassword || !newPassword}>
                         Update password
                     </button>
@@ -310,7 +330,7 @@ export default function SettingsPage() {
                                 </p>
                             )}
                             {billing.status === 'past_due' && (
-                                <p style={{ margin: 0, color: '#dc2626' }}>
+                                <p style={{ margin: 0, color: 'var(--danger)' }}>
                                     <strong>Payment issue</strong> — your storefront is paused. Update your card to bring it back.
                                 </p>
                             )}
@@ -438,20 +458,20 @@ export default function SettingsPage() {
             </section>
 
             {/* Danger Zone */}
-            <section className="sj-card" style={{ borderColor: '#fca5a5' }}>
-                <h2 className="sj-section-title" style={{ color: '#dc2626' }}>Danger Zone</h2>
+            <section className="sj-card" style={{ borderColor: 'var(--danger-mid)' }}>
+                <h2 className="sj-section-title" style={{ color: 'var(--danger)' }}>Danger Zone</h2>
                 {!showDeleteConfirm ? (
                     <div>
                         <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 12 }}>
                             Permanently delete your account and all associated data. This cannot be undone.
                         </p>
-                        <button className="sj-btn" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fca5a5' }} onClick={() => setShowDeleteConfirm(true)}>
+                        <button className="sj-btn" style={{ background: 'var(--danger-light)', color: 'var(--danger)', border: '1px solid var(--danger-mid)' }} onClick={() => setShowDeleteConfirm(true)}>
                             Delete account
                         </button>
                     </div>
                 ) : (
                     <div>
-                        <p style={{ fontSize: 14, color: '#dc2626', fontWeight: 600, marginBottom: 8 }}>
+                        <p style={{ fontSize: 14, color: 'var(--danger)', fontWeight: 600, marginBottom: 8 }}>
                             Type DELETE to confirm
                         </p>
                         <div className="sj-row">
@@ -463,7 +483,7 @@ export default function SettingsPage() {
                             />
                             <button
                                 className="sj-btn"
-                                style={{ background: '#dc2626', color: '#fff', border: 'none' }}
+                                style={{ background: 'var(--danger-solid)', color: '#fff', border: 'none' }}
                                 onClick={deleteAccount}
                                 disabled={deleteInput !== 'DELETE' || saving}
                             >

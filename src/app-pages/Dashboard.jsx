@@ -9,6 +9,7 @@ import AvailabilityEditor from '@/components/AvailabilityEditor';
 import AudiencePanel from '@/components/AudiencePanel';
 import DiscountsPanel from '@/components/DiscountsPanel';
 import TrialBanner from '@/components/TrialBanner';
+import { useAuthGate } from '@/lib/useAuthGate';
 
 // Phase 5 — creator dashboard: revenue, transparent payouts, analytics funnel,
 // and an exportable buyer list. See docs/v3-skill-platform/06.
@@ -36,7 +37,8 @@ export default function Dashboard() {
     }
   }, [user]);
 
-  if (!user) return <div className="db-wrap"><p className="db-muted">Please log in.</p><DashStyles /></div>;
+  const gate = useAuthGate();
+  if (gate) return gate;
 
   const revenue = (sales ?? []).reduce((s, p) => s + p.amount_cents, 0) / 100;
   const buyerCount = new Set((sales ?? []).map(p => p.buyer?.id)).size;

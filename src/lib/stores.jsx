@@ -185,6 +185,13 @@ export function AuthProvider({ children }) {
   }, [])
 
   async function loadProfile(userId) {
+    // `loading` must go back to TRUE here. It starts true, but the initial
+    // getSession() sets it false when there's no session — so on a later
+    // sign-in (onAuthStateChange → loadProfile) it was already false while
+    // `profile` was still null. Anything reading "not loading" as "profile is
+    // resolved" then saw a signed-in user with no profile and drew the wrong
+    // conclusion: the onboarding gate bounced returning users into onboarding.
+    setLoading(true)
     try {
       const { data, error } = await supabase
         .from('profiles')

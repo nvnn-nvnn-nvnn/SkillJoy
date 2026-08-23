@@ -111,25 +111,27 @@ export default function OnboardingPage() {
 
     const liveRef = useRef(null); // polite announcements for screen readers
 
-    // The "already onboarded → leave" check must run ONCE, on arrival.
+    // `startedFlow` flips the moment screen 1 writes a username. That's the ONE
+    // thing that distinguishes the two cases which otherwise look identical
+    // ("profile has a username"):
     //
-    // Screen 1 writes a username to the profiles row, so re-running this on
-    // every profile change would eject the user to /build the moment anything
-    // refreshed the store mid-survey — they'd finish step 1 and get thrown out
-    // of their own onboarding. Guarded by a ref so the redirect can only fire
-    // for someone who was ALREADY onboarded when they landed here.
-    const entryChecked = useRef(false);
+    //   arrived already onboarded  → bounce to /build
+    //   became onboarded just now  → stay, they're on screen 2 of their own flow
+    //
+    // An earlier version used a run-once ref instead. That broke sign-in: on a
+    // later auth change `loading` was already false while `profile` was still
+    // null, so the ref latched against a null profile and a returning user got
+    // stuck here. The redirect check now re-runs on every profile change, which
+    // is safe precisely because startedFlow makes the two cases distinguishable.
+    const startedFlow = useRef(false);
+    const prefilled = useRef(false);
     useEffect(() => {
-        // Wait for auth to resolve. Running while `loading` is true would latch
-        // the ref against a null profile and skip the prefill when it arrives.
         if (authLoading) return;
         if (!user) { navigate('/login'); return; }
-        if (entryChecked.current) return;
-        entryChecked.current = true;
-        if (profile?.username) { navigate('/build', { replace: true }); return; }
-        // One-time prefill from async auth data. The entryChecked ref above
-        // makes this run exactly once, which is why the usual
-        // set-state-in-effect warning no longer applies here.
+        if (profile?.username && !startedFlow.current) { navigate('/build', { replace: true }); return; }
+        if (prefilled.current) return;
+        prefilled.current = true;
+        // One-time prefill from async auth data (guarded by `prefilled` above).
         const meta = user.user_metadata || {};
         setFullName(profile?.full_name || meta.full_name || meta.name || '');
         setUsername(profile?.username ?? '');
@@ -194,6 +196,9 @@ export default function OnboardingPage() {
             setUsernameStatus('taken');
             return;
         }
+        // From here on this profile HAS a username. Tell the entry guard that we
+        // are the ones who put it there, so it stops trying to eject us to /build.
+        startedFlow.current = true;
         setStep(2);
     }
 
@@ -320,10 +325,10 @@ export default function OnboardingPage() {
                                     <p className="onb-p">This is the address you’ll share. You can change it later.</p>
 
                                     <div className="onb-field">
-                                        <label htmlFor="name">Your name</label>
+                                        <label htmlFor="name">Preferred name</label>
                                         <input id="name" type="text" value={fullName}
                                             onChange={e => { setFullName(e.target.value); if (error) setError(''); }}
-                                            placeholder="e.g. Maya Chen" autoComplete="name" />
+                                            placeholder="e.g. Maya" autoComplete="nickname" />
                                     </div>
 
                                     <div className="onb-field">
@@ -594,7 +599,7 @@ function Styles() {
       color:var(--text-muted); background:var(--border); padding:2px 7px; border-radius:var(--r-full); vertical-align:middle; }
     .onb-hint { font-size:12.5px; font-weight:500; margin-top:7px; color:var(--text-muted); }
     .onb-hint .ok, .ok { color:var(--green, #3d8168); }
-    .onb-hint .bad, .bad { color:#CE4A3E; }
+    .onb-hint .bad, .bad { color:var(--danger); }
     .onb-reveal { animation:onbReveal .22s ease; }
     @keyframes onbReveal { from { opacity:0; transform:translateY(-4px); } }
 
@@ -602,12 +607,12 @@ function Styles() {
       background:var(--surface); overflow:hidden; transition:border-color .15s ease, box-shadow .15s ease; }
     .onb-handle:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px rgb(var(--accent-rgb) / .18); }
     .onb-handle.ok { border-color:var(--green-mid, #9ecdb8); }
-    .onb-handle.bad { border-color:#CE4A3E; }
+    .onb-handle.bad { border-color:var(--danger); }
     .onb-handle-prefix { padding-left:13px; font-size:14px; color:var(--text-muted); white-space:nowrap; }
     .onb-handle input { border:none; background:none; padding:12px 6px; flex:1; min-width:0; }
     .onb-handle input:focus { outline:none; }
     .onb-handle-state { display:inline-flex; align-items:center; justify-content:center; width:34px; flex-shrink:0; color:var(--green, #3d8168); }
-    .onb-handle.bad .onb-handle-state { color:#CE4A3E; }
+    .onb-handle.bad .onb-handle-state { color:var(--danger); }
     .onb-spin { animation:onbRot .8s linear infinite; }
     @keyframes onbRot { to { transform:rotate(360deg); } }
 
@@ -651,10 +656,14 @@ function Styles() {
     .onb-skip:hover { background:var(--surface-alt); color:var(--text); }
 
     .onb-error { margin:0 0 14px; padding:10px 13px; border-radius:var(--r-sm); font-size:13px; font-weight:600;
-      color:#CE4A3E; background:#FBE4E0; border:1px solid #f0b8b0; }
+      color:var(--danger); background:var(--danger-light); border:1px solid var(--danger-mid); }
 
     /* ── Plans ── */
-    .onb-plans { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
+    /* Stacked at every width, not side-by-side. Two dense feature lists in
+       parallel columns force the eye to ping-pong to compare them; one under the
+       other is read top-to-bottom in a single pass. It also means the mobile and
+       desktop layouts are the same shape, so only one has to be got right. */
+    .onb-plans { display:flex; flex-direction:column; gap:12px; margin-bottom:14px; }
     .onb-plan { position:relative; display:flex; flex-direction:column; padding:20px 18px; border:1.5px solid var(--border);
       border-radius:var(--r-lg); background:var(--surface); }
     /* Pro is distinguished by an accent border and a flag, NOT by making Free
@@ -729,7 +738,6 @@ function Styles() {
       .onb-benefits, .onb-linkcard { display:none; }
       .onb-card { padding:24px 20px 34px; }
       .onb-h1 { font-size:22px; }
-      .onb-plans { grid-template-columns:1fr; }
       .onb-plan-pro { order:-1; }
     }
     @media (max-width:400px) {

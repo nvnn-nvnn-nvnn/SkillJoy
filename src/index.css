@@ -55,6 +55,15 @@
   --danger-mid: #FCA5A5;
   --danger-rgb: 220 38 38;
 
+  /* FILLED destructive buttons ("Delete", "Block"), where white text sits on a
+     solid red. Deliberately NOT --danger: that one is a FOREGROUND and flips
+     light in dark mode so it stays readable on dark surfaces — which would put
+     white text on a pale red button. This one has no dark override because a
+     solid button doesn't need one; white on #DC2626 is 4.83:1 in both modes.
+     (The literal this replaced, #CE4A3E, was 4.49:1 — already under AA.) */
+  --danger-solid: #DC2626;
+  --danger-solid-hover: #B91C1C;
+
   /* One unified sans across the whole product. */
   --font-display: 'DM Sans', system-ui, sans-serif;
   --font-body: 'DM Sans', system-ui, sans-serif;
@@ -96,7 +105,34 @@
   --primary: #F1EFEA;          /* ink flips light so `color:var(--primary)` stays readable */
   --primary-light: #331A14;
   --accent-light: #331A14;     /* dark-tinted coral fill instead of bright blush */
+  --accent-mid: #5E3327;       /* border partner for --accent-light */
   --danger-light: #3A1518;     /* red-50 would flashbang a dark page */
+
+  /* ── Semantic FOREGROUNDS, not just fills ────────────────────────────────
+     This block previously darkened the tinted BACKGROUNDS (--danger-light,
+     --accent-light) but left their matching foregrounds at the light-mode
+     values. That's only half a palette, and the half that's missing is the
+     readable half. Measured on the real pairs:
+
+        --danger #DC2626 on --danger-light #3A1518 ....... 3.34:1  FAIL
+        --danger #DC2626 on --surface     #191B1F ....... 3.57:1  FAIL
+        --green  #2A7A4B on --surface     #191B1F ....... 3.27:1  FAIL
+
+     The values below clear 4.5:1 on BOTH their tinted fill and plain surface,
+     so a token pair is safe to use anywhere without re-checking:
+
+        --danger #F87171 on #3A1518 5.84:1 · on surface 6.23:1
+        --green  #7BD4A0 on #12291D 8.65:1 · on surface 9.66:1              */
+  --danger: #F87171;
+  --danger-hover: #FCA5A5;
+  --danger-mid: #5E2126;
+
+  /* --green* had NO dark override at all, so --green-light stayed a bright
+     mint slab (#E6F7EE) on dark pages — used by save-confirmations, the
+     booking "confirmed" panel and the contact success state. */
+  --green: #7BD4A0;
+  --green-light: #12291D;
+  --green-mid: #2E5641;
 
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.40), 0 1px 3px rgba(0,0,0,0.30);
   --shadow: 0 2px 8px rgba(0,0,0,0.45), 0 1px 3px rgba(0,0,0,0.35);

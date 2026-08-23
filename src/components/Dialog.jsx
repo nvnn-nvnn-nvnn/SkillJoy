@@ -100,8 +100,12 @@ function DialogModal({ dialog, onConfirm, onCancel }) {
         .dlg-card { width:100%; max-width:420px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-lg); padding:26px 24px 20px; text-align:center; animation:dlg-pop .16s cubic-bezier(.2,.8,.3,1); }
         .dlg-icon { width:52px; height:52px; margin:0 auto 14px; display:flex; align-items:center; justify-content:center; font-size:24px; border-radius:var(--r-full); }
         .dlg-icon-default { background:var(--accent-light); }
+        /* Amber chip. No --warning token exists, so it carries its own dark value
+           inline rather than inventing a token for one use site. The content is an
+           emoji, so only the fill needs to change. */
         .dlg-icon-warning { background:#FBF0D9; }
-        .dlg-icon-danger  { background:#FBE4E0; }
+        :root[data-theme="dark"] .dlg-icon-warning { background:#3A2E12; }
+        .dlg-icon-danger  { background:var(--danger-light); }
         .dlg-title { font-size:19px; font-weight:800; font-family:var(--font-display); color:var(--text); margin-bottom:6px; }
         .dlg-message { font-size:14.5px; color:var(--text-secondary); line-height:1.55; margin:0 auto; max-width:34ch; }
         .dlg-actions { display:flex; gap:10px; justify-content:center; margin-top:22px; }
@@ -109,8 +113,8 @@ function DialogModal({ dialog, onConfirm, onCancel }) {
         .dlg-btn:active { transform:scale(.98); }
         .dlg-btn-confirm { background:var(--accent); color:var(--accent-foreground); }
         .dlg-btn-confirm:hover { background:var(--accent-hover); }
-        .dlg-btn-danger { background:#CE4A3E; color:#fff; }
-        .dlg-btn-danger:hover { background:#B33C31; }
+        .dlg-btn-danger { background:var(--danger-solid); color:#fff; }
+        .dlg-btn-danger:hover { background:var(--danger-solid-hover); }
         .dlg-btn-cancel { background:var(--surface); color:var(--text-secondary); border-color:var(--border-strong); }
         .dlg-btn-cancel:hover { border-color:var(--text-muted); color:var(--text); }
         .dlg-btn:focus-visible { outline:none; box-shadow:0 0 0 3px var(--accent-light); }

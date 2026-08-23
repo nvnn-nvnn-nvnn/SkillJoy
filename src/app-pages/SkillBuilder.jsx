@@ -18,6 +18,7 @@ import BackLink from '@/components/BackLink';
 import SaveStatus from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 import { useDialog } from '@/components/Dialog';
+import { useAuthGate } from '@/lib/useAuthGate';
 
 // Product `kind` (what a Skill *is*) is picked from the shared PRODUCT_TYPES
 // catalog — same source as the /build/new picker. Independent of pricing_type.
@@ -93,7 +94,11 @@ function bookingReadiness(blocks, hasSavedAvailability) {
 export default function SkillBuilder() {
   const { skillId } = useParams();
   const user = useUser();
-  if (!user) return null;
+  // Covers BOTH still-loading and genuinely-signed-out. The old
+  // `if (!user) return null` rendered a blank white page for signed-out
+  // visitors, and flashed that same blank at signed-in ones while auth resolved.
+  const gate = useAuthGate();
+  if (gate) return gate;
   return skillId
     ? <SkillEditor key={skillId} skillId={skillId} userId={user.id} />
     : <SkillList userId={user.id} />;
@@ -884,7 +889,7 @@ function BuilderStyles() {
     .sb-act-update { background:var(--surface); color:var(--text); border-color:var(--border-strong); }
     .sb-act-update:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
     .sb-act-delete { background:none; color:var(--text-muted); padding-left:14px; padding-right:14px; }
-    .sb-act-delete:hover:not(:disabled) { background:#FBE4E0; color:#CE4A3E; }
+    .sb-act-delete:hover:not(:disabled) { background:var(--danger-light); color:var(--danger); }
 
     .sb-coveredit { display:flex; align-items:center; justify-content:center; aspect-ratio:16/7; border:1.5px dashed var(--border-strong); border-radius:var(--r-lg); background:var(--surface-alt) center/cover no-repeat; cursor:pointer; margin-bottom:16px; }
     .sb-cover-cta { background:rgba(0,0,0,.55); color:#fff; padding:8px 16px; border-radius:var(--r-full); font-size:14px; font-weight:600; }

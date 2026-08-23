@@ -184,7 +184,7 @@ export default function Comments({ targetType, targetId }) {
                 }
                 .cm-post-btn:hover:not(:disabled) { background: var(--accent-hover); }
                 .cm-post-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-                .cm-error { color: #dc2626; font-size: 13px; margin: 4px 0 0; }
+                .cm-error { color: var(--danger); font-size: 13px; margin: 4px 0 0; }
                 .cm-empty { padding: 24px 0; text-align: center; color: var(--text-muted); font-size: 14px; }
                 .cm-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 16px; }
                 .cm-item { display: flex; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border); }
@@ -212,7 +212,7 @@ export default function Comments({ targetType, targetId }) {
                     font-family: inherit; transition: color 0.14s;
                 }
                 .cm-action:hover { color: var(--accent); }
-                .cm-action-delete:hover { color: #dc2626; }
+                .cm-action-delete:hover { color: var(--danger); }
             `}</style>
         </div>
     );

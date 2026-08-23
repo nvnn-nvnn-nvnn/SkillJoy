@@ -179,7 +179,7 @@ function SkillStyles() {
     .sp-desc { font-size:15px; color:var(--text-secondary); margin-top:14px; line-height:1.6; }
     .sp-reportline { margin:26px 0 0; text-align:center; }
     .sp-reportbtn { display:inline-flex; align-items:center; gap:5px; min-width:0; width:auto; padding:4px 8px; border:none; background:none; font-size:12px; font-weight:600; color:var(--text-muted); cursor:pointer; }
-    .sp-reportbtn:hover { color:#dc2626; }
+    .sp-reportbtn:hover { color:var(--danger); }
 
     .sp-stars { color:var(--accent); letter-spacing:1px; font-size:15px; }
     .sp-stars-off { color:var(--border-strong); }

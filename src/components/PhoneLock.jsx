@@ -125,7 +125,7 @@ function Styles() {
     .pl-inputicon { position:absolute; left:13px; top:50%; transform:translateY(-50%);
       display:inline-flex; color:var(--text-muted); pointer-events:none; }
     .pl-inputwrap input { padding-left:38px; }
-    .pl-err { color:#CE4A3E; font-size:13px; font-weight:600; margin:8px 0 0; }
+    .pl-err { color:var(--danger); font-size:13px; font-weight:600; margin:8px 0 0; }
     .pl-save { margin-top:14px; width:100%; padding:13px 22px; border-radius:var(--r-full); border:none;
       background:var(--accent); color:var(--accent-foreground); font-size:15px; font-weight:700;
       font-family:inherit; cursor:pointer; }

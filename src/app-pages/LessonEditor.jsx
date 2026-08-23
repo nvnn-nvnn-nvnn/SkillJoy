@@ -9,6 +9,7 @@ import BackLink from '@/components/BackLink';
 import SaveStatus from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 import { useDialog } from '@/components/Dialog';
+import { useAuthGate } from '@/lib/useAuthGate';
 
 // A lesson's own page: title + description + its content blocks. Reached from the
 // course builder's module view (/build/:skillId → click a lesson). Same debounced
@@ -142,7 +143,8 @@ export default function LessonEditor() {
     catch (e) { setBlocks(prev); save.markError(`Couldn’t reorder — ${e.message}`); }
   }
 
-  if (!user) return <div className="le-wrap"><p className="le-muted">Please log in.</p><LEStyles /></div>;
+  const gate = useAuthGate();
+  if (gate) return gate;
   if (loadErr) return <div className="le-wrap"><p className="le-muted">Couldn’t load this lesson: {loadErr}</p><BackLink to={`/build/${skillId}`}>Back to course</BackLink><LEStyles /></div>;
   if (!lesson) return <div className="le-wrap"><p className="le-muted">Loading…</p><LEStyles /></div>;
 

@@ -139,7 +139,7 @@ export default function Checkout() {
     '--accent-mid': `color-mix(in srgb, ${accent} 38%, transparent)`,
     // Accent AS text (bump price): needs 4.5:1 on the surface, else fall back.
     '--ck-accent-text': contrastRatio(accent, palette.surface) >= 4.5 ? accent : palette.text,
-    '--ck-danger': mode === 'dark' ? '#f87171' : '#dc2626',
+    '--ck-danger': mode === 'dark' ? '#f87171' : 'var(--danger)',
   } : undefined;
 
   // Stripe's PaymentElement is an iframe — themed via the appearance API, not
@@ -151,7 +151,7 @@ export default function Checkout() {
       colorPrimary: accent,
       colorBackground: palette.surface,
       colorText: palette.text,
-      colorDanger: '#dc2626',
+      colorDanger: 'var(--danger)',
       fontFamily: 'inherit',
       borderRadius: '10px',
     },
@@ -355,7 +355,7 @@ function Shell({ pin, onBack, children }) {
         .ck-wrap .btn-primary:hover:not(:disabled) { background:var(--accent-hover, var(--accent)); color:var(--accent-foreground, #fff); }
         /* Errors are semantic danger, not the creator's accent — a mint-green
            "payment failed" is a trust bug, not a style choice. */
-        .ck-err { color:var(--ck-danger, #dc2626); background:color-mix(in srgb, var(--ck-danger, #dc2626) 10%, var(--surface)); border:1px solid color-mix(in srgb, var(--ck-danger, #dc2626) 35%, var(--border)); border-radius:var(--r-sm); padding:10px 14px; font-size:14px; margin:8px 0; }
+        .ck-err { color:var(--ck-danger, var(--danger)); background:color-mix(in srgb, var(--ck-danger, var(--danger)) 10%, var(--surface)); border:1px solid color-mix(in srgb, var(--ck-danger, var(--danger)) 35%, var(--border)); border-radius:var(--r-sm); padding:10px 14px; font-size:14px; margin:8px 0; }
         .ck-summary { display:flex; gap:14px; align-items:center; padding:14px; border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); margin-bottom:20px; }
         .ck-cover { width:64px; height:64px; border-radius:var(--r); background:var(--surface-alt) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-size:26px; flex-shrink:0; }
         .ck-title { font-weight:700; color:var(--text); }
@@ -368,7 +368,7 @@ function Shell({ pin, onBack, children }) {
         .ck-prow input { flex:1; text-transform:uppercase; background:var(--surface); color:var(--text); }
         .ck-pmsg { font-size:13px; margin:0; }
         .ck-pmsg.ok { color:var(--green, #16a34a); }
-        .ck-pmsg.bad { color:var(--ck-danger, #dc2626); }
+        .ck-pmsg.bad { color:var(--ck-danger, var(--danger)); }
         .ck-bump { display:flex; gap:12px; align-items:flex-start; padding:14px; border:1.5px dashed var(--accent-mid); border-radius:var(--r-lg); background:var(--accent-light); cursor:pointer; }
         .ck-bump input { margin-top:3px; width:18px; height:18px; flex-shrink:0; accent-color:var(--accent); cursor:pointer; }
         .ck-bump-body { display:flex; flex-direction:column; gap:3px; }

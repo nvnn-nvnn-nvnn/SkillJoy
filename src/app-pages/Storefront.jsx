@@ -81,15 +81,30 @@ export default function Storefront() {
   // stores saved before this key existed have it undefined and must keep glowing.
   const glowOn = theme.glow_enabled !== false;
 
-  // Bucket products by group_label, preserving first-seen order (= sort_order).
-  // '' (no label) is one anonymous group rendered without a heading.
-  const skillGroups = [];
+  // Links split by WHERE they render. `!== 'products'` rather than
+  // `=== 'profile'` so a row with a null/unknown placement falls back to the
+  // profile pill — the behaviour every link had before migration 029.
+  const withUrl = links.filter(l => l.url);
+  const profileLinks = withUrl.filter(l => l.placement !== 'products');
+  const featuredLinks = withUrl.filter(l => l.placement === 'products');
+
+  // Bucket products AND featured links by group_label, preserving first-seen
+  // order. '' (no label) is one anonymous group rendered without a heading.
+  //
+  // Both sources arrive pre-sorted from the DB (skills by sort_order, links by
+  // position), so nothing is sorted here — items keep arrival order within a
+  // group. Products are pushed first, then links, which is exactly the ordering
+  // rule: within a section, all products then all links. The two sequences were
+  // never coordinated with each other, so interleaving them by number would
+  // produce an order the creator can neither predict nor control.
+  const itemGroups = [];
   const groupIndex = new Map();
-  for (const s of skills) {
-    const key = (s.group_label || '').trim();
-    if (!groupIndex.has(key)) { groupIndex.set(key, skillGroups.length); skillGroups.push({ label: key, items: [] }); }
-    skillGroups[groupIndex.get(key)].items.push(s);
-  }
+  const bucket = (key, item) => {
+    if (!groupIndex.has(key)) { groupIndex.set(key, itemGroups.length); itemGroups.push({ label: key, items: [] }); }
+    itemGroups[groupIndex.get(key)].items.push(item);
+  };
+  for (const s of skills) bucket((s.group_label || '').trim(), { type: 'skill', data: s });
+  for (const l of featuredLinks) bucket((l.group_label || '').trim(), { type: 'link', data: l });
 
   // Full-page background layer. 'canvas' falls through to the mode palette's --bg.
   // 'video' renders a separate <video> element below (bgStyle stays undefined).
@@ -112,7 +127,9 @@ export default function Storefront() {
 
   const wrapStyle = {
     '--accent': theme.accent,
-    '--sf-panel-bg': `color-mix(in srgb, var(--surface) ${theme.card_opacity ?? 100}%, transparent)`,
+    // card_color feeds the SAME color-mix as before, so the opacity slider keeps
+    // working identically whether or not a custom colour is set.
+    '--sf-panel-bg': `color-mix(in srgb, ${theme.card_color || 'var(--surface)'} ${theme.card_opacity ?? 100}%, transparent)`,
     '--sf-panel-blur': `${theme.card_blur ?? 0}px`,
     '--sf-item-bg': `color-mix(in srgb, var(--surface) ${theme.product_opacity ?? 100}%, transparent)`,
     '--sf-item-blur': `${theme.product_blur ?? 0}px`,
@@ -210,9 +227,9 @@ export default function Storefront() {
         )}
         {/* Link buttons live INSIDE the profile space — part of "who you are",
             visually distinct from the products section below. */}
-        {links.filter(l => l.url).length > 0 && (
+        {profileLinks.length > 0 && (
           <div className="sf-links">
-            {links.filter(l => l.url).map(l => (
+            {profileLinks.map(l => (
               <a key={l.id} href={l.url} target="_blank" rel={l.is_affiliate ? 'noopener noreferrer sponsored' : 'noopener noreferrer'} className="sf-linkbtn">
                 <span className="sf-linkbtn-label"><Link2 size={16} /> {l.label}</span>
                 {/* Visible disclosure. rel="sponsored" above is a crawler hint only —
@@ -228,31 +245,27 @@ export default function Storefront() {
       </div>
       </div>
 
-      {skills.length > 0 && skillGroups.map((g, gi) => (
+      {/* Gated on itemGroups, NOT skills.length — a store whose only content is
+          featured links still has groups to render. */}
+      {itemGroups.length > 0 && itemGroups.map((g, gi) => (
         <div key={gi} className="sf-group">
           {g.label && theme.show_group_headers !== false && (
             <div className="sf-grouphead">
               <h2 className="sf-grouptitle">{g.label}</h2>
               <span className="sf-groupline" aria-hidden="true" />
+              {/* Counts products AND links — it describes the section, and a
+                  count that ignored links would under-report what's visible. */}
               <span className="sf-groupcount">{g.items.length}</span>
             </div>
           )}
           <div className={`sf-list${theme.layout === 'grid' ? ' sf-grid' : ''}`}>
-            {g.items.map(s => (
-              <Link key={s.id} to={`/@${profile.username}/${s.id}`} className="sf-card">
-                <div className="sf-cover" style={s.cover_url ? { backgroundImage: `url(${s.cover_url})` } : {}}>
-                  {!s.cover_url && <Puzzle size={28} strokeWidth={1.5} />}
-                </div>
-                <div className="sf-card-body">
-                  <p className="sf-card-title">{s.title}</p>
-                  {s.outcome && <p className="sf-card-outcome">{s.outcome}</p>}
-                  <div className="sf-card-foot">
-                    <span className="sf-price">{s.price_cents ? `$${(s.price_cents / 100).toFixed(2)}` : 'Free'}</span>
-                    {theme.show_type_badges !== false && <TypeTag skill={s} />}
-                  </div>
-                </div>
-              </Link>
-            ))}
+            {/* The one branch. Everything above this line is source-agnostic —
+                grouping, ordering and counting never learn there are two tables.
+                Only the leaf knows. */}
+            {g.items.map(item => item.type === 'link'
+              ? <LinkCard key={`l:${item.data.id}`} link={item.data} theme={theme} />
+              : <ProductCard key={`s:${item.data.id}`} skill={item.data} handle={profile.username} theme={theme} />
+            )}
           </div>
         </div>
       ))}
@@ -399,6 +412,61 @@ function AudioPill({ tracks }) {
         )}
       </div>
     </>
+  );
+}
+
+// ── Product card — an internal route to the sales page.
+function ProductCard({ skill: s, handle, theme }) {
+  return (
+    <Link to={`/@${handle}/${s.id}`} className="sf-card">
+      <div className="sf-cover" style={s.cover_url ? { backgroundImage: `url(${s.cover_url})` } : {}}>
+        {!s.cover_url && <Puzzle size={28} strokeWidth={1.5} />}
+      </div>
+      <div className="sf-card-body">
+        <p className="sf-card-title">{s.title}</p>
+        {s.outcome && <p className="sf-card-outcome">{s.outcome}</p>}
+        <div className="sf-card-foot">
+          <span className="sf-price">{s.price_cents ? `$${(s.price_cents / 100).toFixed(2)}` : 'Free'}</span>
+          {theme.show_type_badges !== false && <TypeTag skill={s} />}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+// ── Featured link card — same skeleton as a product, four deliberate differences:
+//   1. <a target="_blank">, not <Link> — it leaves the site entirely.
+//   2. Link2 cover fallback instead of Puzzle, so the category reads at a glance.
+//   3. NO PRICE. A price says "buy this here"; a buyer who clicks expecting
+//      checkout and lands on someone else's site is a trust failure. The CTA
+//      occupies that slot instead.
+//   4. rel="sponsored" AND a visible Affiliate tag — the rel is a crawler hint
+//      only, and disclosure has to reach the reader (note 158).
+// Shares .sf-card so it inherits the creator's product opacity/blur/glow. A
+// parallel class would drift the first time products are restyled.
+function LinkCard({ link: l, theme }) {
+  return (
+    <a
+      href={l.url}
+      target="_blank"
+      rel={l.is_affiliate ? 'noopener noreferrer sponsored' : 'noopener noreferrer'}
+      className="sf-card sf-card-link"
+    >
+      <div className="sf-cover" style={l.cover_url ? { backgroundImage: `url(${l.cover_url})` } : {}}>
+        {!l.cover_url && <Link2 size={28} strokeWidth={1.5} />}
+      </div>
+      <div className="sf-card-body">
+        <p className="sf-card-title">{l.label}</p>
+        {l.description && <p className="sf-card-outcome">{l.description}</p>}
+        <div className="sf-card-foot">
+          <span className="sf-card-cta">{l.cta_label?.trim() || 'Open'} <ArrowUpRight size={14} /></span>
+          {l.is_affiliate && <span className="sf-afftag">Affiliate</span>}
+          {theme.show_type_badges !== false && (
+            <span className="sf-tag"><Link2 size={11} strokeWidth={2.4} /> Link</span>
+          )}
+        </div>
+      </div>
+    </a>
   );
 }
 
@@ -726,42 +794,59 @@ function StoreStyles() {
     .sf-panelbanner { height:150px; margin:-32px -22px 16px; background:var(--surface-alt) center/cover no-repeat; position:relative; }
     .sf-panelbanner::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg, transparent 50%, rgba(20,18,12,.28)); }
 
-    /* ── Cover banner (banner_style: 'cover') ──────────────────────────────
-       Full-bleed across the top of the page, dissolving at its lower edge.
-       Two details make it work:
-       · mask-image, NOT a gradient overlay. An overlay has to know the page
-         background to fade INTO it — which breaks the moment someone sets a
-         photo or video background. A mask fades the banner's own alpha, so
-         whatever is behind shows through correctly every time.
-       · z-index:0 with the panel above it. The banner is decorative and must
-         never sit over the avatar or intercept clicks (hence aria-hidden and
-         pointer-events:none). */
-    /* FULL-BLEED BREAKOUT. The parent .sf-wrap is a 540px centred column, so
-       left:0/right:0 would size the banner to the COLUMN, not the page — it
-       looked like a wide panel banner, not a cover. Escaping a centred parent
-       means going through the viewport: pin the element's centre to the
-       parent's centre, then give it viewport width.
+    /* ══ Cover banner (banner_style: 'cover') ══════════════════════════════
+       A hero image across the top of the PAGE that dissolves into whatever the
+       background is, with the profile card overlapping its lower third.
 
-       100vw includes the scrollbar, so this overflows by the scrollbar width
-       on desktop — "overflow-x: clip" on body (src/index.css) absorbs that.
-       clip, not hidden: hidden would make body a scroll container and break
-       position:sticky anywhere else on the site. */
-    .sf-coverbanner { position:absolute; top:0; left:50%; transform:translateX(-50%);
-      width:100vw; height:340px; z-index:0;
-      background:center top/cover no-repeat; pointer-events:none;
-      -webkit-mask-image:linear-gradient(180deg, #000 0%, #000 45%, transparent 100%);
-      mask-image:linear-gradient(180deg, #000 0%, #000 45%, transparent 100%); }
-    /* The panel has to establish its own stacking context to land above it. */
-    .sf-coverbanner ~ .sf-tiltwrap, .sf-coverbanner ~ .sf-panel { position:relative; z-index:1; }
-    /* Cover mode gives the card breathing room to sit ON the image rather than
-       starting flush at the very top. An explicit class rather than :has() —
-       the component already computes the panel's classes, so there's no reason
-       to make the stylesheet re-derive it. */
-    .sf-panel-cover { margin-top:132px; }
-    @media (max-width:640px) {
-      .sf-coverbanner { height:240px; }
-      .sf-panel-cover { margin-top:92px; }
+       ONE NUMBER drives the whole thing. --sf-cover-h is the banner height; the
+       card's offset and the fade are both derived from it, so changing the
+       height keeps the proportions instead of requiring three edits that drift.
+
+       Three things this has to get right:
+
+       1 · FULL BLEED from inside a centred column.
+           .sf-wrap is max-width:540px, so left:0/right:0 would size the banner
+           to the CARD, not the page. Escaping means going via the viewport:
+           pin the centre to the parent's centre, then take viewport width.
+           100vw includes the scrollbar, so this overflows by ~15px on desktop —
+           absorbed by "overflow-x: clip" on body (src/index.css). clip, not
+           hidden: hidden would make body a scroll container and break
+           position:sticky site-wide.
+
+       2 · MASK, not a gradient overlay.
+           An overlay must fade INTO a known colour. The page background here is
+           user-controlled and can be a photo or a video, where an overlay
+           becomes a grey smear. A mask fades the banner's own alpha, so
+           whatever sits behind shows through correctly every time.
+
+       3 · The fade must FINISH above the card's bottom edge.
+           The banner is viewport-wide but the card is only 540px, so on desktop
+           the banner is visible down both sides for its full height. If the
+           mask were still opaque where the banner ends, those side strips would
+           cut off on a hard horizontal line. Fading out by 100% avoids that.
+
+       Decorative only: aria-hidden + pointer-events:none, so it can never eat a
+       click on the avatar or a product card. */
+    .sf-wrap { --sf-cover-h: 300px; }
+
+    .sf-coverbanner {
+      position:absolute; top:0; left:50%; transform:translateX(-50%);
+      width:100vw; height:var(--sf-cover-h); z-index:0;
+      background:center top/cover no-repeat;
+      pointer-events:none;
+      -webkit-mask-image:linear-gradient(180deg, #000 0%, #000 46%, transparent 100%);
+              mask-image:linear-gradient(180deg, #000 0%, #000 46%, transparent 100%);
     }
+
+    /* Card overlaps the banner's lower ~38%. Enough image stays visible above
+       it to read as a hero rather than a stray strip, and the card lands on the
+       part of the banner that has already started fading. */
+    .sf-panel-cover { margin-top:calc(var(--sf-cover-h) * 0.62); }
+
+    @media (max-width:640px) { .sf-wrap { --sf-cover-h: 200px; } }
+    /* Very short viewports (landscape phones): a 300px hero would be the entire
+       screen before any content. */
+    @media (max-height:560px) { .sf-wrap { --sf-cover-h: 180px; } }
     .sf-panel-hasbanner .sf-avatar { margin-top:-58px; position:relative; z-index:1; }
     /* Opacity 0 → the panel becomes an invisible container (info floats on the bg). */
     .sf-panel-ghost { border-color:transparent; box-shadow:none; }
@@ -858,6 +943,13 @@ function StoreStyles() {
     .sf-card-outcome { font-size:13px; color:var(--text-secondary); margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
     .sf-card-foot { display:flex; align-items:center; gap:8px; margin-top:10px; }
     .sf-price { font-weight:800; color:var(--text); font-size:15px; }
+    /* CTA sits where a product's price sits, and matches its weight/size so the
+       two card types line up in a mixed grid. Accent-coloured, because unlike a
+       price it is an ACTION — and so it can never be mistaken for one. */
+    .sf-card-cta { display:inline-flex; align-items:center; gap:4px; font-weight:800;
+      color:var(--accent); font-size:15px; white-space:nowrap; }
+    .sf-card-cta svg { flex-shrink:0; transition:transform .16s ease; }
+    .sf-card-link:hover .sf-card-cta svg { transform:translate(2px, -2px); }
     .sf-tag { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--accent); background:color-mix(in srgb, var(--accent) 16%, transparent); border:1px solid color-mix(in srgb, var(--accent) 30%, transparent); padding:3px 9px; border-radius:var(--r-full); white-space:nowrap; }
     .sf-tag svg { flex-shrink:0; }
 

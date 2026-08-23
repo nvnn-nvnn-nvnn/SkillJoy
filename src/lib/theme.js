@@ -4,11 +4,25 @@
 
 const KEY = 'sj-theme';
 
-/** 'light' | 'dark' — defaults to the OS preference, then falls back to light. */
+/**
+ * 'light' | 'dark' — an explicit saved choice always wins; otherwise DARK.
+ *
+ * Dark is the product default rather than the OS preference. Following the OS
+ * is the usual advice, but it means the brand's first impression is decided by
+ * a setting we don't control, and half of new visitors would see a look that
+ * was never art-directed. A saved preference still overrides this, so anyone
+ * who wants light gets light and keeps it.
+ *
+ * `localStorage` can throw outright (Safari private mode, blocked site data),
+ * so the read is guarded — an exception here would take down first paint,
+ * since applyTheme() runs before render in main.jsx.
+ */
 export function getTheme() {
-  const saved = localStorage.getItem(KEY);
-  if (saved === 'light' || saved === 'dark') return saved;
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  try {
+    const saved = localStorage.getItem(KEY);
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch { /* storage unavailable — fall through to the default */ }
+  return 'dark';
 }
 
 /** Reflect a theme onto the document (no persistence). */
@@ -17,8 +31,9 @@ export function applyTheme(theme) {
   else document.documentElement.removeAttribute('data-theme');
 }
 
-/** Persist + apply. */
+/** Persist + apply. The write is guarded for the same reason as the read —
+ *  a blocked localStorage must not stop the theme from actually changing. */
 export function setTheme(theme) {
-  localStorage.setItem(KEY, theme);
+  try { localStorage.setItem(KEY, theme); } catch { /* not persisted this session */ }
   applyTheme(theme);
 }

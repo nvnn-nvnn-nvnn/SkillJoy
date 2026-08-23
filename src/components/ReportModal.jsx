@@ -111,7 +111,7 @@ export default function ReportModal({ isOpen, onClose, reportedType, reportedId,
                         </p>
 
                         {error && (
-                            <p style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{error}</p>
+                            <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>
                         )}
 
                         <div style={{ display: 'flex', gap: 10 }}>
@@ -122,7 +122,7 @@ export default function ReportModal({ isOpen, onClose, reportedType, reportedId,
                                 type="submit"
                                 disabled={submitting || !reason}
                                 style={{
-                                    flex: 1, background: '#dc2626', border: 'none', color: '#fff',
+                                    flex: 1, background: 'var(--danger-solid)', border: 'none', color: '#fff',
                                     padding: '10px 18px', borderRadius: 8, fontSize: 14,
                                     fontWeight: 600, cursor: submitting ? 'not-allowed' : 'pointer',
                                     opacity: submitting || !reason ? 0.6 : 1,

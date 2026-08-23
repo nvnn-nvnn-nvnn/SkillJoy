@@ -4,6 +4,7 @@ import { useUser } from '@/lib/stores';
 import { createSkill } from '@/lib/skills';
 import { PRODUCT_TYPES } from '@/lib/productTypes';
 import BackLink from '@/components/BackLink';
+import { useAuthGate } from '@/lib/useAuthGate';
 
 // Phase A — dedicated, type-first "Add product" page (/build/new), modeled on
 // Stan's Add-Product flow: you commit to WHAT you're making before you see any
@@ -15,7 +16,8 @@ export default function AddProduct() {
   const [creating, setCreating] = useState(null); // kind id currently being created
   const [err, setErr] = useState('');
 
-  if (!user) return null;
+  const gate = useAuthGate();
+  if (gate) return gate;
 
   async function pick(type) {
     if (!type.built || creating) return;

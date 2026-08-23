@@ -69,6 +69,7 @@ import SkillPublic from './app-pages/SkillPublic'
 import Checkout from './app-pages/Checkout'
 import Unsubscribe from './app-pages/Unsubscribe'
 import AdminPayouts from './app-pages/AdminPayouts'
+import TrialRibbon from './components/TrialRibbon'
 
 // Force a logged-in creator to finish onboarding before using the app. Fires only
 // on the authenticated app surfaces (not public/marketing/storefront pages), so an
@@ -94,6 +95,9 @@ function AppRoutes() {
   return (
     <div className="app-shell" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <OnboardingGate />
+      {/* Above the header on purpose: a trial countdown that scrolls away with
+          the page content is one a creator can spend two weeks never seeing. */}
+      <TrialRibbon />
       <Header />
       <div style={{ flex: 1 }}>
         <Routes>

@@ -37,6 +37,11 @@ export const DEFAULT_THEME = {
   // explicit override and does NOT adapt, so the editor warns on low contrast
   // rather than silently letting someone make their own name unreadable.
   name_color: '',
+  // Profile-card fill. '' = follow the mode palette's --surface (the old
+  // behaviour). A set value is mixed with card_opacity exactly the same way, so
+  // colour and transparency stay independent controls rather than one field
+  // that has to encode both.
+  card_color: '',
   show_avatar: true,        // false → hide the profile picture on the storefront
   socials: [],
   // ── Deeper theming (guns.lol-style) ──

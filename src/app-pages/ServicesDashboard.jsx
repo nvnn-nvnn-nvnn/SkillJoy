@@ -13,6 +13,7 @@ import {
 import { PRODUCT_TYPES, TYPE_BY_ID } from '@/lib/productTypes';
 import PhoneLock from '@/components/PhoneLock';
 import TrialBanner from '@/components/TrialBanner';
+import { useAuthGate } from '@/lib/useAuthGate';
 
 /*
  * ServicesDashboard — /services
@@ -200,7 +201,8 @@ export default function ServicesDashboard() {
 
   const filterTabs = [{ id: 'all', label: 'All' }, ...PRODUCT_TYPES.map(t => ({ id: t.id, label: t.label }))];
 
-  if (!user) return <div className="sv-wrap"><p className="sv-empty-loading">Please log in to manage your products.</p><Styles /></div>;
+  const gate = useAuthGate();
+  if (gate) return gate;
 
   // ── Phone gate ──
   // Phone is optional at signup but required to sell (the publish endpoint

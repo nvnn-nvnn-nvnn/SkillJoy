@@ -152,7 +152,7 @@ function Styles() {
     .bsm-steps p { margin:3px 0 0; font-size:13px; line-height:1.55; color:var(--text-secondary); }
 
     .bsm-err { margin:14px 0 0; padding:9px 12px; border-radius:var(--r-sm); font-size:13px; font-weight:600;
-      color:#CE4A3E; background:#FBE4E0; border:1px solid #f0b8b0; }
+      color:var(--danger); background:var(--danger-light); border:1px solid var(--danger-mid); }
 
     .bsm-actions { display:flex; justify-content:flex-end; gap:9px; margin-top:20px; flex-wrap:wrap; }
     .bsm-btn { padding:11px 20px; border-radius:var(--r-full); font-size:14px; font-weight:700;

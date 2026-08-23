@@ -191,7 +191,7 @@ export default function CourseStructure({ skillId, onReadyChange }) {
       <style>{`
         .cs { display:flex; flex-direction:column; gap:16px; }
         .cs-muted, .cs-empty { color:var(--text-muted); font-size:14px; }
-        .cs-err { color:#CE4A3E; background:#FBE4E0; border:1px solid #f0b8b0; border-radius:var(--r-sm);
+        .cs-err { color:var(--danger); background:var(--danger-light); border:1px solid var(--danger-mid); border-radius:var(--r-sm);
                   padding:9px 12px; font-size:13px; font-weight:600; margin:0; }
         .cs-section { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); overflow:hidden; }
         .cs-section-head { display:flex; align-items:center; gap:10px; padding:12px 14px; background:var(--surface-alt); border-bottom:1px solid var(--border); }
@@ -202,7 +202,7 @@ export default function CourseStructure({ skillId, onReadyChange }) {
         .cs-ic { width:28px; height:28px; border-radius:var(--r-sm); border:1px solid var(--border-strong); background:var(--surface); color:var(--text-secondary); font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
         .cs-ic:hover:not(:disabled) { background:var(--surface-alt); }
         .cs-ic:disabled { opacity:.35; cursor:default; }
-        .cs-del:hover { background:#FBE4E0; color:#CE4A3E; border-color:#f0b8b0; }
+        .cs-del:hover { background:var(--danger-light); color:var(--danger); border-color:var(--danger-mid); }
         .cs-lessons { padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
         .cs-lesson-empty { color:var(--text-muted); font-size:13px; margin:0; }
         .cs-lrow { display:flex; align-items:center; gap:8px; }

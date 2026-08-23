@@ -20,3 +20,9 @@ Rule for this folder: **no vibe.** Every claim points at a real file/function.
   — a build-it-yourself guide (no finished code): move affiliate links down into
   the products area as cards, keep the profile area for socials. Covers the
   schema decision, merging two ordered lists, build order, and the traps.
+- [04 — The storefront editor, feature by feature](04-the-storefront-editor.md) —
+  the walkthrough: for each major thing the editor does (background, glass, glow,
+  name effects, overlays, the cursor FX layer, splash, site music, uploads, the
+  live preview, presets/import-export, drag-to-order sections, link buttons) —
+  the trick that makes it work, the real code, and the trap. Ends with a landmine
+  index and ten hands-on exercises.
