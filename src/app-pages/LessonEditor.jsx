@@ -6,6 +6,8 @@ import { listLessonBlocks, addBlock, updateBlock, deleteBlock, reorderBlocks } f
 import { BLOCK_TYPES } from '@/lib/blockTypes';
 import BlockEditor from '@/components/BlockEditor';
 import BackLink from '@/components/BackLink';
+import SaveStatus from '@/components/SaveStatus';
+import { useSaveState } from '@/lib/useSaveState';
 import { useDialog } from '@/components/Dialog';
 
 // A lesson's own page: title + description + its content blocks. Reached from the
@@ -20,7 +22,7 @@ export default function LessonEditor() {
   const [lesson, setLesson] = useState(null);
   const [blocks, setBlocks] = useState([]);
   const [loadErr, setLoadErr] = useState('');
-  const [savedAt, setSavedAt] = useState(null);
+  const save = useSaveState();
   const [menuOpen, setMenuOpen] = useState(false);
   const lessonTimer = useRef(null);
   const blockTimers = useRef({});
@@ -39,33 +41,81 @@ export default function LessonEditor() {
     return () => { alive = false; };
   }, [lessonId]);
 
+  // Same restore-on-failure contract as SkillBuilder: a rejected save puts its
+  // patch back in the queue instead of dropping it, and the indicator reports
+  // the failure rather than continuing to claim "Saved ✓".
+  const flushLesson = useCallback(async () => {
+    const toSave = pendingLesson.current;
+    if (!Object.keys(toSave).length) return;
+    pendingLesson.current = {};
+    save.markSaving();
+    try {
+      await updateLesson(lessonId, toSave);
+      if (Object.keys(pendingLesson.current).length) save.markDirty();
+      else save.markSaved();
+    } catch (e) {
+      pendingLesson.current = { ...toSave, ...pendingLesson.current };
+      save.markError(e.message);
+    }
+  }, [lessonId, save]);
+
   const patchLesson = useCallback((patch) => {
     setLesson(prev => ({ ...prev, ...patch }));
     pendingLesson.current = { ...pendingLesson.current, ...patch };
+    save.markDirty();
     clearTimeout(lessonTimer.current);
-    lessonTimer.current = setTimeout(async () => {
-      const toSave = pendingLesson.current; pendingLesson.current = {};
-      try { await updateLesson(lessonId, toSave); setSavedAt(Date.now()); } catch (e) { console.warn('save lesson', e.message); }
-    }, 600);
-  }, [lessonId]);
+    lessonTimer.current = setTimeout(flushLesson, 600);
+  }, [flushLesson, save]);
+
+  const flushBlock = useCallback(async (blockId) => {
+    const toSave = pendingBlock.current[blockId];
+    if (!toSave || !Object.keys(toSave).length) return;
+    delete pendingBlock.current[blockId];
+    save.markSaving();
+    try {
+      await updateBlock(blockId, toSave);
+      if (Object.keys(pendingBlock.current).length) save.markDirty();
+      else save.markSaved();
+    } catch (e) {
+      pendingBlock.current[blockId] = { ...toSave, ...(pendingBlock.current[blockId] || {}) };
+      save.markError(e.message);
+    }
+  }, [save]);
 
   const patchBlock = useCallback((blockId, patch) => {
     setBlocks(prev => prev.map(b => b.id === blockId ? { ...b, ...patch } : b));
     pendingBlock.current[blockId] = { ...(pendingBlock.current[blockId] || {}), ...patch };
+    save.markDirty();
     clearTimeout(blockTimers.current[blockId]);
-    blockTimers.current[blockId] = setTimeout(async () => {
-      const toSave = pendingBlock.current[blockId]; delete pendingBlock.current[blockId];
-      try { await updateBlock(blockId, toSave); setSavedAt(Date.now()); } catch (e) { console.warn('save block', e.message); }
-    }, 600);
-  }, []);
+    blockTimers.current[blockId] = setTimeout(() => flushBlock(blockId), 600);
+  }, [flushBlock, save]);
+
+  const retrySave = useCallback(() => {
+    flushLesson();
+    Object.keys(pendingBlock.current).forEach(id => flushBlock(id));
+  }, [flushLesson, flushBlock]);
 
   // Flush pending saves on unmount so navigating away never drops the last edit.
+  // Cannot surface an error (the component is gone) — logs loudly instead.
   useEffect(() => () => {
     clearTimeout(lessonTimer.current);
     Object.values(blockTimers.current).forEach(clearTimeout);
-    if (Object.keys(pendingLesson.current).length) updateLesson(lessonId, pendingLesson.current).catch(() => {});
-    Object.entries(pendingBlock.current).forEach(([id, patch]) => updateBlock(id, patch).catch(() => {}));
+    if (Object.keys(pendingLesson.current).length) {
+      updateLesson(lessonId, pendingLesson.current)
+        .catch(e => console.error('[lesson-editor] lost unsaved lesson edit on unmount:', e.message));
+    }
+    Object.entries(pendingBlock.current).forEach(([id, patch]) =>
+      updateBlock(id, patch)
+        .catch(e => console.error(`[lesson-editor] lost unsaved block ${id} on unmount:`, e.message)));
   }, [lessonId]);
+
+  const unsaved = save.status === 'dirty' || save.status === 'saving' || save.status === 'error';
+  useEffect(() => {
+    if (!unsaved) return;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [unsaved]);
 
   async function addContent(type) {
     setMenuOpen(false);
@@ -74,16 +124,22 @@ export default function LessonEditor() {
       setBlocks(prev => [...prev, created]);
     } catch (e) { alert({ title: 'Couldn’t add content', message: e.message, tone: 'danger' }); }
   }
+  // Optimistic but reversible — see CourseStructure for the reasoning.
   async function removeBlock(id) {
-    setBlocks(prev => prev.filter(b => b.id !== id));
-    try { await deleteBlock(id); } catch (e) { console.warn(e.message); }
+    const prev = blocks;
+    setBlocks(cur => cur.filter(b => b.id !== id));
+    try { await deleteBlock(id); save.markSaved(); }
+    catch (e) { setBlocks(prev); save.markError(`Couldn’t delete that block — ${e.message}`); }
   }
   async function moveBlock(idx, dir) {
-    const next = [...blocks]; const j = idx + dir;
-    if (j < 0 || j >= next.length) return;
+    const j = idx + dir;
+    if (j < 0 || j >= blocks.length) return;
+    const prev = blocks;
+    const next = [...blocks];
     [next[idx], next[j]] = [next[j], next[idx]];
     setBlocks(next);
-    try { await reorderBlocks(next.map(b => b.id)); } catch (e) { console.warn(e.message); }
+    try { await reorderBlocks(next.map(b => b.id)); save.markSaved(); }
+    catch (e) { setBlocks(prev); save.markError(`Couldn’t reorder — ${e.message}`); }
   }
 
   if (!user) return <div className="le-wrap"><p className="le-muted">Please log in.</p><LEStyles /></div>;
@@ -95,7 +151,7 @@ export default function LessonEditor() {
       <title>Edit lesson — SkillJoy</title>
       <div className="le-top">
         <BackLink to={`/build/${skillId}`} className="bl-inline">Back to course</BackLink>
-        <span className="le-saved">{savedAt ? 'Saved ✓' : ''}</span>
+        <span className="le-saved"><SaveStatus status={save.status} error={save.error} onRetry={retrySave} /></span>
       </div>
 
       <input className="le-title" value={lesson.title ?? ''}

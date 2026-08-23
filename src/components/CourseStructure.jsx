@@ -24,6 +24,7 @@ export default function CourseStructure({ skillId, onReadyChange }) {
   const [lessons, setLessons] = useState([]);
   const [blockCounts, setBlockCounts] = useState(new Map()); // lessonId → #blocks
   const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
   const titleTimers = useRef({});
 
   const reportReady = useCallback((mods, less, counts) => {
@@ -51,21 +52,40 @@ export default function CourseStructure({ skillId, onReadyChange }) {
   function patchModuleTitle(id, title) {
     setModules(prev => prev.map(m => m.id === id ? { ...m, title } : m));
     clearTimeout(titleTimers.current[id]);
-    titleTimers.current[id] = setTimeout(() => updateModule(id, { title }).catch(e => console.warn(e.message)), 500);
+    titleTimers.current[id] = setTimeout(
+      () => updateModule(id, { title })
+        .then(() => setErr(''))
+        .catch(e => setErr(`Couldn’t save that module title — ${e.message}`)),
+      500);
   }
   async function removeModule(id) {
     const ok = await confirm({ title: 'Delete this module?', message: 'This removes the module and every lesson inside it. This cannot be undone.', confirmLabel: 'Delete', danger: true });
     if (!ok) return;
+    const prevM = modules, prevL = lessons;
     const nextM = modules.filter(m => m.id !== id);
     const nextL = lessons.filter(l => l.section_id !== id);
     setModules(nextM); setLessons(nextL); reportReady(nextM, nextL, blockCounts);
-    try { await deleteModule(id); } catch (e) { console.warn(e.message); }
+    setErr('');
+    try { await deleteModule(id); }
+    catch (e) {
+      // Put it back — a failed delete that still disappears from the UI is a
+      // phantom: gone on screen, alive in the database, back on next load.
+      setModules(prevM); setLessons(prevL); reportReady(prevM, prevL, blockCounts);
+      setErr(`Couldn’t delete that module — ${e.message}`);
+    }
   }
+  // Optimistic, but REVERSIBLE. Previously a failed reorder logged to the
+  // console and left the new order on screen — so it looked saved, and came
+  // back rearranged on the next load. Showing the old order plus an error is
+  // the honest outcome: the screen always matches the database.
   async function moveModule(id, dir) {
     const idx = modules.findIndex(m => m.id === id); const j = idx + dir;
     if (j < 0 || j >= modules.length) return;
+    const prev = modules;
     const next = [...modules]; [next[idx], next[j]] = [next[j], next[idx]]; setModules(next);
-    try { await reorderModules(next.map(m => m.id)); } catch (e) { console.warn(e.message); }
+    setErr('');
+    try { await reorderModules(next.map(m => m.id)); }
+    catch (e) { setModules(prev); setErr(`Couldn’t reorder modules — ${e.message}`); }
   }
 
   // ── Lessons ──
@@ -80,25 +100,36 @@ export default function CourseStructure({ skillId, onReadyChange }) {
   async function removeLesson(id) {
     const ok = await confirm({ title: 'Delete this lesson?', message: 'This removes the lesson and all its content. This cannot be undone.', confirmLabel: 'Delete', danger: true });
     if (!ok) return;
+    const prevL = lessons, prevCounts = blockCounts;
     const next = lessons.filter(l => l.id !== id); setLessons(next);
     const counts = new Map(blockCounts); counts.delete(id); setBlockCounts(counts);
     reportReady(modules, next, counts);
-    try { await deleteLesson(id); } catch (e) { console.warn(e.message); }
+    setErr('');
+    try { await deleteLesson(id); }
+    catch (e) {
+      setLessons(prevL); setBlockCounts(prevCounts); reportReady(modules, prevL, prevCounts);
+      setErr(`Couldn’t delete that lesson — ${e.message}`);
+    }
   }
   async function moveLesson(id, sectionId, dir) {
     const sibs = lessons.filter(l => l.section_id === sectionId).sort((a, b) => a.position - b.position);
     const idx = sibs.findIndex(l => l.id === id); const j = idx + dir;
     if (j < 0 || j >= sibs.length) return;
+    const prev = lessons;
     [sibs[idx], sibs[j]] = [sibs[j], sibs[idx]];
     const posById = new Map(sibs.map((l, i) => [l.id, i]));
-    setLessons(prev => prev.map(l => posById.has(l.id) ? { ...l, position: posById.get(l.id) } : l));
-    try { await reorderLessons(sibs.map(l => l.id)); } catch (e) { console.warn(e.message); }
+    setLessons(cur => cur.map(l => posById.has(l.id) ? { ...l, position: posById.get(l.id) } : l));
+    setErr('');
+    try { await reorderLessons(sibs.map(l => l.id)); }
+    catch (e) { setLessons(prev); setErr(`Couldn’t reorder lessons — ${e.message}`); }
   }
 
   if (loading) return <p className="cs-muted">Loading…</p>;
 
   return (
     <div className="cs">
+      {err && <p className="cs-err" role="alert">{err}</p>}
+
       {modules.length === 0 && (
         <p className="cs-empty">No modules yet. Add your first module to start building the curriculum.</p>
       )}
@@ -160,6 +191,8 @@ export default function CourseStructure({ skillId, onReadyChange }) {
       <style>{`
         .cs { display:flex; flex-direction:column; gap:16px; }
         .cs-muted, .cs-empty { color:var(--text-muted); font-size:14px; }
+        .cs-err { color:#CE4A3E; background:#FBE4E0; border:1px solid #f0b8b0; border-radius:var(--r-sm);
+                  padding:9px 12px; font-size:13px; font-weight:600; margin:0; }
         .cs-section { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); overflow:hidden; }
         .cs-section-head { display:flex; align-items:center; gap:10px; padding:12px 14px; background:var(--surface-alt); border-bottom:1px solid var(--border); }
         .cs-section-num { flex-shrink:0; width:24px; height:24px; border-radius:var(--r-full); background:var(--accent); color:var(--accent-foreground); font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center; }

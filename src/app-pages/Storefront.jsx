@@ -172,16 +172,28 @@ export default function Storefront() {
 
       {/* Tilt lives on a WRAPPER, not the panel — .sf-pfx-float already animates
           the panel's transform, and two rules can't own the same property. */}
+      {/* Cover banner sits OUTSIDE the panel: it spans the full viewport width
+          and the panel scrolls over it, which is what "covers the top of the
+          page" needs. Fixed-position would keep it under the whole page; this
+          is absolute so it belongs to the top of the document. */}
+      {theme.banner_url && theme.banner_style === 'cover' && (
+        <div className="sf-coverbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} aria-hidden="true" />
+      )}
+
       <div ref={tiltRef} className={theme.tilt_enabled ? 'sf-tiltwrap' : undefined}>
-      <div className={`sf-panel${theme.banner_url ? ' sf-panel-hasbanner' : ''}${theme.card_opacity === 0 ? ' sf-panel-ghost' : ''}${theme.profile_fx && theme.profile_fx !== 'none' ? ` sf-pfx-${theme.profile_fx}` : ''}`}>
-      {theme.banner_url && <div className="sf-panelbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} />}
+      <div className={`sf-panel${theme.banner_url && theme.banner_style !== 'cover' ? ' sf-panel-hasbanner' : ''}${theme.banner_url && theme.banner_style === 'cover' ? ' sf-panel-cover' : ''}${theme.card_opacity === 0 ? ' sf-panel-ghost' : ''}${theme.profile_fx && theme.profile_fx !== 'none' ? ` sf-pfx-${theme.profile_fx}` : ''}`}>
+      {theme.banner_url && theme.banner_style !== 'cover' && (
+        <div className="sf-panelbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} />
+      )}
       <header className="sf-head">
         {theme.show_avatar !== false && (
           <div className="sf-avatar" style={profile.avatar_url ? { backgroundImage: `url(${profile.avatar_url})` } : {}}>
             {!profile.avatar_url && initials(profile.full_name)}
           </div>
         )}
-        <h1 className="sf-name">{profile.full_name || `@${profile.username}`}</h1>
+        <h1 className="sf-name" style={theme.name_color ? { color: theme.name_color } : undefined}>
+          {profile.full_name || `@${profile.username}`}
+        </h1>
         <p className="sf-handle">@{profile.username}</p>
         {profile.location && (
           <p className="sf-location"><MapPin size={13} strokeWidth={2.4} aria-hidden="true" />{profile.location}</p>
@@ -713,6 +725,43 @@ function StoreStyles() {
        panel's overflow:hidden rounds its top corners to match. */
     .sf-panelbanner { height:150px; margin:-32px -22px 16px; background:var(--surface-alt) center/cover no-repeat; position:relative; }
     .sf-panelbanner::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg, transparent 50%, rgba(20,18,12,.28)); }
+
+    /* ── Cover banner (banner_style: 'cover') ──────────────────────────────
+       Full-bleed across the top of the page, dissolving at its lower edge.
+       Two details make it work:
+       · mask-image, NOT a gradient overlay. An overlay has to know the page
+         background to fade INTO it — which breaks the moment someone sets a
+         photo or video background. A mask fades the banner's own alpha, so
+         whatever is behind shows through correctly every time.
+       · z-index:0 with the panel above it. The banner is decorative and must
+         never sit over the avatar or intercept clicks (hence aria-hidden and
+         pointer-events:none). */
+    /* FULL-BLEED BREAKOUT. The parent .sf-wrap is a 540px centred column, so
+       left:0/right:0 would size the banner to the COLUMN, not the page — it
+       looked like a wide panel banner, not a cover. Escaping a centred parent
+       means going through the viewport: pin the element's centre to the
+       parent's centre, then give it viewport width.
+
+       100vw includes the scrollbar, so this overflows by the scrollbar width
+       on desktop — "overflow-x: clip" on body (src/index.css) absorbs that.
+       clip, not hidden: hidden would make body a scroll container and break
+       position:sticky anywhere else on the site. */
+    .sf-coverbanner { position:absolute; top:0; left:50%; transform:translateX(-50%);
+      width:100vw; height:340px; z-index:0;
+      background:center top/cover no-repeat; pointer-events:none;
+      -webkit-mask-image:linear-gradient(180deg, #000 0%, #000 45%, transparent 100%);
+      mask-image:linear-gradient(180deg, #000 0%, #000 45%, transparent 100%); }
+    /* The panel has to establish its own stacking context to land above it. */
+    .sf-coverbanner ~ .sf-tiltwrap, .sf-coverbanner ~ .sf-panel { position:relative; z-index:1; }
+    /* Cover mode gives the card breathing room to sit ON the image rather than
+       starting flush at the very top. An explicit class rather than :has() —
+       the component already computes the panel's classes, so there's no reason
+       to make the stylesheet re-derive it. */
+    .sf-panel-cover { margin-top:132px; }
+    @media (max-width:640px) {
+      .sf-coverbanner { height:240px; }
+      .sf-panel-cover { margin-top:92px; }
+    }
     .sf-panel-hasbanner .sf-avatar { margin-top:-58px; position:relative; z-index:1; }
     /* Opacity 0 → the panel becomes an invisible container (info floats on the bg). */
     .sf-panel-ghost { border-color:transparent; box-shadow:none; }

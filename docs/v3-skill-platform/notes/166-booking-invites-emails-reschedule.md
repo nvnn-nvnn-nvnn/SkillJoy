@@ -198,6 +198,59 @@ LOCATION:https://zoom.us/j/9998887776?pwd=averyverylongpasswordtokenthatgoe
 --- CRLF used: true
 ```
 
+### 3b · Why that verification wasn't good enough (and what replaced it)
+
+The output above is a **single example**. It looked like proof and wasn't — and
+this is the most transferable lesson in this note.
+
+To check the UTF-8 claim honestly, delete the continuation-byte walk-back and
+see whether anything notices. Doing exactly that:
+
+```
+FAIL | 2-byte é intact at every fold offset 55..100  {"pad":66,...}
+FAIL | 3-byte → intact at every fold offset 55..100  {"pad":65,...}
+FAIL | 4-byte 🎯 intact at every fold offset 55..100  {"pad":64,...}
+PASS | hostile SUMMARY round-trips byte-exact        ← the one-example test
+```
+
+**The single-example check passed with the bug present.** A multi-byte character
+only corrupts if it lands *across* the boundary, so one string either hits that
+window or it doesn't. The fix is to sweep a character across every offset from
+55 to 100 bytes, which guarantees hitting it for 2-, 3- and 4-byte characters.
+
+That sweep now lives in `backend/lib/ics.test.js` — a plain script, no framework,
+exits non-zero on failure:
+
+```
+node backend/lib/ics.test.js
+```
+
+Then the same question about the test itself: **does it catch anything?** Five
+deliberate mutations of `ics.js`, each a plausible real mistake:
+
+| Mutation | Caught by |
+|---|---|
+| final join `CRLF` → `LF` | CRLF between properties |
+| fold join `CRLF` → `LF` | CRLF between properties |
+| stop escaping `;` | semicolon and comma escaped |
+| hardcode `SEQUENCE:0` | SEQUENCE strictly increases |
+| keep `VALARM` on CANCEL | CANCEL carries no VALARM |
+
+All five caught, clean source still passes. Building that harness also exposed a
+flaw in the test: the LF mutants originally **crashed** with
+`Cannot read properties of undefined` instead of reporting. Detection was fine
+(non-zero exit), diagnosis was terrible — the error pointed at the test, not the
+encoder. So the line-ending assertions now run *first*, before any property
+lookup, and `getProp` says which of the two causes it is.
+
+> **Transferable:** "I ran it and looked at the output" is not verification, it's
+> a demo. Verification is knowing what would have to break for the check to fail,
+> and confirming it actually does. Applies well beyond `.ics`.
+>
+> **Honest limitation:** this validates the encoder against the spec as I've read
+> it. It does not prove Google Calendar and Outlook accept the file — that needs
+> a real import, which is worth doing once before you rely on invites.
+
 ---
 
 ## 4 · Reschedule: move the row, don't recreate it
@@ -354,7 +407,8 @@ Frontend before backend would point `createBooking` at a `/api/bookings` route
 that doesn't exist yet, and booking would fail outright.
 
 ## Files
-**New** — `backend/lib/ics.js`, `backend/lib/slots.js`, `backend/routes/bookings.js`,
+**New** — `backend/lib/ics.js`, `backend/lib/ics.test.js`, `backend/lib/slots.js`,
+`backend/routes/bookings.js`,
 `docs/v3-skill-platform/migrations/028_booking_meeting_and_reschedule.sql`
 **Changed** — `backend/index.js` (mount + reminder emails/timezones),
 `backend/lib/email.js` (attachments + 4 booking templates),

@@ -126,10 +126,17 @@ function LivePreview({ theme, name, handle, avatar, bio, location, socials, skil
       {theme.overlay && theme.overlay !== 'none' && <div className={`lp-overlay lp-overlay-${theme.overlay}`} aria-hidden="true" />}
       {/* Cursor FX (cursor_fx) intentionally NOT simulated in the preview — control only. */}
       {theme.audio_tracks?.length > 0 && <span className="lp-audiopill" aria-hidden="true"><Music size={11} /></span>}
-      <div className={`lp-inner${theme.banner_url ? ' lp-hasbanner' : ''}${theme.card_opacity === 0 ? ' lp-ghost' : ''}${theme.profile_fx && theme.profile_fx !== 'none' ? ` lp-pfx-${theme.profile_fx}` : ''}`}>
-        {theme.banner_url && <div className="lp-panelbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} />}
+      {/* Cover banner mirrors the live page: outside the card, full width, faded
+          at the bottom. Same mask technique, scaled to the preview. */}
+      {theme.banner_url && theme.banner_style === 'cover' && (
+        <div className="lp-coverbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} aria-hidden="true" />
+      )}
+      <div className={`lp-inner${theme.banner_url && theme.banner_style !== 'cover' ? ' lp-hasbanner' : ''}${theme.card_opacity === 0 ? ' lp-ghost' : ''}${theme.profile_fx && theme.profile_fx !== 'none' ? ` lp-pfx-${theme.profile_fx}` : ''}`}>
+        {theme.banner_url && theme.banner_style !== 'cover' && (
+          <div className="lp-panelbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} />
+        )}
         {theme.show_avatar !== false && <div className="lp-avatar" style={avatar ? { backgroundImage: `url(${avatar})` } : {}}>{!avatar && initials(name)}</div>}
-        <div className="lp-name">{name}</div>
+        <div className="lp-name" style={theme.name_color && (!theme.name_fx || theme.name_fx === 'none') ? { color: theme.name_color } : undefined}>{name}</div>
         <div className="lp-handle">@{handle}</div>
         {location && <div className="lp-location"><MapPin size={11} strokeWidth={2.4} />{location}</div>}
         {bio && <div className="lp-bio">{bio}</div>}
@@ -511,6 +518,22 @@ export default function StorefrontEditor() {
                   </label>
                   {theme.banner_url && <button className="std-removebtn" onClick={() => set({ banner_url: '' })}><X size={13} /> Remove banner</button>}
                 </Field>
+                {/* Only meaningful once a banner exists — showing it on an empty
+                    banner would be a control with no visible effect. */}
+                {theme.banner_url && (
+                  <Field label="Banner style">
+                    <Seg
+                      value={theme.banner_style || 'panel'}
+                      onChange={v => set({ banner_style: v })}
+                      options={[{ v: 'panel', label: 'In card' }, { v: 'cover', label: 'Cover + fade' }]}
+                    />
+                    <p className="std-note" style={{ marginTop: 6 }}>
+                      {(theme.banner_style || 'panel') === 'cover'
+                        ? 'Spans the full width at the top of the page and fades out into your background.'
+                        : 'A strip inside your profile card, clipped to its edges.'}
+                    </p>
+                  </Field>
+                )}
               </Panel>
 
               {/* ── GENERAL — ambiance: background effects, music, cursor, glow ── */}
@@ -542,6 +565,33 @@ export default function StorefrontEditor() {
                   </div>
                 )}
                 <Field label="Name effect"><Seg value={theme.name_fx || 'none'} onChange={v => set({ name_fx: v })} options={[{ v: 'none', label: 'None' }, { v: 'gradient', label: 'Gradient' }, { v: 'rainbow', label: 'Rainbow' }, { v: 'shimmer', label: 'Shine' }, { v: 'glitch', label: 'Glitch' }]} /></Field>
+
+                {/* Hidden while an effect owns the name: gradient/rainbow/shimmer
+                    paint it with background-clip, so a solid colour underneath
+                    does nothing. Offering a control that visibly can't work is
+                    worse than not offering it. */}
+                {(!theme.name_fx || theme.name_fx === 'none') && (
+                  <Field label="Name colour">
+                    <div className="std-colorrow">
+                      <input
+                        type="color"
+                        value={theme.name_color || (theme.mode === 'dark' ? '#f2f0ea' : '#1a1916')}
+                        onChange={e => set({ name_color: e.target.value })}
+                      />
+                      <span>{theme.name_color || 'Theme default'}</span>
+                      {theme.name_color && (
+                        <button className="std-removebtn" onClick={() => set({ name_color: '' })}>
+                          <X size={13} /> Reset
+                        </button>
+                      )}
+                    </div>
+                    <p className="std-note" style={{ marginTop: 6 }}>
+                      {theme.name_color
+                        ? 'Fixed colour — it stays the same in light and dark mode, so check both.'
+                        : 'Following your theme text colour, which adapts to light and dark.'}
+                    </p>
+                  </Field>
+                )}
                 <Toggle on={!!theme.mono_icons} onChange={v => set({ mono_icons: v })} label="Monochrome icons" hint="Grayscale social icons" />
 
                 <Field label="Site music">
@@ -1075,16 +1125,52 @@ function Styles() {
       border-radius:var(--r-sm); background:var(--surface-alt); color:var(--text); border:1px solid var(--border); }
     .std-socialrow input { flex:1; min-width:0; }
     .std-linkcard { border:1px solid var(--border); border-radius:var(--r); padding:14px; margin-bottom:10px; background:var(--surface-alt); }
-; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
 
-    /* Added socials — icon chip + URL field + remove */
-    .std-sociallist { display:flex; flex-direction:column; gap:8px; margin-top:14px; padding-top:14px; border-top:1px solid var(--border); }
-    .std-socialrow { display:flex; align-items:center; gap:9px; }
-    .std-socialicon { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; flex-shrink:0;
-      border-radius:var(--r-sm); background:var(--surface-alt); color:var(--text); border:1px solid var(--border); }
-    .std-socialrow input { flex:1; min-width:0; }
-    .std-linkcard { border:1px solid var(--border); border-radius:var(--r); padding:14px; margin-bottom:10px; background:var(--surface-alt); }
-r-lg); background:var(--surface); cursor:pointer;
+    /* ── Classes that were used in markup but never had a rule ──────────────
+       All of these rendered unstyled. The two visible ones were the affiliate
+       checkbox (label + box on the text baseline, so the box sat low and the
+       text ran into it) and the Add-link button. */
+
+    /* Checkbox + label as one aligned unit. align-items:center on the FLEX
+       parent is what "connects" them; the checkbox also needs its width fixed
+       and margin zeroed, because the global "input" rule in App.css sets
+       width:100% + padding:12px 16px and would otherwise blow it up. */
+    .std-check { display:flex; align-items:center; gap:8px; margin-top:10px; cursor:pointer;
+      font-size:13px; font-weight:600; color:var(--text-secondary); user-select:none; }
+    .std-check input[type="checkbox"] { width:16px; height:16px; flex:0 0 16px; margin:0; padding:0;
+      accent-color:var(--accent); cursor:pointer; }
+    .std-check:hover { color:var(--text); }
+
+    /* Add-link / add-section / upload triggers.
+       This class is applied to BOTH button and label elements. App.css
+       styles a bare "button" (pill radius, inline-flex, border:none) but not
+       "label", so with no rule of its own the two rendered completely
+       differently — the button as a borderless pill with no padding, the label
+       as plain text. Everything below is restated so the element type stops
+       mattering, and it is scoped tightly enough to beat the global. */
+    .std-addbtn { display:inline-flex; align-items:center; justify-content:center; gap:7px;
+      padding:9px 16px; margin-top:4px; width:auto; white-space:nowrap;
+      border:1.5px dashed var(--border-strong); border-radius:var(--r); background:var(--surface);
+      color:var(--text-secondary); font-family:inherit; font-size:13px; font-weight:700;
+      cursor:pointer; transition:border-color .14s ease, color .14s ease, background .14s ease; }
+    .std-addbtn:hover { border-color:var(--accent); color:var(--accent);
+      background:color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+    .std-addbtn input[type="file"] { display:none; }
+
+    /* Placement control inside a link card — label above, segmented below. */
+    .std-linkplace { display:flex; flex-direction:column; gap:6px; margin-top:12px;
+      padding-top:12px; border-top:1px solid var(--border); }
+
+    .std-panel-lede { font-size:13px; color:var(--text-secondary); line-height:1.55; margin:0 0 14px; }
+    .std-upload-wide { width:100%; aspect-ratio:3 / 1; }
+
+    /* Theme preset cards. NOTE: the .std-theme rule's opening was destroyed by
+       a bad paste — the file carried a stray "r-lg); background:..." fragment
+       with no selector, plus a duplicated socials block and an orphaned tail of
+       .std-platlabel. Reconstructed from its surviving children + :hover. */
+    .std-themegrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:12px; }
+    .std-theme { display:flex; flex-direction:column; align-items:stretch; text-align:left; padding:0; overflow:hidden;
+      border:1.5px solid var(--border); border-radius:var(--r-lg); background:var(--surface); cursor:pointer;
       transition:transform .14s ease, border-color .14s ease, box-shadow .14s ease; }
     .std-theme:hover { transform:translateY(-3px); border-color:var(--accent);
       box-shadow:0 10px 24px color-mix(in srgb, var(--accent) 20%, transparent); }
@@ -1197,6 +1283,10 @@ r-lg); background:var(--surface); cursor:pointer;
       box-shadow:var(--shadow-lg), 0 0 var(--lp-glow-strong, 0px) color-mix(in srgb, var(--accent) 62%, transparent);
       display:flex; flex-direction:column; align-items:center; }
     .lp-panelbanner { height:78px; margin:-24px -16px 12px; background:var(--surface-alt) center/cover no-repeat; align-self:stretch; }
+    .lp-coverbanner { position:absolute; top:0; left:0; right:0; height:170px; z-index:0;
+      background:center top/cover no-repeat; pointer-events:none;
+      -webkit-mask-image:linear-gradient(180deg, #000 0%, #000 45%, transparent 100%);
+      mask-image:linear-gradient(180deg, #000 0%, #000 45%, transparent 100%); }
     .lp-hasbanner .lp-avatar { margin-top:-42px; position:relative; z-index:1; }
     .lp-avatar { width:var(--lp-avatar-size, 67px); height:var(--lp-avatar-size, 67px); border-radius:var(--lp-avatar-radius, 50%); background:color-mix(in srgb, var(--accent) 16%, #fff) center/cover no-repeat;
       display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(var(--lp-avatar-size, 67px) * 0.35); color:var(--accent); border:3px solid var(--lp-surface); box-shadow:var(--shadow), 0 0 var(--lp-glow-strong, 0px) color-mix(in srgb, var(--accent) 85%, transparent); }

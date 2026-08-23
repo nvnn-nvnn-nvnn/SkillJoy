@@ -11,6 +11,8 @@ import {
   Repeat, DollarSign, TrendingUp, Users, Boxes,
 } from 'lucide-react';
 import { PRODUCT_TYPES, TYPE_BY_ID } from '@/lib/productTypes';
+import PhoneLock from '@/components/PhoneLock';
+import TrialBanner from '@/components/TrialBanner';
 
 /*
  * ServicesDashboard — /services
@@ -200,9 +202,36 @@ export default function ServicesDashboard() {
 
   if (!user) return <div className="sv-wrap"><p className="sv-empty-loading">Please log in to manage your products.</p><Styles /></div>;
 
+  // ── Phone gate ──
+  // Phone is optional at signup but required to sell (the publish endpoint
+  // rejects without it), so the requirement surfaces here instead.
+  //
+  // `profile === null` means the store hasn't resolved yet. Rendering the lock
+  // during that window would flash it at creators who DO have a number, so we
+  // wait — an unnecessary lock screen is a much worse first impression than a
+  // brief loading line.
+  if (profile === null) {
+    return <div className="sv-wrap"><p className="sv-empty-loading">Loading…</p><Styles /></div>;
+  }
+  if (!profile.phone?.trim()) {
+    return (
+      <div className="sv-wrap">
+        <title>Products — SkillJoy</title>
+        {/* No local "saved" flag needed: PhoneLock writes through setProfile,
+            and useProfile() subscribes to that store — the update re-renders
+            this component and the gate below simply stops matching. */}
+        <PhoneLock />
+      </div>
+    );
+  }
+
   return (
     <div className="sv-wrap" onClick={() => setMenuFor(null)}>
       <title>Products — SkillJoy</title>
+
+      {/* Platform-subscription state. Also renders the "products built, none
+          live" prompt for creators who never started a plan. */}
+      <TrialBanner />
 
       {/* ── Header ── */}
       <div className="sv-head">
@@ -404,7 +433,14 @@ function Styles() {
     .sv-tab-count { font-size: 11px; color: var(--text-muted); }
     .sv-search { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 10px;
       background: var(--surface); color: var(--text-muted); flex: 1 1 220px; min-width: 0; }
-    .sv-search input { border: none; outline: none; background: none; font-size: 14px; color: var(--text); font-family: inherit; width: 100%; min-width: 0; }
+    /* padding:0 is the load-bearing line. App.css styles every bare "input"
+       with padding:12px 16px, and this rule reset border/background/font but
+       never padding — so the field kept 24px of its own vertical padding
+       INSIDE a container that already adds 8px top and bottom. The box ended up
+       roughly twice the height of the filter buttons beside it. line-height
+       is pinned too so the text sits centred rather than riding high. */
+    .sv-search input { border: none; outline: none; background: none; font-size: 14px; color: var(--text);
+      font-family: inherit; width: 100%; min-width: 0; padding: 0; line-height: 20px; height: 20px; }
 
     /* Status filter — a distinct segmented control so it reads as a SECOND axis
        rather than more type tabs. Active/Draft carry the same dot colors as the

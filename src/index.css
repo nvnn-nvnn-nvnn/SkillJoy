@@ -127,6 +127,12 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
+  /* Absorbs full-bleed breakouts (e.g. the storefront cover banner, which uses
+     width:100vw to escape a centred column — 100vw includes the scrollbar, so
+     it overflows by ~15px on desktop).
+     `clip`, NOT `hidden`: overflow:hidden would turn body into a scroll
+     container and silently break position:sticky everywhere on the site. */
+  overflow-x: clip;
 }
 
 h1,

@@ -6,7 +6,27 @@ import { listPublishedSkills } from '@/lib/skills';
 import { apiFetch } from '@/lib/api';
 import ReportModal from '@/components/ReportModal';
 import BlockButton from '@/components/BlockButton';
-import { Camera, Check, Pencil, ExternalLink, Store, Settings, LogOut, Flag, RefreshCw } from 'lucide-react';
+import { Camera, Check, Pencil, ExternalLink, Store, Settings, LogOut, Flag, RefreshCw, Eye, EyeOff, Mail, Phone } from 'lucide-react';
+import { PROFILE_CARD_COLORS, cardColorVars } from '@/lib/profileCard';
+
+// Partial masks. These keep enough shape to identify WHICH value is on file
+// (the domain, the last four digits) while hiding the part that identifies the
+// person. Fully-dotted values would tell the owner nothing, so they'd reveal
+// and leave it revealed — a privacy control people turn off isn't one.
+function maskEmail(email) {
+    if (!email) return '—';
+    const [name, domain] = String(email).split('@');
+    if (!domain) return '••••••••';
+    // First character only; the rest is a fixed-length run so the mask never
+    // leaks how long the local part actually is.
+    return `${name.slice(0, 1)}••••••@${domain}`;
+}
+
+function maskPhone(phone) {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (digits.length < 4) return '••••••••';
+    return `••• ••• ${digits.slice(-4)}`;
+}
 
 // v3 — a modern "account hub": identity + payouts + quick links. The swap-era
 // profile (teach/learn skills, availability, profile ratings/comments,
@@ -31,6 +51,13 @@ export default function ProfilePage() {
     const [avatarUrl, setAvatarUrl] = useState('');
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const avatarInputRef = useRef(null);
+    const [cardColor, setCardColor] = useState('default');
+
+    // Contact details start HIDDEN on every load, and this is deliberately not
+    // persisted. Screen-sharing and screenshots are the actual threat here, and
+    // a remembered "shown" preference would defeat the whole control the first
+    // time someone demos their dashboard on a call.
+    const [showContact, setShowContact] = useState(false);
 
     const [stripeStatus, setStripeStatus] = useState(null);
     const [stripeEarnings, setStripeEarnings] = useState(null);
@@ -67,6 +94,7 @@ export default function ProfilePage() {
         setBio(profileData.bio || '');
         setUsername(profileData.username || '');
         setAvatarUrl(profileData.avatar_url || '');
+        setCardColor(profileData.profile_card_color || 'default');
 
         const skills = await listPublishedSkills(targetId).catch(() => []);
         setStats({ skillsCount: skills?.length || 0 });
@@ -160,6 +188,9 @@ export default function ProfilePage() {
 
         const { error: e } = await supabase.from('profiles').update({
             full_name: fullName, bio, avatar_url: avatarUrl || null,
+            // 'default' is stored as NULL so the column's meaning stays "an
+            // explicit override exists", not "someone once opened the picker".
+            profile_card_color: cardColor === 'default' ? null : cardColor,
         }).eq('id', user.id);
         setSaving(false);
         if (e) { setError('Could not save profile. Please try again.'); return; }
@@ -174,6 +205,7 @@ export default function ProfilePage() {
         setBio(profile.bio || '');
         setUsername(profile.username || '');
         setAvatarUrl(profile.avatar_url || '');
+        setCardColor(profile.profile_card_color || 'default');
         setError('');
     }
 
@@ -220,8 +252,13 @@ export default function ProfilePage() {
             <title>{profile.full_name || 'Profile'} — SkillJoy</title>
 
             <div className="pf">
-                {/* ── Hero ── */}
-                <div className="pf-hero">
+                {/* ── Hero ──
+                    Tinted per the creator's chosen preset. The style attribute
+                    only sets CSS VARIABLES; which pair (light/dark) actually
+                    applies is decided in the stylesheet, because a style
+                    attribute can't hold a media query. */}
+                <div className={`pf-hero${cardColor !== 'default' ? ' pf-hero-tinted' : ''}`}
+                     style={cardColorVars(cardColor)}>
                     <div className="pf-avwrap">
                         {avatarSrc
                             ? <img className="pf-av" src={avatarSrc} alt={profile.full_name} />
@@ -273,6 +310,29 @@ export default function ProfilePage() {
                         ) : (
                             profile.bio && <p className="pf-bio">{profile.bio}</p>
                         )}
+                        {isOwnProfile && editMode && (
+                            <div className="pf-colorfield">
+                                <span className="pf-colorlabel">Card colour</span>
+                                <div className="pf-swatches" role="radiogroup" aria-label="Profile card colour">
+                                    {PROFILE_CARD_COLORS.map(c => (
+                                        <button
+                                            key={c.key}
+                                            type="button"
+                                            role="radio"
+                                            aria-checked={cardColor === c.key}
+                                            aria-label={c.label}
+                                            title={c.label}
+                                            className={`pf-swatch${cardColor === c.key ? ' on' : ''}`}
+                                            style={{ '--sw': c.light.tint, '--swe': c.light.edge }}
+                                            onClick={() => setCardColor(c.key)}
+                                        >
+                                            {cardColor === c.key && <Check size={13} />}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         <div className="pf-stats">
                             <div className="pf-stat"><span className="pf-statv">{stats.skillsCount}</span><span className="pf-statl">Products</span></div>
                         </div>
@@ -302,6 +362,56 @@ export default function ProfilePage() {
                         <button className="pf-actbtn pf-actbtn-danger" onClick={() => setShowReport(true)}><Flag size={15} /> Report</button>
                         <BlockButton userId={profile?.id} initialState={isBlocked} onBlock={() => setIsBlocked(true)} onUnblock={() => setIsBlocked(false)} />
                     </div>
+                )}
+
+                {/* ── Contact details (own only) ──
+                    Masked by default. The mask keeps the shape of the value
+                    (domain, last 4 digits) so you can confirm WHICH address or
+                    number is on file without exposing it — full dots would make
+                    the row useless while hidden, and people would just leave it
+                    revealed, which defeats the point. */}
+                {isOwnProfile && (
+                    <section className="pf-card">
+                        <div className="pf-contacthead">
+                            <h2 className="pf-cardtitle" style={{ margin: 0 }}>Contact details</h2>
+                            <button
+                                type="button"
+                                className="pf-eye"
+                                onClick={() => setShowContact(v => !v)}
+                                aria-pressed={showContact}
+                                aria-label={showContact ? 'Hide contact details' : 'Show contact details'}
+                                title={showContact ? 'Hide' : 'Show'}
+                            >
+                                {showContact ? <EyeOff size={16} /> : <Eye size={16} />}
+                                <span>{showContact ? 'Hide' : 'Show'}</span>
+                            </button>
+                        </div>
+
+                        <div className="pf-contactrow">
+                            <span className="pf-contacticon"><Mail size={15} /></span>
+                            <span className="pf-contactlabel">Email</span>
+                            <span className={`pf-contactval${showContact ? '' : ' masked'}`}>
+                                {showContact ? (user?.email || '—') : maskEmail(user?.email)}
+                            </span>
+                        </div>
+
+                        <div className="pf-contactrow">
+                            <span className="pf-contacticon"><Phone size={15} /></span>
+                            <span className="pf-contactlabel">Phone</span>
+                            {profile.phone ? (
+                                <span className={`pf-contactval${showContact ? '' : ' masked'}`}>
+                                    {showContact ? profile.phone : maskPhone(profile.phone)}
+                                </span>
+                            ) : (
+                                <Link to="/settings" className="pf-contactadd">Add a number</Link>
+                            )}
+                        </div>
+
+                        <p className="pf-contacthint">
+                            Only you can see this. Hidden by default so it stays private while you’re
+                            screen-sharing. Change either in <Link to="/settings">Settings</Link>.
+                        </p>
+                    </section>
                 )}
 
                 {/* ── Payouts (own only) ── */}
@@ -356,6 +466,50 @@ function Styles() {
     return <style>{`
         .pf { max-width: 720px; margin: 0 auto; padding: 32px 20px 80px; }
         .pf-hero { display: flex; gap: 22px; align-items: flex-start; }
+        /* Tinted hero. Only applied when a preset is chosen, so the default
+           profile keeps its existing borderless layout exactly as it was. */
+        .pf-hero-tinted { background: var(--pfc-tint); border: 1px solid var(--pfc-edge);
+            border-radius: var(--r-lg); padding: 22px 24px; }
+        .pf-hero-tinted .pf-handle,
+        .pf-hero-tinted .pf-statv { color: var(--pfc-accent); }
+        /* The style attribute carries both palettes; the media query picks. */
+        @media (prefers-color-scheme: dark) {
+            .pf-hero-tinted { background: var(--pfc-tint-dark); border-color: var(--pfc-edge-dark); }
+            .pf-hero-tinted .pf-handle,
+            .pf-hero-tinted .pf-statv { color: var(--pfc-accent-dark); }
+        }
+
+        .pf-colorfield { margin-top: 14px; }
+        .pf-colorlabel { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .04em; color: var(--text-muted); margin-bottom: 7px; }
+        .pf-swatches { display: flex; flex-wrap: wrap; gap: 7px; }
+        .pf-swatch { width: 28px; height: 28px; padding: 0; flex: 0 0 28px; border-radius: var(--r-full);
+            background: var(--sw); border: 1.5px solid var(--swe); cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center; color: var(--text);
+            transition: transform .12s ease, box-shadow .12s ease; }
+        .pf-swatch:hover { transform: scale(1.1); }
+        .pf-swatch.on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text); }
+        .pf-swatch:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+
+        .pf-contacthead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+        .pf-eye { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; width: auto;
+            border: 1px solid var(--border-strong); border-radius: var(--r-full); background: var(--surface);
+            color: var(--text-secondary); font-size: 12.5px; font-weight: 700; font-family: inherit; cursor: pointer; }
+        .pf-eye:hover { border-color: var(--accent); color: var(--accent); }
+        .pf-contactrow { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); }
+        .pf-contactrow:first-of-type { border-top: none; padding-top: 0; }
+        .pf-contacticon { display: inline-flex; color: var(--text-muted); flex-shrink: 0; }
+        .pf-contactlabel { flex: 0 0 62px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+        .pf-contactval { flex: 1; min-width: 0; font-size: 14px; color: var(--text); overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap; }
+        /* Tabular figures keep the visible last-4 from shifting as the dots
+           render, and user-select:none stops a "hidden" value being copied. */
+        .pf-contactval.masked { color: var(--text-secondary); letter-spacing: .04em;
+            font-variant-numeric: tabular-nums; user-select: none; }
+        .pf-contactadd { flex: 1; font-size: 13px; font-weight: 700; color: var(--accent); text-decoration: none; }
+        .pf-contactadd:hover { text-decoration: underline; }
+        .pf-contacthint { margin: 12px 0 0; font-size: 12px; line-height: 1.55; color: var(--text-muted); }
+        .pf-contacthint a { color: var(--accent); font-weight: 600; }
         .pf-avwrap { position: relative; flex-shrink: 0; }
         .pf-av { width: 104px; height: 104px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); background: var(--surface-alt); }
         .pf-av-fb { display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 800; color: var(--text-muted); }

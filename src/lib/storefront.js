@@ -28,6 +28,15 @@ export const DEFAULT_THEME = {
   accent: '#F5634A',
   layout: 'list',           // 'list' | 'grid'
   banner_url: '',
+  // 'panel' — the original: a 150px strip inside the card, clipped to it.
+  // 'cover' — full-bleed across the top of the PAGE, fading out at its bottom
+  //           edge so it melts into the background instead of ending on a line.
+  banner_style: 'panel',    // 'panel' | 'cover'
+  // Display-name colour. '' = inherit the theme's normal text colour, which is
+  // the safe default: it follows light/dark automatically. A set value is an
+  // explicit override and does NOT adapt, so the editor warns on low contrast
+  // rather than silently letting someone make their own name unreadable.
+  name_color: '',
   show_avatar: true,        // false → hide the profile picture on the storefront
   socials: [],
   // ── Deeper theming (guns.lol-style) ──

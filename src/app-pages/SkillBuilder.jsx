@@ -15,6 +15,8 @@ import BlockEditor from '@/components/BlockEditor';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import CourseStructure from '@/components/CourseStructure';
 import BackLink from '@/components/BackLink';
+import SaveStatus from '@/components/SaveStatus';
+import { useSaveState } from '@/lib/useSaveState';
 import { useDialog } from '@/components/Dialog';
 
 // Product `kind` (what a Skill *is*) is picked from the shared PRODUCT_TYPES
@@ -181,7 +183,7 @@ function SkillEditor({ skillId, userId }) {
   const [loadErr, setLoadErr] = useState('');
   const [savingCover, setSavingCover] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [savedAt, setSavedAt] = useState(null);
+  const save = useSaveState();
   const skillTimer = useRef(null);
   const blockTimers = useRef({});
   const pendingSkill = useRef({});   // accumulated, unsaved skill-meta patches
@@ -224,39 +226,99 @@ function SkillEditor({ skillId, userId }) {
 
   // Debounced skill-meta save. Accumulate patches so editing several fields
   // within the debounce window persists ALL of them, not just the last one.
+  //
+  // On failure the patch is put BACK into `pending` rather than dropped. The
+  // previous version cleared it before awaiting, so a failed request lost the
+  // edit outright — with only a console.warn to show for it. Restoring it means
+  // the change is still queued, Retry can resend it, and the flush-on-unmount
+  // below gets one more chance at it.
+  const flushSkill = useCallback(async () => {
+    const toSave = pendingSkill.current;
+    if (!Object.keys(toSave).length) return;
+    pendingSkill.current = {};
+    save.markSaving();
+    try {
+      await updateSkill(skillId, toSave);
+      // Only report success if nothing new queued up while we were in flight.
+      if (Object.keys(pendingSkill.current).length) save.markDirty();
+      else save.markSaved();
+    } catch (e) {
+      // Newer edits win over the restored older ones.
+      pendingSkill.current = { ...toSave, ...pendingSkill.current };
+      save.markError(e.message);
+    }
+  }, [skillId, save]);
+
   const patchSkill = useCallback((patch) => {
     setSkill(prev => ({ ...prev, ...patch }));
     pendingSkill.current = { ...pendingSkill.current, ...patch };
+    save.markDirty();
     clearTimeout(skillTimer.current);
-    skillTimer.current = setTimeout(async () => {
-      const toSave = pendingSkill.current;
-      pendingSkill.current = {};
-      try { await updateSkill(skillId, toSave); setSavedAt(Date.now()); }
-      catch (e) { console.warn('save skill', e.message); }
-    }, 600);
-  }, [skillId]);
+    skillTimer.current = setTimeout(flushSkill, 600);
+  }, [flushSkill, save]);
 
-  // Debounced per-block save — same accumulation, keyed per block.
+  // Debounced per-block save — same accumulation and same restore-on-failure,
+  // keyed per block.
+  const flushBlock = useCallback(async (blockId) => {
+    const toSave = pendingBlock.current[blockId];
+    if (!toSave || !Object.keys(toSave).length) return;
+    delete pendingBlock.current[blockId];
+    save.markSaving();
+    try {
+      await updateBlock(blockId, toSave);
+      if (Object.keys(pendingBlock.current).length) save.markDirty();
+      else save.markSaved();
+    } catch (e) {
+      pendingBlock.current[blockId] = { ...toSave, ...(pendingBlock.current[blockId] || {}) };
+      save.markError(e.message);
+    }
+  }, [save]);
+
   const patchBlock = useCallback((blockId, patch) => {
     setBlocks(prev => prev.map(b => b.id === blockId ? { ...b, ...patch } : b));
     pendingBlock.current[blockId] = { ...(pendingBlock.current[blockId] || {}), ...patch };
+    save.markDirty();
     clearTimeout(blockTimers.current[blockId]);
-    blockTimers.current[blockId] = setTimeout(async () => {
-      const toSave = pendingBlock.current[blockId];
-      delete pendingBlock.current[blockId];
-      try { await updateBlock(blockId, toSave); setSavedAt(Date.now()); }
-      catch (e) { console.warn('save block', e.message); }
-    }, 600);
-  }, []);
+    blockTimers.current[blockId] = setTimeout(() => flushBlock(blockId), 600);
+  }, [flushBlock, save]);
+
+  // Retry everything still queued — one button covers skill meta and any blocks.
+  const retrySave = useCallback(() => {
+    flushSkill();
+    Object.keys(pendingBlock.current).forEach(id => flushBlock(id));
+  }, [flushSkill, flushBlock]);
 
   // On unmount, clear timers AND best-effort flush anything still pending so a
   // quick navigate-away within the debounce window doesn't drop the last edit.
+  //
+  // This one genuinely CANNOT report failure — the component is gone and there
+  // is nowhere left to render an error. So it stays swallowed, but it logs
+  // loudly rather than silently: if a creator says "my last edit vanished",
+  // this is the line that says so. The real protection is the beforeunload
+  // guard below, which stops them leaving with unsaved work in the first place.
   useEffect(() => () => {
     clearTimeout(skillTimer.current);
     Object.values(blockTimers.current).forEach(clearTimeout);
-    if (Object.keys(pendingSkill.current).length) updateSkill(skillId, pendingSkill.current).catch(() => {});
-    Object.entries(pendingBlock.current).forEach(([id, patch]) => updateBlock(id, patch).catch(() => {}));
+    if (Object.keys(pendingSkill.current).length) {
+      updateSkill(skillId, pendingSkill.current)
+        .catch(e => console.error('[skill-builder] lost unsaved skill edit on unmount:', e.message));
+    }
+    Object.entries(pendingBlock.current).forEach(([id, patch]) =>
+      updateBlock(id, patch)
+        .catch(e => console.error(`[skill-builder] lost unsaved block ${id} on unmount:`, e.message)));
   }, [skillId]);
+
+  // Closing the tab kills in-flight requests, so unsaved work is simply gone —
+  // and unlike a route change there's no unmount flush that can outlive it.
+  // The browser's native "Leave site?" prompt is the only reliable stop. Armed
+  // only while something is genuinely unsaved, so it never nags otherwise.
+  const unsaved = save.status === 'dirty' || save.status === 'saving' || save.status === 'error';
+  useEffect(() => {
+    if (!unsaved) return;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [unsaved]);
 
   async function onCover(e) {
     const file = e.target.files?.[0];
@@ -289,17 +351,23 @@ function SkillEditor({ skillId, userId }) {
       await alert({ title: 'Keep the booking block', message: 'Coaching products need a coaching block so buyers can book a time. You can add other blocks around it, but this one has to stay.', tone: 'warning' });
       return;
     }
-    setBlocks(prev => prev.filter(b => b.id !== blockId));
-    try { await deleteBlock(blockId); } catch (e) { console.warn(e.message); }
+    const prev = blocks;
+    setBlocks(cur => cur.filter(b => b.id !== blockId));
+    try { await deleteBlock(blockId); save.markSaved(); }
+    catch (e) { setBlocks(prev); save.markError(`Couldn’t delete that block — ${e.message}`); }
   }
 
+  // Optimistic but reversible: a failed reorder used to leave the NEW order on
+  // screen with only a console.warn, so it looked saved and reverted on reload.
   async function moveBlock(idx, dir) {
-    const next = [...blocks];
     const j = idx + dir;
-    if (j < 0 || j >= next.length) return;
+    if (j < 0 || j >= blocks.length) return;
+    const prev = blocks;
+    const next = [...blocks];
     [next[idx], next[j]] = [next[j], next[idx]];
     setBlocks(next);
-    try { await reorderBlocks(next.map(b => b.id)); } catch (e) { console.warn(e.message); }
+    try { await reorderBlocks(next.map(b => b.id)); save.markSaved(); }
+    catch (e) { setBlocks(prev); save.markError(`Couldn’t reorder — ${e.message}`); }
   }
 
 
@@ -435,7 +503,7 @@ function SkillEditor({ skillId, userId }) {
         <BackLink to="/build" className="bl-inline">All products</BackLink>
         <span className="sb-saved">
           {skill.status === 'published' && <span className="sb-ver">v{skill.version}</span>}
-          {savedAt ? 'Saved ✓' : ''}
+          <SaveStatus status={save.status} error={save.error} onRetry={retrySave} />
         </span>
         <div className="sb-editbar-actions">
           <button className="sb-actbtn sb-act-delete" onClick={removeSkill}>

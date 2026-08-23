@@ -1,7 +1,23 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- SkillJoy — Full Schema Archive
--- All migrations consolidated in order of application.
--- Run this in the Supabase SQL editor on a fresh project to reproduce the DB.
+-- SkillJoy — Schema REFERENCE (not a runnable bootstrap)
+--
+-- ⚠️ READ THIS BEFORE TRUSTING THE FILE.
+--
+-- The source of truth is docs/v3-skill-platform/migrations/ (001–028), applied
+-- in order. THIS file is a hand-maintained reading copy, and hand-maintained
+-- copies drift — as of 2026-08-21 it had fallen five tables and ~35 columns
+-- behind, while still claiming to reproduce the database on a fresh project.
+-- Someone who believed that claim would have got a broken DB.
+--
+-- What it is good for: reading the shape of a table without opening 28 files.
+-- What it is NOT: a bootstrap script, or an authority on what production has.
+--
+-- To reproduce the DB:  run the migrations in order.
+-- To see what's REALLY live:  dump it, don't read this —
+--   supabase db dump --schema public   (or the Dashboard → Database → Schema)
+--
+-- When you add a migration, mirror it here in the same pass, or delete this
+-- file. A reference that is 90% right is more dangerous than no reference.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -53,7 +69,8 @@ BEGIN
     RETURNING id INTO v_notification_id;
     RETURN v_notification_id;
 END;
-http://localhost:5173/profile
+$$ LANGUAGE plpgsql;
+
 DROP TRIGGER IF EXISTS trigger_notify_gig_request ON gig_requests;
 CREATE TRIGGER trigger_notify_gig_request
     AFTER INSERT OR UPDATE ON gig_requests FOR EACH ROW EXECUTE FUNCTION notify_new_gig_request();
@@ -366,3 +383,133 @@ ALTER TABLE platform_subscriptions ENABLE ROW LEVEL SECURITY;
 -- forms a mutual-recursion cycle with the purchases→skills policy. The definer
 -- functions bypass the referenced table's RLS to avoid both. Full DDL in
 -- migrations/021_platform_subscriptions.sql.
+
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- BACKFILL 2026-08-21 — sections below were missing from this reference while
+-- being live in migrations 006–010 and 028. Restated here in migration order.
+-- Policies are abridged to the ones that shape reads; full DDL in the migration
+-- named on each heading.
+-- ═════════════════════════════════════════════════════════════════════════════
+
+
+-- ── 006 · store_links (link-in-bio rows) ─────────────────────────────────────
+CREATE TABLE IF NOT EXISTS store_links (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    creator_id   UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    label        TEXT NOT NULL,
+    url          TEXT NOT NULL,
+    position     INTEGER NOT NULL DEFAULT 0,
+    is_affiliate BOOLEAN DEFAULT false,
+    created_at   TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS store_links_creator_idx ON store_links(creator_id, position);
+ALTER TABLE store_links ENABLE ROW LEVEL SECURITY;
+-- Public SELECT (storefront content); owner-only writes.
+
+-- 029 (in flight) adds: cover_url, cta_label, description, group_label, placement.
+
+
+-- ── 007 · bookings (native 1:1 scheduling) ───────────────────────────────────
+CREATE TABLE IF NOT EXISTS bookings (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    skill_id      UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    block_id      UUID REFERENCES content_blocks(id) ON DELETE SET NULL,
+    creator_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    buyer_id      UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    start_time    TIMESTAMPTZ NOT NULL,
+    end_time      TIMESTAMPTZ NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'booked'
+                    CHECK (status IN ('booked','cancelled','completed')),
+    reminder_sent BOOLEAN DEFAULT false,
+    created_at    TIMESTAMPTZ DEFAULT now(),
+    -- 028 ↓
+    meeting_url      TEXT,        -- snapshot of content_blocks.meeting_url at booking time
+    buyer_timezone   TEXT,        -- captured from the browser; email formats in it
+    rescheduled_at   TIMESTAMPTZ,
+    reschedule_count INTEGER NOT NULL DEFAULT 0   -- doubles as the iCalendar SEQUENCE
+);
+CREATE INDEX IF NOT EXISTS bookings_creator_idx ON bookings(creator_id, start_time);
+CREATE INDEX IF NOT EXISTS bookings_buyer_idx   ON bookings(buyer_id, start_time);
+CREATE UNIQUE INDEX IF NOT EXISTS bookings_slot_unique
+    ON bookings(creator_id, start_time) WHERE status = 'booked';
+-- 028: supports the hourly reminder cron's exact filter.
+CREATE INDEX IF NOT EXISTS bookings_reminder_due_idx
+    ON bookings (start_time) WHERE status = 'booked' AND reminder_sent = false;
+ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
+-- SELECT: either party. INSERT: buyer, and only with a paid purchase.
+-- UPDATE: either party.
+--
+-- ⚠️ 016 — the real double-booking guard is an EXCLUSION constraint, because
+-- bookings_slot_unique only catches an identical start_time; two sessions of
+-- different length can still overlap. Needs btree_gist.
+--   ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
+--     EXCLUDE USING gist (creator_id WITH =, tstzrange(start_time, end_time) WITH &&)
+--     WHERE (status = 'booked');
+--
+-- NOTE: v3 writes now go through backend/routes/bookings.js on the SERVICE-ROLE
+-- client, which BYPASSES every policy above. The route re-checks paid access and
+-- validates the slot against the host's availability by hand. RLS still governs
+-- the browser's direct reads.
+
+
+-- ── 008 · subscribers + broadcasts (email marketing) ─────────────────────────
+CREATE TABLE IF NOT EXISTS subscribers (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    creator_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    email      TEXT NOT NULL,
+    name       TEXT,
+    source     TEXT DEFAULT 'storefront',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (creator_id, email)
+);
+CREATE INDEX IF NOT EXISTS subscribers_creator_idx ON subscribers(creator_id, created_at);
+ALTER TABLE subscribers ENABLE ROW LEVEL SECURITY;
+-- INSERT is open to anon (that's the point of a capture form); owner reads.
+
+CREATE TABLE IF NOT EXISTS broadcasts (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    creator_id      UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    subject         TEXT NOT NULL,
+    body            TEXT,
+    recipient_count INTEGER DEFAULT 0,
+    created_at      TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS broadcasts_creator_idx ON broadcasts(creator_id, created_at);
+ALTER TABLE broadcasts ENABLE ROW LEVEL SECURITY;
+-- Owner SELECT only; rows are inserted service-side after a send.
+
+
+-- ── 009 · discounts ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS discounts (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    creator_id      UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    code            TEXT NOT NULL,
+    percent_off     INTEGER NOT NULL CHECK (percent_off BETWEEN 1 AND 100),
+    active          BOOLEAN NOT NULL DEFAULT true,
+    max_redemptions INTEGER,                        -- null = unlimited
+    times_redeemed  INTEGER NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ DEFAULT now()
+);
+-- One code per creator, case-insensitive.
+CREATE UNIQUE INDEX IF NOT EXISTS discounts_creator_code_idx
+    ON discounts(creator_id, upper(code));
+ALTER TABLE discounts ENABLE ROW LEVEL SECURITY;
+-- Owner-only. Buyers never read this table — codes are validated server-side.
+
+
+-- ── 028 · content_blocks.meeting_url ─────────────────────────────────────────
+-- The creator's standing call link on a coaching block. Copied onto each
+-- booking at booking time (see bookings.meeting_url above).
+ALTER TABLE content_blocks ADD COLUMN IF NOT EXISTS meeting_url TEXT;
+
+
+-- ── notifications.type — current full superset (through 028) ─────────────────
+-- The CHECK is REPLACED, never appended to, so every new type means restating
+-- the whole list. Missing one is a silent insert failure at runtime.
+--   'message','swap_request','gig_request','swap_accepted','gig_accepted',
+--   'swap_completed','gig_completed','dispute_filed','dispute_resolved',
+--   'order_update','order_cancelled','payout_setup_required','chargeback',
+--   'gig_removed','skill_update','skill_purchase','community_reply',
+--   'booking_confirmed','booking_cancelled','booking_reminder',
+--   'booking_rescheduled'

@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth } from '@/lib/stores';
 import { apiFetch } from '@/lib/api';
-import { getBillingStatus, openBillingPortal, trialDaysLeft } from '@/lib/billing';
+import { getBillingStatus, openBillingPortal, startSubscription, trialDaysLeft } from '@/lib/billing';
+import BillingSetupModal from '@/components/BillingSetupModal';
+import { Eye, EyeOff } from 'lucide-react';
 import { getTheme, setTheme } from '@/lib/theme';
 
 export default function SettingsPage() {
@@ -33,6 +35,14 @@ export default function SettingsPage() {
     const [unblockingId, setUnblockingId] = useState(null);
     const [billing, setBilling] = useState(null);      // null = loading, {status:'none'|...}
     const [billingBusy, setBillingBusy] = useState(false);
+    // Same default-hidden contract as the Profile page: contact details are
+    // obscured until asked for, and the choice is never persisted so a
+    // screen-share always starts safe. Editable fields can't use a text mask
+    // (you'd be typing into dots), so this flips the input TYPE instead —
+    // the familiar password-reveal affordance, applied to both at once.
+    const [showContact, setShowContact] = useState(false);
+    const [billingModal, setBillingModal] = useState(null); // null | 'no-account' | 'has-products'
+    const [billingErr, setBillingErr] = useState('');
     const [theme, setThemeState] = useState(getTheme());
 
     useEffect(() => {
@@ -51,7 +61,21 @@ export default function SettingsPage() {
     async function manageSubscription() {
         setBillingBusy(true);
         try { await openBillingPortal(); } // redirects on success
-        catch (err) { showToast(err.message, 'error'); setBillingBusy(false); }
+        catch (err) {
+            setBillingBusy(false);
+            // "No billing account yet — subscribe first." is accurate and
+            // unhelpful: it doesn't say that the platform plan is a different
+            // thing from Connect payouts, or how to start one. Show the
+            // explainer instead of a toast that vanishes.
+            if (/no billing account/i.test(err.message)) setBillingModal('no-account');
+            else showToast(err.message, 'error');
+        }
+    }
+
+    async function startPlanFromModal() {
+        setBillingBusy(true); setBillingErr('');
+        try { await startSubscription(); }  // redirects away on success
+        catch (err) { setBillingErr(err.message); setBillingBusy(false); }
     }
 
     async function loadBlockedUsers() {
@@ -164,12 +188,24 @@ export default function SettingsPage() {
 
             {/* Account */}
             <section className="sj-card">
-                <h2 className="sj-section-title">Account</h2>
+                <div className="sj-section-head">
+                    <h2 className="sj-section-title" style={{ margin: 0 }}>Account</h2>
+                    <button
+                        type="button"
+                        className="sj-eye"
+                        onClick={() => setShowContact(v => !v)}
+                        aria-pressed={showContact}
+                        aria-label={showContact ? 'Hide email and phone' : 'Show email and phone'}
+                    >
+                        {showContact ? <EyeOff size={15} /> : <Eye size={15} />}
+                        {showContact ? 'Hide' : 'Show'}
+                    </button>
+                </div>
 
                 <div className="sj-field">
                     <label className="sj-label">Email address</label>
                     <div className="sj-row">
-                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="sj-input" />
+                        <input type={showContact ? 'email' : 'password'} value={email} onChange={e => setEmail(e.target.value)} className="sj-input" autoComplete="email" />
                         <button className="sj-btn sj-btn-ghost" onClick={updateEmail} disabled={saving || email === user?.email}>
                             Update
                         </button>
@@ -182,7 +218,7 @@ export default function SettingsPage() {
                 <div className="sj-field">
                     <label className="sj-label">Phone number</label>
                     <div className="sj-row">
-                        <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="e.g. +1 555 123 4567" className="sj-input" autoComplete="tel" />
+                        <input type={showContact ? 'tel' : 'password'} value={phone} onChange={e => setPhone(e.target.value)} placeholder="e.g. +1 555 123 4567" className="sj-input" autoComplete="tel" />
                         <button className="sj-btn sj-btn-ghost" onClick={savePhone} disabled={saving}>Save</button>
                     </div>
                     <span className="sj-hint">Private — required to publish your storefront, used for account verification. Never shown publicly.</span>
@@ -242,9 +278,22 @@ export default function SettingsPage() {
                 ) : billing.status === 'error' ? (
                     <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>Couldn't load your subscription right now.</p>
                 ) : billing.status === 'none' ? (
-                    <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>
-                        You're not subscribed. Your free trial starts when you publish your storefront.
-                    </p>
+                    // Was a dead sentence. It's now the one place in Settings a
+                    // creator can start the plan deliberately, instead of only
+                    // discovering it as a blocker at publish time.
+                    <>
+                        <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '0 0 12px' }}>
+                            You’re not subscribed yet. Your storefront goes live once your platform plan starts —
+                            14 days free, and you’re not charged today.
+                        </p>
+                        <button className="sj-btn sj-btn-ghost" onClick={() => setBillingModal('has-products')} disabled={billingBusy}>
+                            Set up billing
+                        </button>
+                        <p className="sj-hint" style={{ marginTop: 8 }}>
+                            This is separate from your payout account — that one pays <em>you</em>. Building and
+                            customizing stay free either way.
+                        </p>
+                    </>
                 ) : (
                     <>
                         <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 14 }}>
@@ -460,6 +509,17 @@ export default function SettingsPage() {
                     margin-bottom: 20px;
                 }
 
+                .sj-section-head {
+                    display: flex; align-items: center; justify-content: space-between;
+                    gap: 12px; margin-bottom: 18px;
+                }
+                .sj-eye {
+                    display: inline-flex; align-items: center; gap: 6px; width: auto; flex-shrink: 0;
+                    padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: var(--r-full);
+                    background: var(--surface); color: var(--text-secondary);
+                    font-size: 12.5px; font-weight: 700; font-family: inherit; cursor: pointer;
+                }
+                .sj-eye:hover { border-color: var(--accent); color: var(--accent); }
                 .sj-section-title {
                     font-size: 15px;
                     font-weight: 600;
@@ -617,6 +677,15 @@ export default function SettingsPage() {
                 .sj-toast-success { background: #1a1a1a; color: #fff; }
                 .sj-toast-error   { background: #ef4444; color: #fff; }
             `}</style>
+
+            <BillingSetupModal
+                open={!!billingModal}
+                reason={billingModal || 'no-account'}
+                busy={billingBusy}
+                error={billingErr}
+                onStart={startPlanFromModal}
+                onClose={() => { setBillingModal(null); setBillingErr(''); setBillingBusy(false); }}
+            />
         </div>
     );
 }
