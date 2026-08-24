@@ -169,7 +169,7 @@ function PreviewLinkGroup({ block, items, featured }) {
       {block.subtitle?.trim() && <span className="lpb-sub">{block.subtitle}</span>}
       <div className="lpb-items">
         {items.slice(0, 4).map(l => (
-          <div key={l.id} className="lpb-item">
+          <div key={l.id} className={`lpb-item${l.cover_url ? '' : ' lpb-noimg'}`}>
             {/* Same two-part shape as the live card: a row, then a button that
                 spans the whole thing. */}
             <span className="lpb-main">
@@ -1708,6 +1708,8 @@ function Styles() {
     .lpb-align-right .lpb-txt { text-align:right; align-items:flex-end; }
     .lpb-align-center .lpb-title, .lpb-align-center .lpb-sub { text-align:center; }
     .lpb-align-right .lpb-title, .lpb-align-right .lpb-sub { text-align:right; }
+    .lpb-align-left .lpb-noimg .lpb-txt { text-align:center; align-items:center; }
+    .lpb-align-left .lpb-noimg .lpb-main { justify-content:center; }
     .lpb-outline .lpb-item { border-color:var(--lpb-fg, color-mix(in srgb, var(--lp-text, #000) 45%, transparent)); }
     .lpb-shadow .lpb-item { box-shadow:0 2px 6px color-mix(in srgb, #000 22%, transparent),
       0 0 var(--lp-glow-links, 0px) color-mix(in srgb, var(--accent) 78%, transparent); }

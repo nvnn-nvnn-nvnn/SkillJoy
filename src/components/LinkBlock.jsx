@@ -81,7 +81,7 @@ export default function LinkBlock({ block, links }) {
               href={l.url}
               target="_blank"
               rel={l.is_affiliate ? 'noopener noreferrer sponsored' : 'noopener noreferrer'}
-              className={`lkb-item${l.featured ? ' featured' : ''}`}
+              className={`lkb-item${l.featured ? ' featured' : ''}${l.cover_url ? '' : ' lkb-noimg'}`}
             >
               {/* Top row: image, text, arrow. Its own flex container so the
                   button below can span the FULL card — inside .lkb-body,
@@ -233,6 +233,22 @@ function Styles() {
     .lkb-align-left .lkb-body { text-align:left; align-items:flex-start; }
     .lkb-align-center .lkb-body { text-align:center; align-items:center; }
     .lkb-align-right .lkb-body { text-align:right; align-items:flex-end; }
+
+    /* ── No image → centre on the row ──
+       Left-aligned text with nothing to its left reads as a mistake: the row
+       has an image slot's worth of empty space and the label floats in it.
+       Centring only kicks in for the DEFAULT (left) alignment — the selector is
+       .lkb-align-left .lkb-noimg (0,3,0), which beats .lkb-align-left .lkb-body
+       (0,2,0) but leaves an explicit Centre or Right choice untouched. A blanket
+       .lkb-noimg rule would have silently disabled the alignment control for
+       every imageless link, which is the bug pattern in LANDMINES §13. */
+    .lkb-align-left .lkb-noimg .lkb-body { text-align:center; align-items:center; }
+    .lkb-align-left .lkb-noimg .lkb-main { justify-content:center; }
+    /* The arrow is taken out of flow so "centred" means centred against the
+       card's outline, not against the space left over beside the arrow. */
+    .lkb-noimg .lkb-main { position:relative; }
+    .lkb-noimg .lkb-arrow { position:absolute; right:0; top:50%; transform:translateY(-50%); }
+    .lkb-noimg .lkb-body { padding-inline:26px; }
 
     /* ── Outline / shadow ── */
     /* Both default OFF. The base border is transparent in the rule that

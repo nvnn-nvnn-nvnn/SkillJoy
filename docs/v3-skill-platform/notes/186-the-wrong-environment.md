@@ -132,3 +132,78 @@ Classic thumbnails across the session: **30px → 72px (S) / 108px (L)**.
 5. **Generalise the instrument.** Beyond a build marker, name two more cheap
    instruments that would make an environment mismatch self-evident. For each,
    say what it costs to add and what class of bug it retires permanently.
+
+---
+
+## Addendum — the column was sized for a UI that no longer exists
+
+Not a typo: 540px was correct when a link row was an icon and a label. After
+today's sizing it left this much room for text:
+
+```
+540 − 36 (wrap padding) − 44 (panel padding) − 136 (thumb + gap) − 40 (row padding)
+= 284px  …for a title AND a description
+```
+
+Now `max-width:600px` with `padding:0 22px` and a panel at `34px 26px 30px`,
+giving **344px**. The card grew because its contents did.
+
+> **Transferable:** a container width is a *consequence* of its contents. When
+> you scale what's inside by 2×, the width that framed the old contents is not a
+> constant to preserve — it's stale.
+
+**Two couplings that had to move with it.** Both were negative margins pinned to
+the panel's old 22px padding:
+
+```css
+.sf-panelbanner       { margin:-32px -22px 16px; }   /* in-card banner bleed */
+.sf-lnk-full .sf-linkbtn { margin-inline:-22px; }    /* full-width link bleed */
+```
+
+A negative margin that exists to cancel a parent's padding is a **duplicated
+constant**. Change the padding and the child silently misaligns — no error, just
+a few pixels of the wrong background showing at the edge. Worth a custom
+property (`--sf-panel-pad`) so there is one number; left as-is for now, and
+noted.
+
+## Addendum 2 — imageless links centre themselves
+
+A link with no image left its label hard against the left edge with an image
+slot's worth of empty space beside it — it reads as a missing asset rather than
+a design.
+
+```css
+.lkb-align-left .lkb-noimg .lkb-body { text-align:center; align-items:center; }
+.lkb-noimg .lkb-arrow { position:absolute; right:0; top:50%; transform:translateY(-50%); }
+```
+
+Two decisions worth keeping:
+
+**The arrow leaves the flow.** Otherwise "centred" means centred in the space
+*left over beside the arrow*, which is visibly off-centre against the card's
+outline — and the outline is what the eye measures against.
+
+**The selector is `.lkb-align-left .lkb-noimg` (0,3,0), not `.lkb-noimg`.** A
+blanket rule would have beaten `.lkb-align-left .lkb-body` (0,2,0) *and* every
+other alignment, silently disabling the Alignment control for every imageless
+link — LANDMINES §13, committed on purpose this time. Scoping it to the default
+alignment means an explicit Centre or Right choice still wins.
+
+> **Transferable:** when adding a "smart default" that overrides a user control,
+> scope it to the control's *default value*. Then it improves the untouched case
+> and never fights an explicit choice.
+
+## Exercises (addendum)
+
+6. **Kill the duplicated constant.** Introduce `--sf-panel-pad`, use it for the
+   panel's padding and for both negative-margin bleeds. What breaks if the
+   panel's horizontal and vertical padding need to differ?
+
+7. **Test the smart default.** Set a block to align Right and remove a link's
+   image. Does it centre or right-align? Now work out the specificity of each
+   competing rule and show why.
+
+8. **Find the next stale constant.** `.sf-bio` is `max-width:42ch` and the
+   splash text is `min(32ch, 84vw)`. Were those sized against 540px? What should
+   they be at 600px — and how would you tell the difference between "sized for
+   the old column" and "deliberately narrower than the column"?

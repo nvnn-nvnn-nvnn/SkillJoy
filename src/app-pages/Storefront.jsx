@@ -690,7 +690,7 @@ function CursorFx({ kind, color }) {
 
 function StoreStyles() {
   return <style>{`
-    .sf-wrap { max-width:540px; margin:0 auto; padding:0 18px 96px; position:relative; }
+    .sf-wrap { max-width:600px; margin:0 auto; padding:0 22px 96px; position:relative; }
     .sf-center { text-align:center; padding-top:40px; }
     .sf-h1 { font-size:26px; font-weight:800; letter-spacing:-.02em; }
     .sf-muted { color:var(--text-muted); }
@@ -898,7 +898,7 @@ function StoreStyles() {
 
     /* Main glass panel — wraps the profile info so the background never bleeds
        into the text. Opacity + blur sliders drive --sf-panel-bg / --sf-panel-blur. */
-    .sf-panel { position:relative; z-index:1; margin-top:28px; padding:32px 22px 26px; border-radius:var(--r-2xl); overflow:hidden;
+    .sf-panel { position:relative; z-index:1; margin-top:28px; padding:34px 26px 30px; border-radius:var(--r-2xl); overflow:hidden;
       background:var(--sf-panel-bg, var(--surface));
       -webkit-backdrop-filter:blur(var(--sf-panel-blur, 0px)); backdrop-filter:blur(var(--sf-panel-blur, 0px));
       border:1px solid color-mix(in srgb, var(--border-strong) 55%, transparent);
@@ -906,7 +906,7 @@ function StoreStyles() {
         0 0 var(--sf-glow-card, 0px) color-mix(in srgb, var(--accent) 62%, transparent); }
     /* Banner lives inside the panel — negative margins pull it edge-to-edge, the
        panel's overflow:hidden rounds its top corners to match. */
-    .sf-panelbanner { height:150px; margin:-32px -22px 16px; background:var(--surface-alt) center/cover no-repeat; position:relative; }
+    .sf-panelbanner { height:150px; margin:-34px -26px 16px; background:var(--surface-alt) center/cover no-repeat; position:relative; }
     .sf-panelbanner::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg, transparent 50%, rgba(20,18,12,.28)); }
 
     /* ══ Cover banner (banner_style: 'cover') ══════════════════════════════
@@ -1104,7 +1104,7 @@ function StoreStyles() {
        A negative inline margin equal to the panel's 22px padding reaches the
        panel border exactly, which is what "full width" means for something
        inside a card. */
-    .sf-lnk-full .sf-linkbtn { border-radius:0; margin-inline:-22px; padding-left:22px; padding-right:22px; }
+    .sf-lnk-full .sf-linkbtn { border-radius:0; margin-inline:-26px; padding-left:26px; padding-right:26px; }
     .sf-linkbtn-label { display:inline-flex; align-items:center; gap:9px; }
     .sf-linkbtn-thumb { flex-shrink:0; width:26px; height:26px; border-radius:50%;
       background:var(--surface-alt) center/cover no-repeat; }
