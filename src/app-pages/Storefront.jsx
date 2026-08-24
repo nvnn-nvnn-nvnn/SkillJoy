@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { useUser } from '@/lib/stores';
 import { getProfileByUsername } from '@/lib/profiles';
@@ -13,13 +14,15 @@ import { TYPE_BY_ID } from '@/lib/productTypes';
 import SubscribeForm from '@/components/SubscribeForm';
 import Seo from '@/components/Seo';
 import { injectPixels } from '@/lib/pixels';
+import { listBlocks } from '@/lib/blocks';
+import LinkBlock from '@/components/LinkBlock';
 
 // Phase 3/7 — public, mobile-first link-in-bio storefront at /@username, themed.
 export default function Storefront() {
   const { handle = '' } = useParams();
   const username = handle.replace(/^@/, '');
   const user = useUser();
-  const [state, setState] = useState({ status: 'loading', profile: null, skills: [], links: [] });
+  const [state, setState] = useState({ status: 'loading', profile: null, skills: [], links: [], blocks: [] });
   const [entered, setEntered] = useState(false); // splash: has the visitor clicked through?
 
   // Resolve the theme BEFORE the early returns so the hooks below are
@@ -39,12 +42,15 @@ export default function Storefront() {
         const profile = await getProfileByUsername(username);
         if (!alive) return;
         if (!profile) { setState({ status: 'notfound' }); return; }
-        const [skills, links] = await Promise.all([
+        const [skills, links, blocks] = await Promise.all([
           listPublishedSkills(profile.id),
           listLinks(profile.id).catch(() => []),
+          // Fail-open: a creator with no blocks — or a deploy where migration
+          // 032 hasn't run — still gets the legacy flat link list below.
+          listBlocks(profile.id).catch(() => []),
         ]);
         if (!alive) return;
-        setState({ status: 'ready', profile, skills, links });
+        setState({ status: 'ready', profile, skills, links, blocks });
         recordEvent('storefront_view', { creatorId: profile.id });
         injectPixels(profile.tracking_pixels);
       } catch {
@@ -73,7 +79,7 @@ export default function Storefront() {
     </div>
   );
 
-  const { profile, skills, links } = state;
+  const { profile, skills, links, blocks = [] } = state;
   const isOwner = user && user.id === profile.id;
   const splashOn = theme.splash_enabled && !entered;
   const socials = (theme.socials || []).filter(s => s.url);
@@ -85,8 +91,10 @@ export default function Storefront() {
   // `=== 'profile'` so a row with a null/unknown placement falls back to the
   // profile pill — the behaviour every link had before migration 029.
   const withUrl = links.filter(l => l.url);
-  const profileLinks = withUrl.filter(l => l.placement !== 'products');
-  const featuredLinks = withUrl.filter(l => l.placement === 'products');
+  const profileLinks = withUrl.filter(l => !l.block_id && l.placement !== 'products');
+  // Featured now comes from the per-link flag (032); placement is the legacy
+  // fallback for rows the backfill hasn't touched.
+  const featuredLinks = withUrl.filter(l => l.featured || (!l.block_id && l.placement === 'products'));
 
   // Bucket products AND featured links by group_label, preserving first-seen
   // order. '' (no label) is one anonymous group rendered without a heading.
@@ -97,14 +105,32 @@ export default function Storefront() {
   // rule: within a section, all products then all links. The two sequences were
   // never coordinated with each other, so interleaving them by number would
   // produce an order the creator can neither predict nor control.
+  // Featured links, grouped by the block they belong to, so each keeps its
+  // block's layout/colours/title. Blocks with no featured links are skipped.
+  // A featured link with no block (legacy `placement === 'products'`) gets a
+  // synthetic block carrying the defaults, so it renders rather than vanishing.
+  const featuredBlocks = [
+    ...blocks
+      .filter(b => b.visible)
+      .map(b => ({ block: b, items: featuredLinks.filter(l => l.block_id === b.id) }))
+      .filter(g => g.items.length > 0),
+    ...(featuredLinks.some(l => !l.block_id)
+      ? [{ block: { id: '__legacy__', visible: true, layout: {} }, items: featuredLinks.filter(l => !l.block_id) }]
+      : []),
+  ];
+
   const itemGroups = [];
   const groupIndex = new Map();
   const bucket = (key, item) => {
     if (!groupIndex.has(key)) { groupIndex.set(key, itemGroups.length); itemGroups.push({ label: key, items: [] }); }
     itemGroups[groupIndex.get(key)].items.push(item);
   };
+  // Only PRODUCTS live in itemGroups now. Featured links used to be bucketed in
+  // here too, which meant they rendered as product cards and inherited product
+  // styling — but a link is not a product, and its block owns its layout,
+  // colours and title. They render as their own section above (see
+  // featuredBlocks), so featuring a link no longer silently restyles it.
   for (const s of skills) bucket((s.group_label || '').trim(), { type: 'skill', data: s });
-  for (const l of featuredLinks) bucket((l.group_label || '').trim(), { type: 'link', data: l });
 
   // Full-page background layer. 'canvas' falls through to the mode palette's --bg.
   // 'video' renders a separate <video> element below (bgStyle stays undefined).
@@ -119,6 +145,7 @@ export default function Storefront() {
     `sf-glow-${theme.product_glow || 'none'}`,
     (theme.bg === 'image' && theme.bg_image) || hasBgVideo ? 'sf-has-bgimg' : '',
     theme.mono_icons ? 'sf-mono' : '',
+    `sf-lnk-${theme.link_shape || 'oval'}`,
     // Gated on glowOn too: sfNameGlow animates a hardcoded 18px text-shadow, so
     // unlike everything else it would NOT go away when --sf-glow collapses to 0.
     glowOn && theme.animated_name ? 'sf-anim-name' : '',
@@ -131,7 +158,24 @@ export default function Storefront() {
     // working identically whether or not a custom colour is set.
     '--sf-panel-bg': `color-mix(in srgb, ${theme.card_color || 'var(--surface)'} ${theme.card_opacity ?? 100}%, transparent)`,
     '--sf-panel-blur': `${theme.card_blur ?? 0}px`,
-    '--sf-item-bg': `color-mix(in srgb, var(--surface) ${theme.product_opacity ?? 100}%, transparent)`,
+    '--sf-item-bg': `color-mix(in srgb, ${theme.item_color || 'var(--surface)'} ${theme.product_opacity ?? 100}%, transparent)`,
+    // Link buttons get their OWN fill, separate from product cards. Default
+    // keeps the existing look (a 10% accent tint over the item surface); a set
+    // link_color replaces it outright. Links and products are distinct block
+    // types in the product spec, so their colours have to be separable — one
+    // shared control would make that impossible later without a migration.
+    '--sf-link-bg': theme.link_color
+      ? `color-mix(in srgb, ${theme.link_color} ${theme.link_opacity ?? theme.product_opacity ?? 100}%, transparent)`
+      : `color-mix(in srgb, var(--accent) 10%, var(--sf-item-bg, var(--surface)))`,
+    // Text colours, separate per category — links and products are distinct
+    // block types and must be stylable independently.
+    ...(theme.link_text_color ? { '--sf-link-fg': theme.link_text_color } : null),
+    '--sf-link-blur': `${theme.link_blur ?? theme.card_blur ?? 0}px`,
+    ...(theme.item_text_color ? { '--sf-item-fg': theme.item_text_color } : null),
+    // Border tracks the fill when custom, else stays accent-derived.
+    '--sf-link-border': theme.link_color
+      ? `color-mix(in srgb, ${theme.link_color} 62%, black)`
+      : 'color-mix(in srgb, var(--accent) 32%, transparent)',
     '--sf-item-blur': `${theme.product_blur ?? 0}px`,
     '--sf-avatar-size': `${theme.avatar_size ?? 96}px`,
     '--sf-avatar-radius': theme.avatar_shape === 'square' ? '14%' : theme.avatar_shape === 'rounded' ? '26%' : '50%',
@@ -193,8 +237,18 @@ export default function Storefront() {
           and the panel scrolls over it, which is what "covers the top of the
           page" needs. Fixed-position would keep it under the whole page; this
           is absolute so it belongs to the top of the document. */}
-      {theme.banner_url && theme.banner_style === 'cover' && (
-        <div className="sf-coverbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} aria-hidden="true" />
+      {/* PORTALLED TO <body>. Anchoring it inside .sf-wrap meant "top" was the
+          top of the content column, which sits below whatever chrome exists —
+          the 60px mobile bar, or just the shell's own offset. Compensating with
+          a negative --app-header-h only worked at the one breakpoint where that
+          variable is set, leaving a strip of page background above the hero
+          everywhere else.
+          On <body> with top:0 it anchors to the DOCUMENT, so it starts at the
+          true top of the page at every width, and still scrolls away normally
+          (absolute, not fixed). */}
+      {theme.banner_url && theme.banner_style === 'cover' && createPortal(
+        <div className="sf-coverbanner" style={{ backgroundImage: `url(${theme.banner_url})` }} aria-hidden="true" />,
+        document.body
       )}
 
       <div ref={tiltRef} className={theme.tilt_enabled ? 'sf-tiltwrap' : undefined}>
@@ -225,8 +279,20 @@ export default function Storefront() {
             ))}
           </div>
         )}
-        {/* Link buttons live INSIDE the profile space — part of "who you are",
-            visually distinct from the products section below. */}
+        {/* Blocks first (migration 032): each renders its own title, layout and
+            collapse state. Links that predate blocks — or belong to none — still
+            fall through to the flat list below, so nothing disappears if the
+            backfill hasn't run yet. */}
+        {/* `!l.featured` is the important half. Featured links are rendered in
+            the products section below (see featuredLinks), so including them
+            here too puts the same link on the page twice — which is exactly
+            what "pull this one out of the list" is supposed to prevent. */}
+        {/* PROFILE links — everything not featured, inside the profile card. */}
+        {blocks.map(b => (
+          <LinkBlock key={b.id} block={b} links={links.filter(l => l.block_id === b.id && !l.featured)} />
+        ))}
+
+        {/* Legacy: links with no block_id. Same markup as before. */}
         {profileLinks.length > 0 && (
           <div className="sf-links">
             {profileLinks.map(l => (
@@ -245,8 +311,17 @@ export default function Storefront() {
       </div>
       </div>
 
-      {/* Gated on itemGroups, NOT skills.length — a store whose only content is
-          featured links still has groups to render. */}
+      {/* FEATURED links — outside the profile card, ABOVE products, each still
+          rendered by its own block so it keeps that block's layout, colours and
+          title. This is the whole point of splitting them from products: a
+          featured link is a promoted LINK, not a product, and featuring one
+          shouldn't change how it looks. */}
+      {featuredBlocks.map(({ block, items }) => (
+        <div key={block.id} className="sf-featured">
+          <LinkBlock block={block} links={items} />
+        </div>
+      ))}
+
       {itemGroups.length > 0 && itemGroups.map((g, gi) => (
         <div key={gi} className="sf-group">
           {g.label && theme.show_group_headers !== false && (
@@ -827,12 +902,21 @@ function StoreStyles() {
 
        Decorative only: aria-hidden + pointer-events:none, so it can never eat a
        click on the avatar or a product card. */
-    .sf-wrap { --sf-cover-h: 300px; }
+    :root { --sf-cover-h: 300px; }
 
     .sf-coverbanner {
-      position:absolute; top:0; left:50%; transform:translateX(-50%);
-      width:100vw; height:var(--sf-cover-h); z-index:0;
-      background:center top/cover no-repeat;
+      /* Portalled onto <body>, so this is anchored to the DOCUMENT, not to the
+         540px content column. That removes the whole problem the previous
+         version was fighting: .sf-wrap begins below the app chrome, so top:0
+         there left a strip of page background above the hero, and the
+         --app-header-h compensation only existed at one breakpoint.
+         No viewport breakout needed either — on <body>, left/right:0 IS full
+         width. Still absolute, so it scrolls away like content. */
+      position:absolute; top:0; left:var(--shell-offset, 0px); right:0;
+      height:var(--sf-cover-h, 300px); z-index:0;
+      background-position:center center;
+      background-size:cover;
+      background-repeat:no-repeat;
       pointer-events:none;
       -webkit-mask-image:linear-gradient(180deg, #000 0%, #000 46%, transparent 100%);
               mask-image:linear-gradient(180deg, #000 0%, #000 46%, transparent 100%);
@@ -843,10 +927,10 @@ function StoreStyles() {
        part of the banner that has already started fading. */
     .sf-panel-cover { margin-top:calc(var(--sf-cover-h) * 0.62); }
 
-    @media (max-width:640px) { .sf-wrap { --sf-cover-h: 200px; } }
+    @media (max-width:640px) { :root { --sf-cover-h: 200px; } }
     /* Very short viewports (landscape phones): a 300px hero would be the entire
        screen before any content. */
-    @media (max-height:560px) { .sf-wrap { --sf-cover-h: 180px; } }
+    @media (max-height:560px) { :root { --sf-cover-h: 180px; } }
     .sf-panel-hasbanner .sf-avatar { margin-top:-58px; position:relative; z-index:1; }
     /* Opacity 0 → the panel becomes an invisible container (info floats on the bg). */
     .sf-panel-ghost { border-color:transparent; box-shadow:none; }
@@ -923,6 +1007,9 @@ function StoreStyles() {
     /* Product cards + link buttons — a separate section below the profile panel */
     /* Links sit inside the profile panel — full width, stacked under the socials. */
     .sf-links { display:flex; flex-direction:column; gap:10px; margin-top:18px; width:100%; }
+    /* Featured links sit outside the profile card, in the same column as the
+       product groups, so they read as page content rather than profile chrome. */
+    .sf-featured { margin-top:22px; }
     .sf-group { margin-top:22px; }
     /* Section header: title + accent-fading rule + item-count pill. */
     .sf-grouphead { display:flex; align-items:center; gap:12px; margin:0 4px 2px; }
@@ -933,7 +1020,7 @@ function StoreStyles() {
     .sf-group .sf-list { margin-top:12px; }
     .sf-list { display:flex; flex-direction:column; gap:14px; margin-top:22px; }
     .sf-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; }
-    .sf-card { display:flex; gap:14px; align-items:center; padding:12px; border:1px solid var(--border); border-radius:var(--r-lg); background:var(--sf-item-bg, var(--surface)); backdrop-filter:blur(var(--sf-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--sf-item-blur, 0px)); text-decoration:none; box-shadow:var(--shadow-sm); transition:transform .16s cubic-bezier(.34,1.4,.64,1), box-shadow .16s ease, border-color .16s ease; }
+    .sf-card { display:flex; gap:14px; align-items:center; padding:12px; color:var(--sf-item-fg, var(--text)); border:1px solid var(--border); border-radius:var(--r-lg); background:var(--sf-item-bg, var(--surface)); backdrop-filter:blur(var(--sf-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--sf-item-blur, 0px)); text-decoration:none; box-shadow:var(--shadow-sm); transition:transform .16s cubic-bezier(.34,1.4,.64,1), box-shadow .16s ease, border-color .16s ease; }
     .sf-card:hover { transform:translateY(-3px); border-color:color-mix(in srgb, var(--accent) 45%, var(--border)); box-shadow:0 12px 26px color-mix(in srgb, var(--accent) 16%, transparent), var(--shadow); }
     .sf-grid .sf-card { flex-direction:column; align-items:stretch; gap:10px; padding:10px; }
     .sf-cover { width:88px; height:88px; flex-shrink:0; border-radius:var(--r); background:var(--surface-alt) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-size:30px; }
@@ -961,8 +1048,18 @@ function StoreStyles() {
       padding:3px 8px; border-radius:var(--r-full); color:var(--accent);
       background:color-mix(in srgb, var(--accent) 14%, transparent);
       border:1px solid color-mix(in srgb, var(--accent) 32%, transparent); }
-    .sf-linkbtn { display:flex; align-items:center; justify-content:center; gap:9px; padding:14px 18px; border:1.5px solid color-mix(in srgb, var(--accent) 32%, transparent); border-radius:var(--r-full); background:color-mix(in srgb, var(--accent) 10%, var(--sf-item-bg, var(--surface))); backdrop-filter:blur(var(--sf-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--sf-item-blur, 0px)); text-decoration:none; color:var(--text); font-weight:700; box-shadow:0 0 var(--sf-glow, 0px) color-mix(in srgb, var(--accent) 78%, transparent); transition:transform .16s cubic-bezier(.34,1.4,.64,1), background .16s ease, border-color .16s ease, box-shadow .16s ease; }
-    .sf-linkbtn:hover { transform:translateY(-2px); background:color-mix(in srgb, var(--accent) 18%, var(--surface)); border-color:var(--accent); box-shadow:0 8px 22px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 var(--sf-glow, 0px) color-mix(in srgb, var(--accent) 60%, transparent); }
+    .sf-linkbtn { display:flex; align-items:center; justify-content:center; gap:9px; padding:14px 18px; color:var(--sf-link-fg, var(--text)); border:1.5px solid var(--sf-link-border); border-radius:var(--r-full); background:var(--sf-link-bg); backdrop-filter:blur(var(--sf-link-blur, 0px)); -webkit-backdrop-filter:blur(var(--sf-link-blur, 0px)); text-decoration:none; font-weight:700; box-shadow:0 0 var(--sf-glow, 0px) color-mix(in srgb, var(--accent) 78%, transparent); transition:transform .16s cubic-bezier(.34,1.4,.64,1), background .16s ease, border-color .16s ease, box-shadow .16s ease; }
+    .sf-linkbtn:hover { transform:translateY(-2px); background:color-mix(in srgb, var(--sf-link-bg) 82%, var(--text)); border-color:var(--sf-link-border); box-shadow:0 8px 22px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 var(--sf-glow, 0px) color-mix(in srgb, var(--accent) 60%, transparent); }
+    /* Link button shape. Separate from .sf-btn-* (product cards) on purpose —
+       links and products are distinct categories and were sharing one key. */
+    .sf-lnk-rounded .sf-linkbtn { border-radius:14px; }
+    .sf-lnk-oval .sf-linkbtn { border-radius:var(--r-full); }
+    .sf-lnk-sharp .sf-linkbtn { border-radius:4px; }
+    /* Full width: square edges AND a viewport breakout, so buttons run to the
+       screen edge rather than stopping at the 540px column. */
+    .sf-lnk-full .sf-linkbtn { border-radius:0; width:100vw; margin-left:50%; transform:translateX(-50%);
+      padding-left:max(18px, calc(50vw - 270px + 18px)); padding-right:max(18px, calc(50vw - 270px + 18px)); }
+    .sf-lnk-full .sf-linkbtn:hover { transform:translateX(-50%) translateY(-2px); }
     .sf-linkbtn-label { display:inline-flex; align-items:center; gap:9px; }
     .sf-linkbtn-arrow { color:var(--accent); flex-shrink:0; }
 

@@ -1,8 +1,8 @@
-# 168 — Link card editor fields (step 6)
+# 177 — Link card editor fields (step 6)
 
 Date: 2026-08-21
 
-Final step of plan 03 §4. Note 167 shipped the render, which already read
+Final step of plan 03 §4. Note 176 shipped the render, which already read
 `description`, `cover_url` and `cta_label` — but nothing wrote them, so every
 featured card fell back to label + "Open" + a link icon. This closes that.
 
@@ -91,7 +91,7 @@ text. The card in the products area should show all three. Remove the image and
 the link icon should come back in both the editor preview and the live card.
 
 ## Status
-Plan 03 is now **fully built** — schema (164), render (167), editor (168).
+Plan 03 is now **fully built** — schema (164), render (176), editor (177).
 Remaining from the design doc but deliberately deferred:
 - `group_label` has no editor control yet, so featured links can only land in the
   ungrouped section. The column exists and the render honours it.

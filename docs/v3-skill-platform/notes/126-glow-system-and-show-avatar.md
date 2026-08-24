@@ -1,4 +1,4 @@
-# 125 — Master glow system + show/hide avatar (Opus side of the UI batch)
+# 126 — Master glow system + show/hide avatar (Opus side of the UI batch)
 
 _2026-07-11. Opus owns Storefront.jsx + StorefrontEditor.jsx + DEFAULT_THEME; Fable ran the
 isolated files (icons/discover/thumbnails/footer) in parallel — merged clean via the file-

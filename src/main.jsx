@@ -8,6 +8,9 @@ class ErrorBoundary extends Component {
     // Surface the crash so it isn't swallowed silently in prod.
     // TODO(observability): forward to Sentry/LogRocket here.
     console.error('[ErrorBoundary]', error, info?.componentStack);
+    // Kept in state so the component stack can be shown on screen, not just
+    // in a console the person hitting the crash may never open.
+    this.setState({ stack: info?.componentStack || null });
   }
   render() {
     if (this.state.error) return (
@@ -17,9 +20,28 @@ class ErrorBoundary extends Component {
       }}>
         <div style={{ fontSize: 64, marginBottom: 12, lineHeight: 1 }}>😵</div>
         <h1 style={{ fontSize: 32, fontWeight: 800, margin: '0 0 8px', fontFamily: 'var(--font-display)' }}>Something went wrong</h1>
-        <p style={{ fontSize: 15, color: 'var(--text-secondary)', margin: '0 0 28px', maxWidth: 380, lineHeight: 1.6 }}>
+        <p style={{ fontSize: 15, color: 'var(--text-secondary)', margin: '0 0 20px', maxWidth: 380, lineHeight: 1.6 }}>
           An unexpected error crashed this page. Try reloading — if it keeps happening, let us know.
         </p>
+
+        {/* The actual error, on screen. A generic "something went wrong" makes a
+            crash unreportable: the person who hit it can't tell you anything
+            useful, and the stack only exists in a console they may never open.
+            Collapsed by default so it stays out of the way for normal users. */}
+        <details style={{ maxWidth: 640, width: '100%', margin: '0 0 24px', textAlign: 'left' }}>
+          <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>
+            Show error details
+          </summary>
+          <pre style={{
+            marginTop: 10, padding: 14, borderRadius: 10, overflowX: 'auto',
+            background: 'var(--surface-alt)', border: '1px solid var(--border)',
+            fontSize: 12, lineHeight: 1.5, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap',
+          }}>
+            {String(this.state.error?.message || this.state.error)}
+            {this.state.stack ? `\n\nComponent stack:${this.state.stack}` : ''}
+          </pre>
+        </details>
+
         <button className="btn btn-primary" onClick={() => window.location.reload()}>Reload page</button>
       </div>
     );
@@ -119,7 +141,12 @@ function AppRoutes() {
           {/* Old /services route folded into the products hub. */}
           <Route path="/services" element={<Navigate to="/build" replace />} />
           <Route path="/discover" element={<Discover />} />
+          {/* The editor's three sections are ROUTES, not local tab state, so the
+              sidebar can link straight to one, browser-back works between them,
+              and a section is shareable. The component reads which from the URL. */}
           <Route path="/storefront/edit" element={<StorefrontEditor />} />
+          <Route path="/storefront/templates" element={<StorefrontEditor />} />
+          <Route path="/storefront/links" element={<StorefrontEditor />} />
           <Route path="/checkout/:skillId" element={<Checkout />} />
 
           <Route path="/profile" element={<Profile />} />

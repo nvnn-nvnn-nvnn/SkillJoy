@@ -35,6 +35,15 @@ Skill, from one link.*
 Session log lives in [`notes/`](notes/) (continues the project-wide numbered
 note convention — see `42-...`).
 
+> ### ⚠️ Read [`LANDMINES.md`](LANDMINES.md) before touching the code
+>
+> Twelve traps in this codebase that have each cost a real debugging session —
+> the backtick that silently ends a `<style>` block, why `!user` doesn't mean
+> "signed out", global element styles in `App.css` leaking into every component,
+> and where the schema actually lives. Symptom-first, so you can find yours by
+> what you're seeing. **When something bites you twice, add it there** — numbered
+> notes are chronological and get buried.
+
 ## Locked decisions (2026-06-22)
 
 - **Selling unit:** a single unified **Skill** (mixed content blocks). Not

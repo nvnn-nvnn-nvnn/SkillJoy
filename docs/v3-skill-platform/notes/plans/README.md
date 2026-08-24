@@ -26,3 +26,16 @@ change-log note + (if it's a real system) an explainer.
   — the concrete spec behind `../explainers/03`: extend `store_links` with a
   `placement` axis, links render after products within a group, editor splits by
   placement. **Status: designed, not built.**
+  ⚠️ Its link half is **superseded by 04**, which generalises `placement` into
+  real blocks.
+
+- [04 — Link-in-Bio blocks](04-link-in-bio-blocks.md) — the block model behind
+  the link-in-bio product spec: a `store_blocks` table owning a set of links
+  plus its own layout, then the 4 layout styles (Classic / Grid / Carousel /
+  Cards), per-block Settings, products-as-a-block, and onboarding templates.
+  **Status: planned, not started.**
+  The headline finding: **there is no block model for links today**, so Phase 1
+  is a hard prerequisite for every other item in the spec — none of the layout
+  controls have anywhere to live until it exists. Carries five open questions
+  that must be answered before Phase 1, the biggest being how existing links
+  get backfilled.

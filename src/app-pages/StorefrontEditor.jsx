@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useUser, useProfile, useAuth } from '@/lib/stores';
 import { listMySkills, reorderSkills, updateSkill } from '@/lib/skills';
 import { initials } from '@/lib/stores';
 import {
   resolveTheme, updateStorefront, SOCIAL_TYPES,
-  listLinks, addLink, updateLink, deleteLink,
+  listLinks,
   THEME_PRESETS, sanitizeThemeImport, portableTheme, SITE_AUDIO_VOLUME,
 } from '@/lib/storefront';
 import { uploadBanner, uploadBgVideo, uploadAudio } from '@/lib/storage';
@@ -18,10 +18,11 @@ import {
   Upload, Download, Layers, MapPin,
 } from 'lucide-react';
 import { BrandIcon } from '@/lib/brandIcons';
+import LinkBlockEditor from '@/components/LinkBlockEditor';
 
 const ACCENT_PRESETS = ['#F5634A', '#2563EB', '#7C3AED', '#DB2777', '#F59E0B', '#EF4444', '#0D9488', '#F8FAFC'];
 
-const SUBTAB_HEADS = { customize: 'Site Customization', themes: 'Themes', links: 'Links' };
+const SUBTAB_HEADS = { customize: 'Site Customization', themes: 'Templates', links: 'Links' };
 
 // ── Theme-card helpers ───────────────────────────────────────────────────────
 // Paint a preset's ACTUAL background so the card previews the look, not an emoji.
@@ -102,7 +103,10 @@ function LivePreview({ theme, name, handle, avatar, bio, location, socials, skil
     '--accent': theme.accent,
     '--lp-card-bg': `color-mix(in srgb, ${theme.card_color || 'var(--lp-surface)'} ${theme.card_opacity ?? 100}%, transparent)`,
     '--lp-card-blur': `${theme.card_blur ?? 0}px`,
-    '--lp-item-bg': `color-mix(in srgb, var(--lp-surface) ${theme.product_opacity ?? 100}%, transparent)`,
+    '--lp-item-bg': `color-mix(in srgb, ${theme.item_color || 'var(--lp-surface)'} ${theme.product_opacity ?? 100}%, transparent)`,
+    '--lp-link-bg': theme.link_color
+      ? `color-mix(in srgb, ${theme.link_color} ${theme.product_opacity ?? 100}%, transparent)`
+      : `color-mix(in srgb, var(--lp-accent, var(--accent)) 10%, var(--lp-surface))`,
     '--lp-item-blur': `${theme.product_blur ?? 0}px`,
     '--lp-avatar-size': `${Math.round((theme.avatar_size ?? 96) * 0.7)}px`, // preview is ~70% scale
     '--lp-avatar-radius': theme.avatar_shape === 'square' ? '14%' : theme.avatar_shape === 'rounded' ? '26%' : '50%',
@@ -192,10 +196,15 @@ export default function StorefrontEditor() {
   const [savingBgVideo, setSavingBgVideo] = useState(false);
   const [savingAudio, setSavingAudio] = useState(false);
   const [savingCursor, setSavingCursor] = useState(false);
-  const [savingLinkCover, setSavingLinkCover] = useState(null); // id of the link uploading, or null
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState('');
-  const [subTab, setSubTab] = useState('customize');
+  // Section comes from the URL, not state. The sidebar's "My Page" group links
+  // directly to each one (see Header.jsx), so this component no longer owns the
+  // switcher at all — it just renders whichever section the route names.
+  const { pathname } = useLocation();
+  const subTab = pathname.endsWith('/templates') ? 'themes'
+    : pathname.endsWith('/links') ? 'links'
+    : 'customize';
   const [musicOpen, setMusicOpen] = useState(false); // site-music modal
   const [dragId, setDragId] = useState(null);       // id of the product being dragged
   const [dragOver, setDragOver] = useState(null);   // section key currently hovered
@@ -334,29 +343,12 @@ export default function StorefrontEditor() {
   function addSocial(type = 'instagram') { setTheme(t => ({ ...t, socials: [...(t.socials || []), { type, url: '' }] })); }
   function removeSocial(i) { setTheme(t => ({ ...t, socials: t.socials.filter((_, j) => j !== i) })); }
 
-  async function createLink() { try { const l = await addLink(user.id, { label: 'New link', url: '', position: links.length }); setLinks([...links, l]); } catch (e) { setErr(e.message); } }
-  function patchLinkLocal(id, patch) { setLinks(ls => ls.map(l => l.id === id ? { ...l, ...patch } : l)); }
-  async function saveLink(id, patch) { try { await updateLink(id, patch); } catch (e) { setErr(e.message); } }
-  // Per-link cover upload. Can't reuse uploadTo(): that writes a THEME key, while
-  // this writes a row. Holds the id of the link currently uploading (not a bool)
-  // so only that row shows "Uploading…" instead of every row at once.
-  async function onLinkCover(id, e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    // Same rule as a product cover — it is the same kind of asset in the same
-    // bucket, so it gets the same 5MB / images-only limit (note 159).
-    const check = validateUpload('cover', file);
-    if (!check.ok) { setErr(check.error); e.target.value = ''; return; }
-    setErr('');
-    setSavingLinkCover(id);
-    try {
-      const url = await uploadBanner(user.id, file);
-      patchLinkLocal(id, { cover_url: url });
-      await saveLink(id, { cover_url: url });
-    } catch (err2) { setErr(err2.message); }
-    finally { setSavingLinkCover(null); if (e.target) e.target.value = ''; }
-  }
-  async function removeLinkRow(id) { setLinks(ls => ls.filter(l => l.id !== id)); try { await deleteLink(id); } catch (e) { setErr(e.message); } }
+  // The block editor writes links directly; this refreshes the copy that feeds
+  // the live preview so the two never disagree.
+  const reloadLinks = () => listLinks(user.id).then(setLinks).catch(() => {});
+
+  // (createLink / patchLinkLocal / saveLink / onLinkCover / removeLinkRow lived
+  // here for the old flat link panel. LinkBlockEditor owns link writes now.)
 
   // ── Sections ──────────────────────────────────────────────────────────────
   // A "section" is just a distinct `group_label` across the creator's products —
@@ -438,20 +430,30 @@ export default function StorefrontEditor() {
       <div className="std-bgfx" aria-hidden="true" />
 
       {/* ── Top header ── */}
+      {/* Top bar is now ACTIONS ONLY. Section nav moved to the left rail below —
+          Customize is a long scrolling column, and a horizontal tab row above it
+          means the way out of that column scrolls off the top. A rail stays put. */}
+      {/* Section tabs live here AND in the sidebar's "My Page" group. That's
+          deliberate duplication, not an oversight: the sidebar is app-wide
+          wayfinding, these are the sections of the page you're already on, and
+          reaching the sidebar means moving away from the work. Both point at
+          the same ROUTES, so they can't disagree about what's selected. */}
       <header className="std-top">
-        <div className="std-top-tabs">
-          {/* Two plain, prominent tabs — no dropdown. Links is a first-class
-              destination so it's never buried. */}
-          <button className={`std-tab${subTab === 'customize' ? ' on' : ''}`} onClick={() => setSubTab('customize')}>
-            <Palette size={15} /> Customize
-          </button>
-          <button className={`std-tab${subTab === 'themes' ? ' on' : ''}`} onClick={() => setSubTab('themes')}>
-            <Layers size={15} /> Themes
-          </button>
-          <button className={`std-tab${subTab === 'links' ? ' on' : ''}`} onClick={() => setSubTab('links')}>
-            <Link2 size={15} /> Links
-          </button>
-        </div>
+        <nav className="std-top-tabs">
+          {[
+            { to: '/storefront/edit', id: 'customize', icon: Palette, label: 'Customize' },
+            { to: '/storefront/links', id: 'links', icon: Link2, label: 'Links' },
+            { to: '/storefront/templates', id: 'themes', icon: Layers, label: 'Templates' },
+          ].map(t => {
+            const Icon = t.icon;
+            return (
+              <Link key={t.id} to={t.to} className={`std-tab${subTab === t.id ? ' on' : ''}`}
+                aria-current={subTab === t.id ? 'page' : undefined}>
+                <Icon size={15} /> {t.label}
+              </Link>
+            );
+          })}
+        </nav>
         <div className="std-top-actions">
           {profile.username && <Link to={`/@${profile.username}`} className="std-ghost"><ExternalLink size={15} /> View live</Link>}
           <button className="std-save" onClick={save}>{saved ? <><Check size={15} /> Saved</> : 'Save changes'}</button>
@@ -460,6 +462,10 @@ export default function StorefrontEditor() {
       {err && <p className="std-err">{err}</p>}
 
       <div className="std-body">
+        {/* No section switcher here any more — it lives in the app sidebar under
+            "My Page" (Header.jsx). One nav, one place, and each section is a
+            real URL. */}
+
         {/* ── Main controls ── */}
         <main className="std-main">
           <div className="std-mainhead">{SUBTAB_HEADS[subTab]}</div>
@@ -691,10 +697,90 @@ export default function StorefrontEditor() {
               </Panel>
 
               {/* ── PRODUCTS — how product cards look & stack ── */}
+              {/* ── LINKS and PRODUCTS are separate panels ──
+                  They're distinct block types on the page, and they were sharing
+                  one "Products" panel — so a creator styling their links had to
+                  find the controls among product settings, and the two sets of
+                  colours sat next to each other looking like one system. Split,
+                  each with its own fill AND text colour. */}
+              <Panel icon={Link2} title="Link buttons">
+                <p className="std-panel-lede">
+                  How your plain link buttons look. Products have their own settings below.
+                </p>
+                <Field label="Button shape">
+                  <Seg value={theme.link_shape || 'oval'} onChange={v => set({ link_shape: v })}
+                    options={[
+                      { v: 'rounded', label: 'Rounded' },
+                      { v: 'oval', label: 'Oval' },
+                      { v: 'sharp', label: 'Sharp' },
+                      { v: 'full', label: 'Full width' },
+                    ]} />
+                  <p className="std-note">
+                    Rounded is a soft card · Oval is the classic pill · Sharp is square-cornered ·
+                    Full width removes the side margins so buttons run edge to edge.
+                  </p>
+                </Field>
+                <Field label="Button colour">
+                  <div className="std-colorrow">
+                    <input type="color" value={theme.link_color || theme.accent}
+                      onChange={e => set({ link_color: e.target.value })} />
+                    <span>{theme.link_color || 'Accent tint'}</span>
+                    {theme.link_color && (
+                      <button className="std-removebtn" onClick={() => set({ link_color: '' })}><X size={13} /> Reset</button>
+                    )}
+                  </div>
+                </Field>
+                <Field label="Button text colour">
+                  <div className="std-colorrow">
+                    <input type="color" value={theme.link_text_color || (theme.mode === 'dark' ? '#F1EFEA' : '#1A1916')}
+                      onChange={e => set({ link_text_color: e.target.value })} />
+                    <span>{theme.link_text_color || 'Theme text'}</span>
+                    {theme.link_text_color && (
+                      <button className="std-removebtn" onClick={() => set({ link_text_color: '' })}><X size={13} /> Reset</button>
+                    )}
+                  </div>
+                  <p className="std-note">Individual blocks can override this in Links → Layouts.</p>
+                </Field>
+                {/* Own opacity/blur, not the product values. A glassy product
+                    grid used to force glassy link buttons — null means "follow
+                    products", so nothing changes until you move the slider. */}
+                <Field label="Button opacity (glass)">
+                  <Slider value={theme.link_opacity ?? theme.product_opacity ?? 100} min={40} max={100} suffix="%"
+                    onChange={v => set({ link_opacity: v })} />
+                </Field>
+                <Field label="Button blur (glass)">
+                  <Slider value={theme.link_blur ?? theme.card_blur ?? 0} min={0} max={24} suffix="px"
+                    onChange={v => set({ link_blur: v })} />
+                </Field>
+              </Panel>
+
               <Panel icon={LayoutGrid} title="Products">
+                <p className="std-panel-lede">
+                  How the things you sell look. Plain links are configured above.
+                </p>
                 <Field label="Product layout"><Seg value={theme.layout} onChange={v => set({ layout: v })} options={[{ v: 'list', label: 'List' }, { v: 'grid', label: 'Grid' }]} /></Field>
-                <Field label="Button style"><Seg value={theme.button_style} onChange={v => set({ button_style: v })} options={[{ v: 'rounded', label: 'Rounded' }, { v: 'pill', label: 'Pill' }, { v: 'sharp', label: 'Sharp' }]} /></Field>
+                <Field label="Card shape"><Seg value={theme.button_style} onChange={v => set({ button_style: v })} options={[{ v: 'rounded', label: 'Rounded' }, { v: 'pill', label: 'Oval' }, { v: 'sharp', label: 'Sharp' }]} /></Field>
                 <Field label="Product glow"><Seg value={theme.product_glow || 'none'} onChange={v => set({ product_glow: v })} options={[{ v: 'none', label: 'None' }, { v: 'soft', label: 'Soft' }, { v: 'strong', label: 'Strong' }]} /></Field>
+                <Field label="Card colour">
+                  <div className="std-colorrow">
+                    <input type="color" value={theme.item_color || (theme.mode === 'dark' ? '#191B1F' : '#FFFFFF')}
+                      onChange={e => set({ item_color: e.target.value })} />
+                    <span>{theme.item_color || 'Theme surface'}</span>
+                    {theme.item_color && (
+                      <button className="std-removebtn" onClick={() => set({ item_color: '' })}><X size={13} /> Reset</button>
+                    )}
+                  </div>
+                </Field>
+                <Field label="Card text colour">
+                  <div className="std-colorrow">
+                    <input type="color" value={theme.item_text_color || (theme.mode === 'dark' ? '#F1EFEA' : '#1A1916')}
+                      onChange={e => set({ item_text_color: e.target.value })} />
+                    <span>{theme.item_text_color || 'Theme text'}</span>
+                    {theme.item_text_color && (
+                      <button className="std-removebtn" onClick={() => set({ item_text_color: '' })}><X size={13} /> Reset</button>
+                    )}
+                  </div>
+                </Field>
                 <Field label="Product opacity (glass)"><Slider value={theme.product_opacity ?? 100} min={40} max={100} suffix="%" onChange={v => set({ product_opacity: v })} /></Field>
                 <Field label="Product blur (glass)"><Slider value={theme.product_blur ?? 0} min={0} max={24} suffix="px" onChange={v => set({ product_blur: v })} /></Field>
                 <Toggle on={theme.show_group_headers !== false} onChange={v => set({ show_group_headers: v })} label="Section headers" hint="Titled dividers above each product group" />
@@ -859,95 +945,16 @@ export default function StorefrontEditor() {
                 )}
               </Panel>
 
-              <Panel icon={Link2} title="Link buttons">
-                {links.map(l => (
-                  <div key={l.id} className="std-linkcard">
-                    <div className="std-row">
-                      <input value={l.label} onChange={e => patchLinkLocal(l.id, { label: e.target.value })} onBlur={e => saveLink(l.id, { label: e.target.value })} placeholder="Label" />
-                      <button className="std-icobtn" onClick={() => removeLinkRow(l.id)}><X size={15} /></button>
-                    </div>
-                    <input value={l.url} onChange={e => patchLinkLocal(l.id, { url: e.target.value })} onBlur={e => saveLink(l.id, { url: e.target.value })} placeholder="https://…" />
-                    <label className="std-check"><input type="checkbox" checked={!!l.is_affiliate} onChange={e => { patchLinkLocal(l.id, { is_affiliate: e.target.checked }); saveLink(l.id, { is_affiliate: e.target.checked }); }} /> Affiliate link</label>
-
-                    {/* Placement — which REGION of the page renders this link.
-                        `|| 'profile'` mirrors the column default so a row that
-                        somehow arrives without it still shows a selected state
-                        instead of an empty segmented control.
-                        Saves immediately (like the affiliate checkbox) rather
-                        than on blur — a segmented control has no blur moment. */}
-                    <div className="std-linkplace">
-                      <span className="std-flabel">Where it shows</span>
-                      <Seg
-                        value={l.placement || 'profile'}
-                        onChange={v => { patchLinkLocal(l.id, { placement: v }); saveLink(l.id, { placement: v }); }}
-                        options={[{ v: 'profile', label: 'Profile' }, { v: 'products', label: 'Featured' }]}
-                      />
-                    </div>
-
-                    {/* Card-only fields. Hidden on a profile pill because it
-                        renders NONE of them — showing a cover uploader there
-                        would promise something that can never appear. */}
-                    {l.placement === 'products' && (
-                      <div className="std-subgroup">
-                        <Field label="Subheader">
-                          <input
-                            value={l.description ?? ''}
-                            onChange={e => patchLinkLocal(l.id, { description: e.target.value })}
-                            onBlur={e => saveLink(l.id, { description: e.target.value.trim() || null })}
-                            placeholder="One line under the title"
-                            maxLength={120}
-                          />
-                        </Field>
-
-                        <Field label="Image">
-                          <div className="std-linkcover">
-                            <div
-                              className={`std-linkcover-prev${l.cover_url ? '' : ' empty'}`}
-                              style={l.cover_url ? { backgroundImage: `url(${l.cover_url})` } : {}}
-                              aria-hidden="true"
-                            >
-                              {/* Mirrors the storefront's fallback exactly (LinkCard
-                                  renders Link2 when cover_url is empty), so the
-                                  editor shows what visitors will actually see. */}
-                              {!l.cover_url && <Link2 size={20} strokeWidth={1.5} />}
-                            </div>
-                            <div className="std-linkcover-actions">
-                              <label className="std-addbtn std-linkcover-btn">
-                                <input type="file" accept="image/*" hidden
-                                  onChange={e => onLinkCover(l.id, e)} disabled={savingLinkCover === l.id} />
-                                {savingLinkCover === l.id ? 'Uploading…' : <><Camera size={14} /> {l.cover_url ? 'Change' : 'Upload'}</>}
-                              </label>
-                              {l.cover_url && (
-                                <button className="std-removebtn"
-                                  onClick={() => { patchLinkLocal(l.id, { cover_url: null }); saveLink(l.id, { cover_url: null }); }}>
-                                  <X size={13} /> Remove
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          <p className="std-note">No image? The card shows a link icon instead.</p>
-                        </Field>
-
-                        <Field label="Button text">
-                          <input
-                            value={l.cta_label ?? ''}
-                            onChange={e => patchLinkLocal(l.id, { cta_label: e.target.value })}
-                            onBlur={e => saveLink(l.id, { cta_label: e.target.value.trim() || null })}
-                            placeholder="Open"
-                            maxLength={24}
-                          />
-                        </Field>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <button className="std-addbtn" onClick={createLink}><Plus size={15} /> Add link</button>
-                <p className="std-note">
-                  Not products — plain buttons on your page, for anything you want to send people
-                  to. Tick <strong>Affiliate link</strong> on any you earn commission from: it shows
-                  a small “Affiliate” tag to visitors and tags the link <code>rel=&quot;sponsored&quot;</code>
-                  for search engines. Disclosing that is generally required, so leave it on.
+              {/* In its own Panel, like Social links above it. Without the
+                  wrapper the block list ran straight on from the social icons
+                  with no boundary, so two unrelated things read as one list.
+                  See src/components/LinkBlockEditor.jsx for the sub-pages. */}
+              <Panel icon={Link2} title="Link blocks">
+                <p className="std-note" style={{ marginTop: -4, marginBottom: 14 }}>
+                  Each block is a group of links with its own title, layout and visibility.
+                  Drag order here is the order they appear on your page.
                 </p>
+                <LinkBlockEditor creatorId={user.id} onChange={reloadLinks} />
               </Panel>
             </>
           )}
@@ -1059,11 +1066,6 @@ function Styles() {
          --app-header-h is 0 on desktop, where nothing sits above the page. */
       position:sticky; top:calc(var(--app-header-h, 0px) + 12px);
       scroll-margin-top:calc(var(--app-header-h, 0px) + 12px); }
-    .std-top-tabs { display:flex; gap:4px; }
-    .std-tab { width:auto; min-width:0; padding:9px 18px; border-radius:var(--r-full); border:none; background:transparent;
-      color:var(--text-secondary); font-size:14px; font-weight:700; cursor:pointer; transition:all .15s; }
-    .std-tab:hover { background:var(--surface-alt); color:var(--text); }
-    .std-tab.on { background:var(--accent); color:#fff; box-shadow:0 4px 14px color-mix(in srgb, var(--accent) 34%, transparent); }
     .std-tabwrap { position:relative; }
     .std-caret { transition:transform .18s ease; opacity:.9; }
     .std-caret.open { transform:rotate(180deg); }
@@ -1093,6 +1095,16 @@ function Styles() {
 
     /* Body: subnav | main | preview */
     .std-body { display:grid; grid-template-columns:minmax(0,1fr) 396px; gap:22px; align-items:start; }
+
+    .std-top-tabs { display:flex; gap:4px; min-width:0; flex-wrap:wrap; }
+    .std-tab { display:inline-flex; align-items:center; gap:7px; width:auto; padding:9px 16px;
+      border-radius:var(--r-full); border:none; background:transparent; color:var(--text-secondary);
+      font-size:14px; font-weight:700; font-family:inherit; text-decoration:none; cursor:pointer;
+      transition:background .13s ease, color .13s ease; }
+    .std-tab:hover { background:var(--surface-alt); color:var(--text); text-decoration:none; }
+    .std-tab.on { background:var(--accent); color:var(--accent-foreground);
+      box-shadow:0 4px 14px color-mix(in srgb, var(--accent) 34%, transparent); }
+    .std-tab.on:hover { background:var(--accent-hover); color:var(--accent-foreground); }
 
     /* Same offset chain as .std-top, one bar lower, so the subnav never tucks
        under the app header either. */
@@ -1411,7 +1423,8 @@ function Styles() {
        No 100vw breakout needed: the preview frame is already the full width of
        its own container, so left/right:0 IS full bleed here. */
     .lp-coverbanner { position:absolute; top:0; left:0; right:0; height:var(--lp-cover-h); z-index:0;
-      background:center top/cover no-repeat; pointer-events:none;
+      background-position:center center; background-size:cover; background-repeat:no-repeat;
+      pointer-events:none;
       -webkit-mask-image:linear-gradient(180deg, #000 0%, #000 46%, transparent 100%);
               mask-image:linear-gradient(180deg, #000 0%, #000 46%, transparent 100%); }
     /* Overrides the margin shorthand on .lp-inner. Same specificity, declared
@@ -1462,13 +1475,17 @@ function Styles() {
     .lp-links { display:flex; flex-direction:column; gap:7px; margin-top:11px; width:100%; }
     .lp-linkbtn { display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-radius:999px; font-size:13px; font-weight:700;
       backdrop-filter:blur(var(--lp-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--lp-item-blur, 0px));
-      background:color-mix(in srgb, var(--accent) 12%, var(--lp-item-bg, transparent)); border:1.5px solid color-mix(in srgb, var(--accent) 32%, transparent);
+      background:var(--lp-link-bg, color-mix(in srgb, var(--accent) 12%, var(--lp-item-bg, transparent)));
+      border:1.5px solid color-mix(in srgb, var(--accent) 32%, transparent);
       box-shadow:0 0 var(--lp-glow, 0px) color-mix(in srgb, var(--accent) 55%, transparent); }
     .lp-btn-pill .lp-card, .lp-btn-pill .lp-cover { border-radius:999px; }
     .lp-btn-sharp .lp-card, .lp-btn-sharp .lp-cover { border-radius:5px; }
 
     @keyframes sfNameGlow { 0%,100% { text-shadow:0 0 0 transparent; } 50% { text-shadow:0 0 16px color-mix(in srgb, var(--accent) 65%, transparent); } }
 
+    /* Preview goes first, rail stays beside the controls — at this width there's
+       still room for 200px of nav, and losing it would put the section switcher
+       back on top of a long scrolling column. */
     @media (max-width: 1100px) {
       .std-body { grid-template-columns:1fr; }
       .std-preview { display:none; }
@@ -1476,6 +1493,7 @@ function Styles() {
     @media (max-width: 780px) {
       .std { padding:14px 12px 60px; }
       .std-top { flex-wrap:wrap; }
+      .std-body { gap:14px; }
     }
   `}</style>;
 }

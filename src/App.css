@@ -354,6 +354,37 @@ body.has-sidebar .app-shell { padding-left: 248px; }
 .sb-link.active .sb-link-icon { color: var(--accent-hover); }
 .sb-link-label { flex: 1; }
 
+/* ── Expandable nav group (My Page → Customize / Templates / Links) ── */
+.sb-caret {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.18s ease;
+}
+.sb-caret.open { transform: rotate(180deg); }
+.sb-link.active .sb-caret { color: var(--accent-hover); }
+
+/* Indented and rule-anchored so the children read as belonging to the parent
+   rather than as three more top-level destinations. */
+.sb-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 3px 0 4px 25px;
+  padding-left: 11px;
+  border-left: 1.5px solid var(--border);
+}
+.sb-sublink {
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: background 0.13s ease, color 0.13s ease;
+}
+.sb-sublink:hover { background: var(--surface); color: var(--text); }
+.sb-sublink.active { color: var(--accent-hover); font-weight: 700; }
+
 .sb-foot { display: flex; flex-direction: column; gap: 2px; padding-top: 12px; margin-top: 8px; border-top: 1px solid var(--border); }
 .sb-foot-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .sb-foot-row .sb-link { flex: 1; }

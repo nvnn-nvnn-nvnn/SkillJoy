@@ -1,4 +1,4 @@
-# 167 — Link product: the render (steps 3–5)
+# 176 — Link product: the render (steps 3–5)
 
 Date: 2026-08-21
 

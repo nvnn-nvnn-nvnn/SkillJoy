@@ -42,6 +42,24 @@ export const DEFAULT_THEME = {
   // colour and transparency stay independent controls rather than one field
   // that has to encode both.
   card_color: '',
+  // Link buttons and product cards are SEPARATE block types (see the
+  // link-in-bio spec), so each gets its own fill AND its own text colour.
+  // '' = follow the theme. Sharing any of these would collapse a distinction
+  // the page design depends on.
+  link_color: '',
+  link_text_color: '',
+  // Opacity and blur are per-category too. They read product_opacity /
+  // card_blur before, so a glassy product grid forced glassy link buttons.
+  // null = "follow the product value", which keeps every existing storefront
+  // pixel-identical until someone moves the slider.
+  link_opacity: null,
+  link_blur: null,
+  // 'rounded' | 'oval' | 'sharp' | 'full'. Separate from button_style, which is
+  // the PRODUCT card shape — they were one key and that's exactly the conflation
+  // being undone here. 'full' also drops the side margins.
+  link_shape: 'oval',
+  item_color: '',
+  item_text_color: '',
   show_avatar: true,        // false → hide the profile picture on the storefront
   socials: [],
   // ── Deeper theming (guns.lol-style) ──
@@ -163,6 +181,11 @@ export function sanitizeThemeImport(raw) {
     const def = DEFAULT_THEME[key];
     // Type must match the default's shape, else skip it.
     if (Array.isArray(def)) { if (Array.isArray(val)) out[key] = val; continue; }
+    // A null default means "unset, but holds a number when set" (link_opacity,
+    // link_blur). typeof null === 'object', so the plain type check below would
+    // silently DROP a perfectly valid imported number — the exact failure mode
+    // this whitelist exists to avoid for hostile input, applied to good input.
+    if (def === null) { if (val === null || typeof val === 'number') out[key] = val; continue; }
     if (typeof def === typeof val) out[key] = val;
   }
   // The importer has no bg_image/bg_video (we never carry them), so an
@@ -265,14 +288,26 @@ export async function updateStorefront(userId, { bio, location, storefront_theme
 }
 
 // ── Link buttons ─────────────────────────────────────────────────────────────
+// Columns that only exist once migration 032 has run.
+const LINK_COLS_LEGACY = 'id, label, url, position, is_affiliate, placement, description, cover_url, cta_label, group_label';
+const LINK_COLS_BLOCKS = `${LINK_COLS_LEGACY}, block_id, featured, visible`;
+
 export async function listLinks(creatorId) {
-  const { data, error } = await supabase
+  // Explicit column list — anything missing here arrives `undefined` in the UI
+  // with no error anywhere, so new columns must be added in BOTH places
+  // (the migration + here). addLink's bare .select() picks up new ones on its own.
+  //
+  // TWO-STEP, and this is load-bearing. Naming a column PostgREST doesn't have
+  // fails the ENTIRE query, and every caller wraps this in .catch(() => []).
+  // So a select that runs ahead of its migration doesn't error visibly — it
+  // silently empties the link list on the public storefront. That is exactly
+  // what shipping the 032 columns here before 032 had run did.
+  //
+  // Trying the block columns first and falling back means the frontend is safe
+  // to deploy in either order, and self-heals the moment the migration lands.
+  const query = (cols) => supabase
     .from('store_links')
-    // Explicit column list — anything missing here arrives `undefined` in the UI
-    // with no error anywhere, so new columns must be added in BOTH places
-    // (migration 029 + here). This is the only store_links read that names
-    // columns; addLink's bare .select() picks up new ones on its own.
-    .select('id, label, url, position, is_affiliate, placement, description, cover_url, cta_label, group_label')
+    .select(cols)
     .eq('creator_id', creatorId)
     // position, then created_at as a tiebreaker. createLink sets
     // `position: links.length`, so a delete-then-add can produce duplicate
@@ -280,8 +315,20 @@ export async function listLinks(creatorId) {
     // which shows up as the list visibly reshuffling between page loads.
     .order('position', { ascending: true })
     .order('created_at', { ascending: true });
-  if (error) throw error;
-  return data;
+
+  const { data, error } = await query(LINK_COLS_BLOCKS);
+  // `?? []` — a null here becomes links.filter(...) on null in every caller,
+  // which is a hard crash rather than an empty list.
+  if (!error) return data ?? [];
+
+  // 42703 = undefined_column. Anything else is a real failure worth surfacing.
+  const missingColumn = error.code === '42703' || /column .* does not exist/i.test(error.message || '');
+  if (!missingColumn) throw error;
+
+  const legacy = await query(LINK_COLS_LEGACY);
+  if (legacy.error) throw legacy.error;
+  // Defaults match the migration's, so callers can read these unconditionally.
+  return (legacy.data ?? []).map(l => ({ ...l, block_id: null, featured: l.placement === 'products', visible: true }));
 }
 
 export async function addLink(creatorId, link) {

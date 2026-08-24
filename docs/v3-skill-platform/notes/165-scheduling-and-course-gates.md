@@ -1,4 +1,4 @@
-# 164 — Booking/course publish gates, split availability, and a Stan parity audit
+# 165 — Booking/course publish gates, split availability, and a Stan parity audit
 
 Date: 2026-08-21
 

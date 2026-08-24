@@ -1,0 +1,205 @@
+import { useState } from 'react';
+import { ArrowUpRight, ChevronDown } from 'lucide-react';
+import { resolveBlockLayout, LINK_SHAPES } from '@/lib/blocks';
+
+// ── Public renderer for one Links block (plan 04) ───────────────────────────
+//
+// Four styles off one data shape. They differ in geometry only — the anchor,
+// its rel handling, and the affiliate tag are identical across all of them, so
+// the style picks a className and the markup stays shared. Four separate
+// renderers would drift on exactly the details (rel="sponsored", target) that
+// matter most.
+export default function LinkBlock({ block, links }) {
+  const layout = resolveBlockLayout(block.layout);
+  // Only when the block explicitly overrides — '' means inherit the page-level
+  // link_shape, so the block var must not be emitted at all.
+  const shapeRadius = layout.shape ? LINK_SHAPES.find(s => s.id === layout.shape)?.radius : null;
+  const [open, setOpen] = useState(!block.default_collapsed);
+
+  const visible = links
+    .filter(l => l.visible !== false && l.url)
+    .sort((a, b) => a.position - b.position);
+
+  if (!block.visible || visible.length === 0) return null;
+
+  const collapsible = !!block.collapsible;
+  const showBody = !collapsible || open;
+  const hasHeader = !!(block.title?.trim() || block.subtitle?.trim() || collapsible);
+
+  const cls = [
+    'lkb',
+    `lkb-${layout.style}`,
+    `lkb-size-${layout.size}`,
+    `lkb-align-${layout.align}`,
+    // Booleans, so these are present-or-absent rather than a value suffix.
+    layout.outline ? 'lkb-outline' : '',
+    layout.shadow ? 'lkb-shadow' : '',
+  ].filter(Boolean).join(' ');
+
+  // Per-block colours as CSS variables, with the page-level value as the
+  // fallback — an unset key must inherit, not override with empty.
+  return (
+    <section
+      className={cls}
+      style={{
+        '--lkb-cols': layout.columns || 2,
+        ...(layout.bg ? { '--lkb-bg': layout.bg } : null),
+        ...(layout.fg ? { '--lkb-fg': layout.fg } : null),
+        ...(layout.headingColor ? { '--lkb-head': layout.headingColor } : null),
+        ...(shapeRadius ? { '--lkb-shape': shapeRadius } : null),
+      }}
+    >
+      {hasHeader && (
+        collapsible ? (
+          // A real button, since it toggles rather than navigates. Without
+          // aria-expanded a screen reader has no way to know the block opened.
+          <button className="lkb-head lkb-head-btn" onClick={() => setOpen(o => !o)} aria-expanded={open}>
+            {block.collapsed_thumb_url && (
+              <span className="lkb-headthumb" style={{ backgroundImage: `url(${block.collapsed_thumb_url})` }} aria-hidden="true" />
+            )}
+            <span className="lkb-headtext">
+              {block.title?.trim() && <span className="lkb-title">{block.title}</span>}
+              {block.subtitle?.trim() && <span className="lkb-sub">{block.subtitle}</span>}
+            </span>
+            <ChevronDown size={17} className={`lkb-caret${open ? ' open' : ''}`} aria-hidden="true" />
+          </button>
+        ) : (
+          <div className="lkb-head">
+            <span className="lkb-headtext">
+              {block.title?.trim() && <span className="lkb-title">{block.title}</span>}
+              {block.subtitle?.trim() && <span className="lkb-sub">{block.subtitle}</span>}
+            </span>
+          </div>
+        )
+      )}
+
+      {showBody && (
+        <div className="lkb-items">
+          {visible.map(l => (
+            <a
+              key={l.id}
+              href={l.url}
+              target="_blank"
+              rel={l.is_affiliate ? 'noopener noreferrer sponsored' : 'noopener noreferrer'}
+              className={`lkb-item${l.featured ? ' featured' : ''}`}
+            >
+              {/* Thumbnail carries the layout: Classic hides it via CSS rather
+                  than omitting it, so switching styles never loses the image. */}
+              {l.cover_url && (
+                <span className="lkb-thumb" style={{ backgroundImage: `url(${l.cover_url})` }} aria-hidden="true" />
+              )}
+
+              <span className="lkb-body">
+                <span className="lkb-label">{l.label || 'Link'}</span>
+                {l.description && <span className="lkb-desc">{l.description}</span>}
+                {l.is_affiliate && <span className="lkb-aff">Affiliate</span>}
+              </span>
+
+              <ArrowUpRight size={17} className="lkb-arrow" aria-hidden="true" />
+            </a>
+          ))}
+        </div>
+      )}
+
+      <Styles />
+    </section>
+  );
+}
+
+function Styles() {
+  return <style>{`
+    .lkb { margin-top:16px; }
+    .lkb-head { display:flex; align-items:center; gap:11px; width:100%; margin-bottom:10px;
+      padding:0; border:none; background:none; text-align:left; color:inherit; }
+    .lkb-head-btn { cursor:pointer; padding:9px 11px; border-radius:var(--r);
+      background:var(--sf-item-bg, var(--surface)); border:1px solid var(--border); }
+    .lkb-headthumb { flex-shrink:0; width:38px; height:38px; border-radius:var(--r-sm);
+      background:var(--surface-alt) center/cover no-repeat; }
+    .lkb-headtext { display:flex; flex-direction:column; gap:1px; flex:1; min-width:0; }
+    .lkb-title { font-size:16.5px; font-weight:800; color:var(--lkb-head, var(--sf-link-fg, var(--text))); }
+    .lkb-sub { font-size:13.5px; line-height:1.45; color:var(--lkb-head, var(--sf-link-fg, var(--text-secondary))); opacity:.82; }
+    .lkb-caret { flex-shrink:0; color:var(--text-muted); transition:transform .2s ease; }
+    .lkb-caret.open { transform:rotate(180deg); }
+
+    .lkb-items { display:flex; flex-direction:column; gap:9px; }
+
+    /* Shared item shell. Style variants below only change geometry. */
+    /* --lkb-shape is the corner radius (Settings → Block shape); the fallback
+       keeps the original pill. Border colour derives from the text colour so a
+       custom pair stays coherent without a fourth control. */
+    .lkb-item { display:flex; align-items:center; gap:12px; padding:15px 17px;
+      border-radius:var(--lkb-shape, var(--r-full)); text-decoration:none;
+      background:var(--lkb-bg, var(--sf-link-bg, var(--surface)));
+      color:var(--lkb-fg, var(--sf-link-fg, var(--text)));
+      border:1.5px solid var(--lkb-fg, var(--sf-link-border, transparent));
+      transition:transform .16s cubic-bezier(.34,1.4,.64,1), box-shadow .16s ease, border-color .16s ease; }
+    .lkb-item:hover { transform:translateY(-2px); }
+    .lkb-body { display:flex; flex-direction:column; gap:2px; flex:1; min-width:0; }
+    .lkb-label { font-weight:700; font-size:15.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .lkb-desc { font-size:13px; line-height:1.45; color:var(--lkb-fg, var(--sf-link-fg, var(--text-secondary))); opacity:.75; }
+    .lkb-aff { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.05em;
+      color:var(--text-muted); }
+    .lkb-thumb { flex-shrink:0; width:44px; height:44px; border-radius:var(--r-sm);
+      background:var(--surface-alt) center/cover no-repeat;
+      display:inline-flex; align-items:center; justify-content:center; color:var(--text-muted); }
+    .lkb-arrow { flex-shrink:0; opacity:.55; }
+
+    /* ── Classic: no thumbnail, centred label, arrow only ── */
+    .lkb-classic .lkb-thumb { display:none; }
+    .lkb-classic .lkb-desc { display:none; }
+
+    /* ── Grid ── */
+    .lkb-grid .lkb-items { display:grid; grid-template-columns:repeat(var(--lkb-cols, 2), minmax(0,1fr)); gap:9px; }
+    .lkb-grid .lkb-item { flex-direction:column; align-items:stretch; text-align:center;
+      padding:14px; border-radius:var(--r-lg); }
+    .lkb-grid .lkb-thumb { width:100%; height:84px; border-radius:var(--r); }
+    .lkb-grid .lkb-arrow { display:none; }
+    .lkb-grid .lkb-desc { display:none; }
+
+    /* ── Carousel ──
+       Breaks out of the 540px column so the row can actually run edge to edge;
+       the padding puts the first card back in line with everything above it.
+       scroll-snap gives it the swipe feel without any JS. */
+    .lkb-carousel .lkb-items { display:flex; flex-direction:row; gap:9px;
+      overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none;
+      width:100vw; margin-left:50%; transform:translateX(-50%);
+      padding:2px max(18px, calc(50vw - 270px + 18px)); }
+    .lkb-carousel .lkb-items::-webkit-scrollbar { display:none; }
+    .lkb-carousel .lkb-item { flex:0 0 190px; flex-direction:column; align-items:stretch;
+      scroll-snap-align:start; border-radius:var(--r-lg); padding:14px; }
+    .lkb-carousel .lkb-thumb { width:100%; height:96px; border-radius:var(--r); }
+    .lkb-carousel .lkb-arrow { display:none; }
+
+    /* ── Cards ── */
+    .lkb-cards .lkb-item { align-items:flex-start; padding:14px; border-radius:var(--r-lg); }
+    .lkb-cards .lkb-thumb { width:56px; height:56px; }
+    .lkb-cards .lkb-label { white-space:normal; }
+
+    /* ── Size ── */
+    .lkb-size-small .lkb-item { padding:10px 13px; }
+    .lkb-size-small .lkb-label { font-size:13.5px; }
+    .lkb-size-large .lkb-item { padding:19px 20px; }
+    .lkb-size-large .lkb-label { font-size:16px; }
+
+    /* ── Alignment. Classic centres its label by default; the other styles are
+       left-aligned unless told otherwise. ── */
+    .lkb-align-left .lkb-body { text-align:left; align-items:flex-start; }
+    .lkb-align-center .lkb-body { text-align:center; align-items:center; }
+    .lkb-align-right .lkb-body { text-align:right; align-items:flex-end; }
+
+    /* ── Outline / shadow ── */
+    /* Outline and shadow are on/off (see DEFAULT_BLOCK_LAYOUT). Default is OFF,
+       so the base .lkb-item carries no border colour and no shadow. */
+    .lkb-item { border-color:transparent; }
+    .lkb-outline .lkb-item { border-color:var(--sf-link-border, var(--border-strong)); }
+    .lkb-shadow .lkb-item { box-shadow:0 4px 14px rgba(20,18,12,.10); }
+
+    /* Featured reads as promoted without needing its own layout. */
+    .lkb-item.featured { border-color:var(--accent); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .lkb-item, .lkb-caret { transition:none; }
+      .lkb-item:hover { transform:none; }
+    }
+  `}</style>;
+}

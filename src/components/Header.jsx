@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useUser, useProfile, useAuth } from '@/lib/stores';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  Package, Store, BarChart3, Compass, Lock, ExternalLink, User, Settings, TrendingUp,
+  Package, Store, BarChart3, Compass, Lock, ExternalLink, User, Settings, TrendingUp, ChevronDown,
 } from 'lucide-react';
 import Notifications from './Notifications';
 import Logo from './Logo';
@@ -16,6 +16,52 @@ function NavItem({ to, icon: Icon, label, active, badge = 0, onClick }) {
       <span className="sb-link-label">{label}</span>
       {badge > 0 && <span className="nav-badge">{badge}</span>}
     </Link>
+  );
+}
+
+// A nav item that expands into sub-destinations.
+//
+// Open state is DERIVED from the route, not stored: if you're anywhere under
+// /storefront the group is open, otherwise it's closed. A remembered toggle
+// would let you be on /storefront/links with the group collapsed, which hides
+// where you actually are — the one thing nav must never do.
+//
+// The parent is a Link (to the first item), not a button. It has a real
+// destination, so making it a button would break middle-click and open-in-new-tab
+// for no gain; the chevron is decoration on top of a working link.
+function NavGroup({ icon, label, active, items, currentPath, onNavigate }) {
+  // Assigned as a VARIABLE, not renamed in the param list — eslint's
+  // varsIgnorePattern ^[A-Z_] covers variables but not args (LANDMINES §11).
+  const Icon = icon;
+  const open = active;
+  return (
+    <div className={`sb-group-nav${open ? ' open' : ''}`}>
+      <Link
+        to={items[0].to}
+        className={`sb-link${active ? ' active' : ''}`}
+        onClick={onNavigate}
+        aria-expanded={open}
+      >
+        <Icon size={18} strokeWidth={2} className="sb-link-icon" />
+        <span className="sb-link-label">{label}</span>
+        <ChevronDown size={15} className={`sb-caret${open ? ' open' : ''}`} aria-hidden="true" />
+      </Link>
+      {open && (
+        <div className="sb-sub">
+          {items.map(it => (
+            <Link
+              key={it.to}
+              to={it.to}
+              className={`sb-sublink${currentPath === it.to ? ' active' : ''}`}
+              onClick={onNavigate}
+              aria-current={currentPath === it.to ? 'page' : undefined}
+            >
+              {it.label}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -71,8 +117,22 @@ export default function Header() {
 
         <nav className="sb-nav">
           <span className="sb-group">Create</span>
-          {/* Link-in-bio first: the customizable page is the hook, products live on it. */}
-          <NavItem to="/storefront/edit" icon={Store} label="My Page" active={on('/storefront')} onClick={close} />
+          {/* Link-in-bio first: the customizable page is the hook, products live on it.
+              My Page expands into its sections rather than hiding them behind a tab
+              row inside the editor — one nav for the whole app, and each section is
+              a real URL you can link to or hit back from. */}
+          <NavGroup
+            icon={Store}
+            label="My Page"
+            active={on('/storefront')}
+            items={[
+              { to: '/storefront/edit', label: 'Customize' },
+              { to: '/storefront/links', label: 'Links' },
+              { to: '/storefront/templates', label: 'Templates' },
+            ]}
+            currentPath={currentPath}
+            onNavigate={close}
+          />
           <NavItem to="/build" icon={Package} label="Products" active={on('/build')} onClick={close} />
 
           <span className="sb-group">Grow</span>

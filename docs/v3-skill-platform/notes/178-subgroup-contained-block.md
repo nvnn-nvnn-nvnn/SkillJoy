@@ -1,4 +1,4 @@
-# 169 — `.std-subgroup` reads as a block, not an indent
+# 178 — `.std-subgroup` reads as a block, not an indent
 
 Date: 2026-08-21
 
