@@ -10,15 +10,16 @@ import {
 } from '@/lib/storefront';
 import { uploadBanner, uploadBgVideo, uploadAudio } from '@/lib/storage';
 import { validateUpload, LIMITS, formatBytes } from '@/lib/uploadLimits';
-import { MAX_AUDIO_TRACKS } from '@/lib/storefront';
+import { MAX_AUDIO_TRACKS, GLOW_TARGETS, glowVars } from '@/lib/storefront';
 import {
   Palette, Link2, Eye, ImagePlus, X, Plus, ChevronUp, ChevronDown,
   ExternalLink, Check, MousePointer2, Type, Video, Music, Wand2, SlidersHorizontal,
   Image as ImageIcon, Camera, AtSign, User, Sparkles, LayoutGrid, ListMusic,
-  Upload, Download, Layers, MapPin,
+  Upload, Download, Layers, MapPin, Star,
 } from 'lucide-react';
 import { BrandIcon } from '@/lib/brandIcons';
 import LinkBlockEditor from '@/components/LinkBlockEditor';
+import { listBlocks, resolveBlockLayout, LINK_SHAPES } from '@/lib/blocks';
 
 const ACCENT_PRESETS = ['#F5634A', '#2563EB', '#7C3AED', '#DB2777', '#F59E0B', '#EF4444', '#0D9488', '#F8FAFC'];
 
@@ -84,11 +85,115 @@ function Toggle({ on, onChange, label, hint }) {
   );
 }
 
+// Multi-select. Deliberately NOT <Seg>, which is one-of-N — these are five
+// independent on/off answers, and a segmented control would imply they're
+// exclusive. Each chip carries its own checked state.
+function Chips({ value, onChange, options, allLabel }) {
+  const set = new Set(Array.isArray(value) ? value : options.map(o => o.id));
+  const flip = (id) => {
+    const next = new Set(set);
+    next.has(id) ? next.delete(id) : next.add(id);
+    onChange(options.filter(o => next.has(o.id)).map(o => o.id));
+  };
+  return (
+    <div className="std-chips">
+      {options.map(o => (
+        <button key={o.id} className={`std-chip${set.has(o.id) ? ' on' : ''}`}
+          onClick={() => flip(o.id)} aria-pressed={set.has(o.id)}>
+          {set.has(o.id) ? <Check size={12} strokeWidth={3} /> : <span className="std-chipdot" />}
+          {o.label}
+        </button>
+      ))}
+      {allLabel && set.size < options.length && (
+        <button className="std-chipall" onClick={() => onChange(options.map(o => o.id))}>{allLabel}</button>
+      )}
+    </div>
+  );
+}
+
 // ── Live preview — a faithful mini-storefront that reflects the draft theme ────
-function LivePreview({ theme, name, handle, avatar, bio, location, socials, skills, links }) {
+// One block's links, at preview scale. Deliberately NOT a reuse of LinkBlock:
+// that component carries its own full-size stylesheet, and dropping it into a
+// ~65%-scale phone frame would render at the wrong size while overriding the
+// preview's own CSS. This mirrors the SHAPE — style, colours, title — which is
+// what the controls actually change.
+// Preview mirrors of the page's link geometry. Kept as literals rather than
+// imported from Storefront.jsx because the preview is deliberately decoupled
+// from the live renderer (see note 180 §8) — but the VALUES must match, so if
+// one changes, change both.
+const LP_LINK_RADIUS = { rounded: '14px', oval: '999px', sharp: '4px', full: '0px' };
+
+// The preview frame is ~65% of the live page, so every glow length is too.
+// Rewriting --sf-* to --lp-* keeps ONE source of truth for which targets are
+// on: the same glowVars the live page calls.
+function scaleGlow(vars, factor) {
+  const out = {};
+  for (const [k, v] of Object.entries(vars)) {
+    const px = parseFloat(v) || 0;
+    out[k.replace('--sf-', '--lp-')] = `${px * factor}px`;
+  }
+  return out;
+}
+
+// Emits only the featured_* keys that are set; everything else falls through
+// to the --lp-link-* vars on the preview root. Same cascade as the live page.
+function lpFeaturedVars(theme) {
+  const v = {};
+  const fill = theme.featured_link_color;
+  const op = theme.featured_link_opacity ?? theme.link_opacity ?? theme.product_opacity ?? 100;
+  if (fill) v['--lp-link-bg'] = `color-mix(in srgb, ${fill} ${op}%, transparent)`;
+  if (theme.featured_link_text_color) v['--lp-link-fg'] = theme.featured_link_text_color;
+  if (theme.featured_link_shape) v['--lp-link-radius'] = LP_LINK_RADIUS[theme.featured_link_shape] ?? LP_LINK_RADIUS.oval;
+  return v;
+}
+
+function PreviewLinkGroup({ block, items, featured }) {
+  const layout = resolveBlockLayout(block.layout);
+  // '' means inherit, so the var must not be emitted at all — an empty default
+  // that IS a value would silently override every level above it.
+  const shapeRadius = layout.shape ? LINK_SHAPES.find(x => x.id === layout.shape)?.radius : null;
+  const style = {
+    ...(shapeRadius ? { '--lpb-shape': shapeRadius } : null),
+    ...(layout.bg ? { '--lpb-bg': layout.bg } : null),
+    ...(layout.fg ? { '--lpb-fg': layout.fg } : null),
+    ...(layout.headingColor ? { '--lpb-head': layout.headingColor } : null),
+  };
+  return (
+    <div className={`lpb lpb-${layout.style}${featured ? ' lpb-featured' : ''}`} style={style}>
+      {block.title?.trim() && <span className="lpb-title">{block.title}</span>}
+      {block.subtitle?.trim() && <span className="lpb-sub">{block.subtitle}</span>}
+      <div className="lpb-items">
+        {items.slice(0, 4).map(l => (
+          <div key={l.id} className="lpb-item">
+            {l.cover_url && <span className="lpb-thumb" style={{ backgroundImage: `url(${l.cover_url})` }} />}
+            <span className="lpb-label">{l.label || 'Link'}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LivePreview({ theme, name, handle, avatar, bio, location, socials, skills, links, blocks }) {
   // Mirrors Storefront.jsx exactly — if the preview ignored glow_enabled the
   // toggle would look like it did nothing until you opened the live page.
   const glowOn = theme.glow_enabled !== false;
+
+  // Same split as the live page: profile links stay in the card, featured ones
+  // move out above the products. Grouped by block so each carries its own
+  // layout and colours.
+  const withUrl = (links || []).filter(l => l.url && l.visible !== false);
+  // Placement is the BLOCK's (033), not the link's — same rule as the live
+  // page, so the preview can't imply a split the page doesn't make.
+  const groupsFor = (placement) => (blocks || [])
+    .filter(b => b.visible && (b.placement || 'profile') === placement)
+    .map(b => ({ block: b, items: withUrl.filter(l => l.block_id === b.id) }))
+    .filter(g => g.items.length > 0);
+  const profileGroups = groupsFor('profile');
+  const featuredGroups = groupsFor('featured');
+  // Links predating blocks still render, as plain profile buttons.
+  const orphanLinks = withUrl.filter(l => !l.block_id);
+  if (orphanLinks.length) profileGroups.push({ block: { id: '__none__', layout: {} }, items: orphanLinks });
   const bgStyle =
     theme.bg === 'solid' ? { background: theme.bg_color } :
     theme.bg === 'gradient' ? { background: `linear-gradient(160deg, ${theme.bg_color}, ${theme.bg_color2})` } :
@@ -105,8 +210,10 @@ function LivePreview({ theme, name, handle, avatar, bio, location, socials, skil
     '--lp-card-blur': `${theme.card_blur ?? 0}px`,
     '--lp-item-bg': `color-mix(in srgb, ${theme.item_color || 'var(--lp-surface)'} ${theme.product_opacity ?? 100}%, transparent)`,
     '--lp-link-bg': theme.link_color
-      ? `color-mix(in srgb, ${theme.link_color} ${theme.product_opacity ?? 100}%, transparent)`
+      ? `color-mix(in srgb, ${theme.link_color} ${theme.link_opacity ?? theme.product_opacity ?? 100}%, transparent)`
       : `color-mix(in srgb, var(--lp-accent, var(--accent)) 10%, var(--lp-surface))`,
+    ...(theme.link_text_color ? { '--lp-link-fg': theme.link_text_color } : null),
+    '--lp-link-radius': LP_LINK_RADIUS[theme.link_shape] ?? LP_LINK_RADIUS.oval,
     '--lp-item-blur': `${theme.product_blur ?? 0}px`,
     '--lp-avatar-size': `${Math.round((theme.avatar_size ?? 96) * 0.7)}px`, // preview is ~70% scale
     '--lp-avatar-radius': theme.avatar_shape === 'square' ? '14%' : theme.avatar_shape === 'rounded' ? '26%' : '50%',
@@ -115,7 +222,9 @@ function LivePreview({ theme, name, handle, avatar, bio, location, socials, skil
     '--lp-bio-glow': `${theme.bio_glow ?? 0}px`,
     '--lp-glow': glowOn ? `${(theme.glow_intensity ?? 0) * 0.65}px` : '0px',
     '--lp-glow-strong': glowOn ? `${(theme.glow_intensity ?? 0) * 1.4}px` : '0px',
-    '--lp-icon-glow': glowOn ? `${(theme.icon_glow ?? 10) * 0.65}px` : '0px', // preview ~65% scale
+    // Per-surface, scaled. glowVars returns the live-page pixel values, so each
+    // is re-scaled to the preview here rather than duplicating the target logic.
+    ...scaleGlow(glowVars(theme, glowOn), 0.65),
     // Cover-banner height at preview scale. Set here rather than in CSS so it
     // stays next to the other preview-scale factors — 150 is ~0.5 of the live
     // 300px, matching the preview frame's own reduction.
@@ -153,15 +262,24 @@ function LivePreview({ theme, name, handle, avatar, bio, location, socials, skil
             {(socials || []).filter(s => s.url).map((s, i) => <span key={i} className="lp-social"><BrandIcon type={s.type} size={20} /></span>)}
           </div>
         )}
-        {/* Links inside the profile panel (mirrors the live storefront) */}
-        {(links || []).filter(l => l.url).length > 0 && (
-          <div className="lp-links">
-            {(links || []).filter(l => l.url).slice(0, 3).map(l => (
-              <div key={l.id} className="lp-linkbtn"><Link2 size={14} /> {l.label || 'Link'}</div>
-            ))}
-          </div>
-        )}
+        {/* PROFILE links, grouped by block so each shows its own layout and
+            colours. Previously this was one flat list, which meant the entire
+            Layouts tab had no live feedback — the thing note 175 argued is
+            worse than having no preview at all. */}
+        {profileGroups.map(g => (
+          <PreviewLinkGroup key={g.block.id} block={g.block} items={g.items} />
+        ))}
       </div>
+      {/* FEATURED links — outside the card, above products, matching the live
+          page's ordering so the preview doesn't imply a different layout. */}
+      {featuredGroups.length > 0 && (
+        <div style={lpFeaturedVars(theme)}>
+          {featuredGroups.map(g => (
+            <PreviewLinkGroup key={g.block.id} block={g.block} items={g.items} featured />
+          ))}
+        </div>
+      )}
+
       <div className={`lp-list${theme.layout === 'grid' ? ' lp-grid' : ''}`}>
           {shown.length === 0 && <div className="lp-card lp-empty">Your products appear here</div>}
           {shown.map(s => (
@@ -191,6 +309,7 @@ export default function StorefrontEditor() {
   const [webhookUrl, setWebhookUrl] = useState('');
   const [skills, setSkills] = useState([]);
   const [links, setLinks] = useState([]);
+  const [blocks, setBlocks] = useState([]);
   const [savingBanner, setSavingBanner] = useState(false);
   const [savingBg, setSavingBg] = useState(false);
   const [savingBgVideo, setSavingBgVideo] = useState(false);
@@ -225,6 +344,7 @@ export default function StorefrontEditor() {
     if (!user) return;
     listMySkills(user.id).then(s => setSkills(s.filter(x => x.status === 'published'))).catch(() => {});
     listLinks(user.id).then(setLinks).catch(() => {});
+    listBlocks(user.id).then(setBlocks).catch(() => {});
   }, [user]);
 
   if (!user || !profile) return <div className="std-loading">Loading…<Styles /></div>;
@@ -345,7 +465,12 @@ export default function StorefrontEditor() {
 
   // The block editor writes links directly; this refreshes the copy that feeds
   // the live preview so the two never disagree.
-  const reloadLinks = () => listLinks(user.id).then(setLinks).catch(() => {});
+  // Reloads BOTH — the preview renders links through their block, so a block
+  // edit with stale block data would show the old layout.
+  const reloadLinks = () => {
+    listLinks(user.id).then(setLinks).catch(() => {});
+    listBlocks(user.id).then(setBlocks).catch(() => {});
+  };
 
   // (createLink / patchLinkLocal / saveLink / onLinkCover / removeLinkRow lived
   // here for the old flat link panel. LinkBlockEditor owns link writes now.)
@@ -596,14 +721,23 @@ export default function StorefrontEditor() {
                   on={theme.glow_enabled !== false}
                   onChange={v => set({ glow_enabled: v })}
                   label="Glow effects"
-                  hint="Accent halo on your name and social icons"
+                  hint="Accent halo on your name, icons, links and cards"
                 />
                 {theme.glow_enabled !== false && (
                   <div className="std-subgroup">
                     <Field label="Glow intensity"><Slider value={theme.glow_intensity ?? 0} min={0} max={80} suffix="px" onChange={v => set({ glow_intensity: v })} /></Field>
                     <p className="std-note">Master accent glow across your name, picture, card &amp; links.</p>
                     <Field label="Icon glow"><Slider value={theme.icon_glow ?? 10} min={0} max={60} suffix="px" onChange={v => set({ icon_glow: v })} /></Field>
-                    <p className="std-note">Neon halo on your social icons — crank it for a full burst, 0 to turn it off.</p>
+                    <p className="std-note">Neon halo on every icon — socials, link buttons and block arrows. Crank it for a full burst, 0 to turn it off.</p>
+                    {/* One slider used to light all five surfaces at once, so
+                        tuning it for links also lit the name and avatar. Each
+                        target collapses its own variable to 0 — nothing else
+                        changes. */}
+                    <Field label="Glow applies to">
+                      <Chips value={theme.glow_targets} onChange={v => set({ glow_targets: v })}
+                        options={GLOW_TARGETS} allLabel="Select all" />
+                      <p className="std-note">Untick a surface to leave it flat while the rest still glow.</p>
+                    </Field>
                     {/* Lives inside the group because it is ALSO a name glow and is
                         suppressed with the rest — outside, it would look broken. */}
                     <Toggle on={!!theme.animated_name} onChange={v => set({ animated_name: v })} label="Pulse the name" hint="Slow accent breathe on your display name" />
@@ -703,9 +837,9 @@ export default function StorefrontEditor() {
                   find the controls among product settings, and the two sets of
                   colours sat next to each other looking like one system. Split,
                   each with its own fill AND text colour. */}
-              <Panel icon={Link2} title="Link buttons">
+              <Panel icon={Link2} title="Profile links">
                 <p className="std-panel-lede">
-                  How your plain link buttons look. Products have their own settings below.
+                  The link buttons inside your profile card. Featured links and products each have their own settings below.
                 </p>
                 <Field label="Button shape">
                   <Seg value={theme.link_shape || 'oval'} onChange={v => set({ link_shape: v })}
@@ -751,6 +885,61 @@ export default function StorefrontEditor() {
                 <Field label="Button blur (glass)">
                   <Slider value={theme.link_blur ?? theme.card_blur ?? 0} min={0} max={24} suffix="px"
                     onChange={v => set({ link_blur: v })} />
+                </Field>
+                <p className="std-note std-xref">
+                  Glow lives in <strong>General &rarr; Glow effects</strong> above.
+                  <em>Glow intensity</em> is the halo around the button; <em>Icon glow</em> is the bloom on its icon.
+                </p>
+              </Panel>
+
+              {/* ── FEATURED links are a third category ──
+                  Same object as a profile link, different job: promoted out of
+                  the card into its own section above the products. Every control
+                  here defaults to "Follow profile links", so an untouched
+                  storefront is pixel-identical — this adds a cascade level, it
+                  doesn't fork the styling. */}
+              <Panel icon={Star} title="Featured links">
+                <p className="std-panel-lede">
+                  Links you've promoted out of the profile card. Leave anything unset to follow your profile links.
+                </p>
+                <Field label="Button shape">
+                  <Seg value={theme.featured_link_shape || ''} onChange={v => set({ featured_link_shape: v })}
+                    options={[
+                      { v: '', label: 'Follow' },
+                      { v: 'rounded', label: 'Rounded' },
+                      { v: 'oval', label: 'Oval' },
+                      { v: 'sharp', label: 'Sharp' },
+                    ]} />
+                  <p className="std-note">Follow uses whatever your profile links use.</p>
+                </Field>
+                <Field label="Button colour">
+                  <div className="std-colorrow">
+                    <input type="color" value={theme.featured_link_color || theme.link_color || theme.accent}
+                      onChange={e => set({ featured_link_color: e.target.value })} />
+                    <span>{theme.featured_link_color || 'Follow profile links'}</span>
+                    {theme.featured_link_color && (
+                      <button className="std-removebtn" onClick={() => set({ featured_link_color: '' })}><X size={13} /> Reset</button>
+                    )}
+                  </div>
+                </Field>
+                <Field label="Button text colour">
+                  <div className="std-colorrow">
+                    <input type="color" value={theme.featured_link_text_color || theme.link_text_color || (theme.mode === 'dark' ? '#F1EFEA' : '#1A1916')}
+                      onChange={e => set({ featured_link_text_color: e.target.value })} />
+                    <span>{theme.featured_link_text_color || 'Follow profile links'}</span>
+                    {theme.featured_link_text_color && (
+                      <button className="std-removebtn" onClick={() => set({ featured_link_text_color: '' })}><X size={13} /> Reset</button>
+                    )}
+                  </div>
+                  <p className="std-note">A block can still override this in Links &rarr; Layouts.</p>
+                </Field>
+                <Field label="Button opacity (glass)">
+                  <Slider value={theme.featured_link_opacity ?? theme.link_opacity ?? theme.product_opacity ?? 100}
+                    min={40} max={100} suffix="%" onChange={v => set({ featured_link_opacity: v })} />
+                </Field>
+                <Field label="Button blur (glass)">
+                  <Slider value={theme.featured_link_blur ?? theme.link_blur ?? theme.card_blur ?? 0}
+                    min={0} max={24} suffix="px" onChange={v => set({ featured_link_blur: v })} />
                 </Field>
               </Panel>
 
@@ -964,7 +1153,7 @@ export default function StorefrontEditor() {
         <aside className="std-preview">
           <div className="std-preview-label"><Eye size={13} /> Live preview</div>
           <div className="std-preview-frame">
-            <LivePreview theme={theme} name={name || `@${profile.username}`} handle={profile.username} avatar={avatarUrl} bio={bio} location={location} socials={theme.socials} skills={skills} links={links} />
+            <LivePreview theme={theme} name={name || `@${profile.username}`} handle={profile.username} avatar={avatarUrl} bio={bio} location={location} socials={theme.socials} skills={skills} links={links} blocks={blocks} />
           </div>
           <p className="std-preview-note">Updates as you edit · Save to publish</p>
         </aside>
@@ -1294,6 +1483,26 @@ function Styles() {
        shoves it off in this narrow column — pin it back to the left edge. */
     .std-linkcover-actions .std-removebtn { margin:0; }
 
+    /* Multi-select chips. Checked state is carried by fill + a tick, not by
+       fill alone — a colour-only difference at 3:1 is exactly the contrast
+       problem this pass is fixing. */
+    .std-chips { display:flex; flex-wrap:wrap; gap:7px; }
+    .std-chip { display:inline-flex; align-items:center; gap:6px; padding:7px 13px;
+      border-radius:var(--r-full); border:1.5px solid var(--border-strong);
+      background:var(--surface); color:var(--text-secondary);
+      font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap;
+      transition:background .14s ease, border-color .14s ease, color .14s ease; }
+    .std-chip:hover { border-color:var(--accent-mid); color:var(--text); }
+    .std-chip.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .std-chipdot { width:12px; height:12px; border-radius:50%; border:1.5px solid var(--border-strong); }
+    .std-chipall { padding:7px 13px; border-radius:var(--r-full); border:1.5px dashed var(--border-strong);
+      background:transparent; color:var(--text-muted); font-size:12.5px; font-weight:700; cursor:pointer; }
+    .std-chipall:hover { border-color:var(--accent); color:var(--accent); }
+
+    .std-xref { margin-top:12px; padding:9px 11px; border-radius:8px;
+      border-left:2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+      background:color-mix(in srgb, var(--accent) 8%, transparent); }
+    .std-xref em { font-style:normal; font-weight:700; color:var(--text); }
     .std-panel-lede { font-size:13px; color:var(--text-secondary); line-height:1.55; margin:0 0 14px; }
     .std-upload-wide { width:100%; aspect-ratio:3 / 1; }
 
@@ -1413,7 +1622,7 @@ function Styles() {
     .lp-inner { position:relative; z-index:1; margin:20px 14px; padding:24px 16px 22px; border-radius:20px; overflow:hidden;
       background:var(--lp-card-bg, var(--lp-surface)); -webkit-backdrop-filter:blur(var(--lp-card-blur,0px)); backdrop-filter:blur(var(--lp-card-blur,0px));
       border:1px solid color-mix(in srgb, var(--lp-text,#000) 12%, transparent);
-      box-shadow:var(--shadow-lg), 0 0 var(--lp-glow-strong, 0px) color-mix(in srgb, var(--accent) 62%, transparent);
+      box-shadow:var(--shadow-lg), 0 0 var(--lp-glow-card, 0px) color-mix(in srgb, var(--accent) 62%, transparent);
       display:flex; flex-direction:column; align-items:center; }
     .lp-panelbanner { height:78px; margin:-24px -16px 12px; background:var(--surface-alt) center/cover no-repeat; align-self:stretch; }
     /* Mirrors .sf-coverbanner on the live page, at preview scale. Same single
@@ -1432,8 +1641,8 @@ function Styles() {
     .lp-inner-cover { margin-top:calc(var(--lp-cover-h) * 0.62); }
     .lp-hasbanner .lp-avatar { margin-top:-42px; position:relative; z-index:1; }
     .lp-avatar { width:var(--lp-avatar-size, 67px); height:var(--lp-avatar-size, 67px); border-radius:var(--lp-avatar-radius, 50%); background:color-mix(in srgb, var(--accent) 16%, #fff) center/cover no-repeat;
-      display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(var(--lp-avatar-size, 67px) * 0.35); color:var(--accent); border:3px solid var(--lp-surface); box-shadow:var(--shadow), 0 0 var(--lp-glow-strong, 0px) color-mix(in srgb, var(--accent) 85%, transparent); }
-    .lp-name { font-size:20px; font-weight:800; letter-spacing:-.01em; margin-top:12px; color:var(--lp-title, inherit); filter:drop-shadow(0 0 var(--lp-glow, 0px) color-mix(in srgb, var(--accent) 100%, transparent)) drop-shadow(0 0 var(--lp-glow-strong, 0px) color-mix(in srgb, var(--accent) 55%, transparent)); }
+      display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(var(--lp-avatar-size, 67px) * 0.35); color:var(--accent); border:3px solid var(--lp-surface); box-shadow:var(--shadow), 0 0 var(--lp-glow-avatar, 0px) color-mix(in srgb, var(--accent) 85%, transparent); }
+    .lp-name { font-size:20px; font-weight:800; letter-spacing:-.01em; margin-top:12px; color:var(--lp-title, inherit); filter:drop-shadow(0 0 var(--lp-glow-name, 0px) color-mix(in srgb, var(--accent) 100%, transparent)) drop-shadow(0 0 var(--lp-glow-name-strong, 0px) color-mix(in srgb, var(--accent) 55%, transparent)); }
     .lp-anim .lp-name { animation:sfNameGlow 2.6s ease-in-out infinite; }
     .lp-handle { font-size:13px; font-weight:600; color:var(--accent); margin-top:2px; }
     .lp-location { display:inline-flex; align-items:center; gap:4px; margin-top:5px; font-size:11px; font-weight:600;
@@ -1472,12 +1681,38 @@ function Styles() {
     @keyframes lpShine { to { background-position:-250% center; } }
     .lp-fx-glitch .lp-name { animation:lpGlitch 2.2s infinite steps(1); }
     @keyframes lpGlitch { 0%,88%,100% { text-shadow:none; } 90% { text-shadow:-2px 0 #ff2d75, 2px 0 #00c8ff; } 96% { text-shadow:1px 0 #ff2d75, -1px 0 #00c8ff; } }
-    .lp-links { display:flex; flex-direction:column; gap:7px; margin-top:11px; width:100%; }
-    .lp-linkbtn { display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-radius:999px; font-size:13px; font-weight:700;
-      backdrop-filter:blur(var(--lp-item-blur, 0px)); -webkit-backdrop-filter:blur(var(--lp-item-blur, 0px));
-      background:var(--lp-link-bg, color-mix(in srgb, var(--accent) 12%, var(--lp-item-bg, transparent)));
-      border:1.5px solid color-mix(in srgb, var(--accent) 32%, transparent);
-      box-shadow:0 0 var(--lp-glow, 0px) color-mix(in srgb, var(--accent) 55%, transparent); }
+
+    /* ── Preview link blocks ──
+       Mirrors LinkBlock at preview scale. Colours fall through the same
+       cascade as the live page: block -> page -> theme. */
+    .lpb { width:100%; margin-top:10px; }
+    .lpb-featured { margin-top:14px; }
+    .lpb-title { display:block; font-size:12px; font-weight:800; text-align:left;
+      color:var(--lpb-head, var(--lp-text, inherit)); margin-bottom:2px; }
+    .lpb-sub { display:block; font-size:10px; text-align:left; opacity:.75;
+      color:var(--lpb-head, var(--lp-text, inherit)); margin-bottom:6px; }
+    .lpb-items { display:flex; flex-direction:column; gap:6px; }
+    .lpb-item { display:flex; align-items:center; gap:7px; padding:9px 11px;
+      border-radius:var(--lpb-shape, var(--lp-link-radius, 999px));
+      font-size:11.5px; font-weight:700; overflow:hidden;
+      background:var(--lpb-bg, var(--lp-link-bg, color-mix(in srgb, var(--accent) 12%, var(--lp-item-bg, transparent))));
+      color:var(--lpb-fg, var(--lp-link-fg, var(--lp-text, inherit)));
+      border:1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+      /* Mirrors .lkb-item — the Glow slider has to move something here too. */
+      box-shadow:0 0 var(--lp-glow-links, 0px) color-mix(in srgb, var(--accent) 78%, transparent); }
+    .lpb-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .lpb-thumb { flex-shrink:0; width:20px; height:20px; border-radius:4px;
+      background:var(--lp-surface) center/cover no-repeat; }
+    /* Style variants — the same four shapes the Layouts tab offers. */
+    .lpb-classic .lpb-thumb { width:16px; height:16px; border-radius:50%; }
+    .lpb-grid .lpb-items { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+    .lpb-grid .lpb-item, .lpb-carousel .lpb-item { flex-direction:column; align-items:stretch;
+      text-align:center; border-radius:10px; padding:8px; }
+    .lpb-grid .lpb-thumb, .lpb-carousel .lpb-thumb { width:100%; height:34px; border-radius:6px; }
+    .lpb-carousel .lpb-items { display:flex; flex-direction:row; overflow:hidden; }
+    .lpb-carousel .lpb-item { flex:0 0 62px; }
+    .lpb-cards .lpb-item { align-items:flex-start; border-radius:10px; padding:9px; }
+    .lpb-cards .lpb-thumb { width:28px; height:28px; }
     .lp-btn-pill .lp-card, .lp-btn-pill .lp-cover { border-radius:999px; }
     .lp-btn-sharp .lp-card, .lp-btn-sharp .lp-cover { border-radius:5px; }
 

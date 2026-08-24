@@ -1,15 +1,95 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useId } from 'react';
 import {
   Link2, Plus, X, Star, Eye, EyeOff, ChevronUp, ChevronDown, ChevronLeft,
-  Image as ImageIcon, GripVertical, Trash2, HelpCircle, ChevronRight,
-  AlignLeft, AlignCenter, AlignRight, BarChart2,
+  GripVertical, Trash2, HelpCircle, ChevronRight,
+  AlignLeft, AlignCenter, AlignRight, BarChart2, Upload, Loader2,
 } from 'lucide-react';
 import {
   listBlocksResult, createBlock, updateBlock, updateBlockLayout, deleteBlock,
-  reorderBlocks, resolveBlockLayout, LINK_STYLES, LINK_SIZES, LINK_SHAPES, contrast, contrastVerdict,
+  reorderBlocks, resolveBlockLayout, LINK_STYLES, LINK_SIZES, LINK_SHAPES, PLACEMENTS, contrast, contrastVerdict,
 } from '@/lib/blocks';
 import { listLinks, addLink, updateLink, deleteLink, reorderLinks } from '@/lib/storefront';
 import { useDialog } from '@/components/Dialog';
+import { uploadLinkThumb } from '@/lib/storage';
+
+// ── Image picker ────────────────────────────────────────────────────────────
+//
+// Adding an image used to mean finding a URL somewhere else and pasting it,
+// which is a dead end for most people — they have a FILE, not a URL. This
+// accepts all four ways someone actually has an image to hand:
+//
+//   click  → file picker        drop   → drag from the desktop
+//   paste  → Ctrl+V a file OR a URL    type → the URL box, still there
+//
+// The upload goes straight to the public covers bucket and hands back a URL,
+// so everything downstream still only ever sees cover_url. That's the point:
+// the storage shape doesn't change, only how a value gets into it.
+function ImagePick({ value, onChange, creatorId, size = 'sm', hint }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [over, setOver] = useState(false);
+  const fileRef = useRef(null);
+  const inputId = useId();
+
+  async function take(file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setErr('That is not an image file.'); return; }
+    // 5MB. Enforced here as well as in the bucket so the failure is instant and
+    // explains itself, rather than a 413 after a slow upload.
+    if (file.size > 5 * 1024 * 1024) { setErr('Image is over 5MB — try a smaller one.'); return; }
+    if (!creatorId) { setErr('Still loading your account — try again in a second.'); return; }
+    setErr(''); setBusy(true);
+    try {
+      onChange(await uploadLinkThumb(creatorId, file));
+    } catch (e) {
+      setErr(e?.message || 'Upload failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function onPaste(e) {
+    const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+    if (item) { e.preventDefault(); take(item.getAsFile()); return; }
+    const text = e.clipboardData?.getData('text')?.trim();
+    if (text && /^https?:\/\//i.test(text)) { e.preventDefault(); onChange(text); }
+  }
+
+  return (
+    <div className={`ip ip-${size}`}>
+      <div
+        className={`ip-tile${value ? ' ip-has' : ''}${over ? ' ip-over' : ''}`}
+        style={value ? { backgroundImage: `url(${value})` } : undefined}
+        onClick={() => !busy && fileRef.current?.click()}
+        onPaste={onPaste}
+        onDragOver={e => { e.preventDefault(); setOver(true); }}
+        onDragLeave={() => setOver(false)}
+        onDrop={e => { e.preventDefault(); setOver(false); take(e.dataTransfer?.files?.[0]); }}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click(); } }}
+        role="button"
+        tabIndex={0}
+        aria-label={value ? 'Replace image' : 'Add an image'}
+        title="Click, drop a file, or paste an image"
+      >
+        {busy
+          ? <span className="ip-state"><Loader2 size={18} className="ip-spin" /></span>
+          : !value && <span className="ip-state"><Upload size={size === 'lg' ? 20 : 17} /><span className="ip-cta">Add image</span></span>}
+        {value && !busy && (
+          <button className="ip-clear" title="Remove image"
+            onClick={e => { e.stopPropagation(); onChange(''); setErr(''); }}>
+            <X size={12} />
+          </button>
+        )}
+      </div>
+      <input ref={fileRef} id={inputId} type="file" accept="image/*" hidden
+        onChange={e => { take(e.target.files?.[0]); e.target.value = ''; }} />
+      <input className="ip-url" value={value ?? ''} onChange={e => onChange(e.target.value)}
+        placeholder="or paste a URL" aria-label="Image URL" spellCheck={false} />
+      {err && <span className="ip-err">{err}</span>}
+      {hint && !err && <span className="ip-hint">{hint}</span>}
+    </div>
+  );
+}
 
 // ── Links block editor ──────────────────────────────────────────────────────
 //
@@ -73,9 +153,9 @@ export default function LinkBlockEditor({ creatorId, onChange }) {
   const layout = resolveBlockLayout(open?.layout);
 
   // ── Blocks ──
-  async function addBlockRow() {
+  async function addBlockRow(placement = 'profile') {
     try {
-      const b = await createBlock(creatorId, blocks.length);
+      const b = await createBlock(creatorId, blocks.length, placement);
       setBlocks(prev => [...prev, b]);
       setOpenId(b.id); setTab('links'); touch();
     } catch (e) { setErr(e.message); }
@@ -97,9 +177,17 @@ export default function LinkBlockEditor({ creatorId, onChange }) {
   }
 
   async function moveBlock(id, dir) {
+    const me = blocks.find(b => b.id === id);
+    if (!me) return;
+    const place = me.placement || 'profile';
+    // Neighbour within the same section, then translated back to a global index
+    // — the arrows are section-local but the stored order is one list.
+    const siblings = blocks.filter(b => (b.placement || 'profile') === place);
+    const si = siblings.findIndex(b => b.id === id);
+    const target = siblings[si + dir];
+    if (!target) return;
     const idx = blocks.findIndex(b => b.id === id);
-    const j = idx + dir;
-    if (j < 0 || j >= blocks.length) return;
+    const j = blocks.findIndex(b => b.id === target.id);
     const next = [...blocks];
     [next[idx], next[j]] = [next[j], next[idx]];
     setBlocks(next.map((b, i) => ({ ...b, position: i })));
@@ -177,41 +265,65 @@ export default function LinkBlockEditor({ creatorId, onChange }) {
         {diagnostic}
         {err && <p className="lb-err">{err}</p>}
 
-        <div className="lb-list">
-          {blocks.map((b, i) => {
-            const rows = links.filter(l => l.block_id === b.id);
-            const feat = rows.filter(l => l.featured).length;
-            const shown = rows.length - feat;   // what actually renders in the block
-            const st = LINK_STYLES.find(s => s.id === resolveBlockLayout(b.layout).style);
-            return (
-              <div key={b.id} className={`lb-row2${b.visible ? '' : ' off'}`}>
-                <div className="lb-rank">
-                  <button className="lb-nudge" disabled={i === 0} onClick={() => moveBlock(b.id, -1)} aria-label="Move up"><ChevronUp size={15} /></button>
-                  <span className="lb-num">{i + 1}</span>
-                  <button className="lb-nudge" disabled={i === blocks.length - 1} onClick={() => moveBlock(b.id, 1)} aria-label="Move down"><ChevronDown size={15} /></button>
+        {/* ── Two lists, not one ──
+            Placement used to be a per-LINK star inside a shared list, so one
+            block could feed two page regions at once — printing its title in
+            both, with one layout applied to two unrelated groups. Placement is
+            a property of the container now (migration 033), so the editor shows
+            the page's actual structure: these render here, those render there. */}
+        {PLACEMENTS.map(pl => {
+          const mine = blocks.filter(b => (b.placement || 'profile') === pl.id);
+          return (
+            <div key={pl.id} className="lb-sect">
+              <div className="lb-secthead">
+                <span className="lb-sectico">{pl.id === 'featured' ? <Star size={14} /> : <Link2 size={14} />}</span>
+                <div className="lb-secttext">
+                  <span className="lb-secttitle">{pl.label}</span>
+                  <span className="lb-sectblurb">{pl.blurb}</span>
                 </div>
-
-                <button className="lb-open" onClick={() => { setOpenId(b.id); setTab('links'); }}>
-                  <span className="lb-t">
-                    {b.title?.trim() || 'Untitled block'}
-                    {!b.visible && <span className="lb-pill lb-pill-off"><EyeOff size={10} /> Hidden</span>}
-                  </span>
-                  <span className="lb-chips">
-                    <span className="lb-chip">{st?.label}</span>
-                    <span className="lb-chip">{rows.length} link{rows.length === 1 ? '' : 's'}</span>
-                    {feat > 0 && <span className="lb-chip lb-chip-star"><Star size={10} /> {feat} featured</span>}
-                    {rows.length > 0 && shown === 0 && (
-                      <span className="lb-chip lb-chip-warn">Renders empty — all featured</span>
-                    )}
-                    {rows.length === 0 && <span className="lb-chip lb-chip-warn">No links yet</span>}
-                  </span>
+                <button className="lb-sectadd" onClick={() => addBlockRow(pl.id)}>
+                  <Plus size={14} /> Add block
                 </button>
-
-                <span className="lb-go" aria-hidden="true"><ChevronRight size={17} /></span>
               </div>
-            );
-          })}
 
+              {mine.length === 0 ? (
+                <p className="lb-sectempty">No {pl.label.toLowerCase()} yet.</p>
+              ) : (
+                <div className="lb-list">
+                  {mine.map((b, i) => {
+                    const rows = links.filter(l => l.block_id === b.id);
+                    const st = LINK_STYLES.find(x => x.id === resolveBlockLayout(b.layout).style);
+                    return (
+                      <div key={b.id} className={`lb-row2${b.visible ? '' : ' off'}`}>
+                        <div className="lb-rank">
+                          <button className="lb-nudge" disabled={i === 0} onClick={() => moveBlock(b.id, -1)} aria-label="Move up"><ChevronUp size={15} /></button>
+                          <span className="lb-num">{i + 1}</span>
+                          <button className="lb-nudge" disabled={i === mine.length - 1} onClick={() => moveBlock(b.id, 1)} aria-label="Move down"><ChevronDown size={15} /></button>
+                        </div>
+
+                        <button className="lb-open" onClick={() => { setOpenId(b.id); setTab('links'); }}>
+                          <span className="lb-t">
+                            {b.title?.trim() || 'Untitled block'}
+                            {!b.visible && <span className="lb-pill lb-pill-off"><EyeOff size={10} /> Hidden</span>}
+                          </span>
+                          <span className="lb-chips">
+                            <span className="lb-chip">{st?.label}</span>
+                            <span className="lb-chip">{rows.length} link{rows.length === 1 ? '' : 's'}</span>
+                            {rows.length === 0 && <span className="lb-chip lb-chip-warn">No links yet</span>}
+                          </span>
+                        </button>
+
+                        <span className="lb-go" aria-hidden="true"><ChevronRight size={17} /></span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <div className="lb-list">
           {orphans.length > 0 && (
             <div className="lb-row2 lb-row2-orphan">
               <div className="lb-rank"><span className="lb-num lb-num-dash">—</span></div>
@@ -239,7 +351,7 @@ export default function LinkBlockEditor({ creatorId, onChange }) {
               A block is a group of links with its own title, layout and visibility.
               Most pages start with one.
             </p>
-            <button className="lb-primary" onClick={addBlockRow}>
+            <button className="lb-primary" onClick={() => addBlockRow('profile')}>
               <Plus size={17} /> Create your first block
             </button>
             {/* Only worth showing when the two numbers disagree — links that
@@ -253,8 +365,6 @@ export default function LinkBlockEditor({ creatorId, onChange }) {
             )}
           </div>
         )}
-
-        <button className="lb-primary lb-full" onClick={addBlockRow}><Plus size={17} /> Add links block</button>
 
         {/* MUST be in this branch too. The component has two top-level returns
             and the stylesheet lives in the JSX, so leaving it out of one branch
@@ -353,11 +463,6 @@ export default function LinkBlockEditor({ creatorId, onChange }) {
                   placeholder="https://…" />
 
                 <div className="lb-cardacts">
-                  <button className={`lb-ic${l.featured ? ' on' : ''}`}
-                    onClick={() => { patchLinkLocal(l.id, { featured: !l.featured }); saveLink(l.id, { featured: !l.featured }); }}
-                    aria-pressed={!!l.featured} title={l.featured ? 'Featured — shown with your products' : 'Feature this link'}>
-                    <Star size={14} />
-                  </button>
                   <button className={`lb-ic${l.is_affiliate ? ' on' : ''}`}
                     onClick={() => { patchLinkLocal(l.id, { is_affiliate: !l.is_affiliate }); saveLink(l.id, { is_affiliate: !l.is_affiliate }); }}
                     aria-pressed={!!l.is_affiliate} title="Affiliate link — adds a disclosure tag and rel=sponsored">
@@ -377,15 +482,11 @@ export default function LinkBlockEditor({ creatorId, onChange }) {
 
               {/* Thumbnail on the right, where the reference puts it — it reads
                   as a preview of the destination rather than a form field. */}
-              <label className="lb-thumbwrap" title="Thumbnail image URL">
-                {l.cover_url
-                  ? <span className="lb-thumb" style={{ backgroundImage: `url(${l.cover_url})` }} />
-                  : <span className="lb-thumb lb-thumb-empty"><ImageIcon size={18} /></span>}
-                <input className="lb-thumbin" value={l.cover_url ?? ''}
-                  onChange={e => patchLinkLocal(l.id, { cover_url: e.target.value })}
-                  onBlur={e => saveLink(l.id, { cover_url: e.target.value })}
-                  placeholder="Image URL" aria-label="Thumbnail image URL" />
-              </label>
+              <ImagePick
+                value={l.cover_url ?? ''}
+                creatorId={creatorId}
+                onChange={v => { patchLinkLocal(l.id, { cover_url: v }); saveLink(l.id, { cover_url: v }); }}
+              />
             </div>
           ))}
         </div>
@@ -476,6 +577,26 @@ export default function LinkBlockEditor({ creatorId, onChange }) {
       {/* ══ SETTINGS ══ */}
       {tab === 'settings' && open && (
         <div className="lb-panel">
+          {/* Placement first, because it decides WHERE everything below lands.
+              It's a block property (033) — the whole block moves, links and all,
+              so there is never a title rendered in two regions at once. */}
+          <span className="lb-h">Where this block appears</span>
+          <div className="lb-places">
+            {PLACEMENTS.map(pl => {
+              const on = (open.placement || 'profile') === pl.id;
+              return (
+                <button key={pl.id} className={`lb-place${on ? ' on' : ''}`}
+                  onClick={() => patchBlock({ placement: pl.id })} aria-pressed={on}>
+                  <span className="lb-placeico">{pl.id === 'featured' ? <Star size={15} /> : <Link2 size={15} />}</span>
+                  <span className="lb-placetext">
+                    <span className="lb-placelabel">{pl.label}</span>
+                    <span className="lb-placeblurb">{pl.blurb}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           <span className="lb-h">Title <span className="lb-opt">(optional)</span></span>
           <p className="lb-hint">
             Help your audience find the link they’re looking for by adding a title and
@@ -517,15 +638,13 @@ export default function LinkBlockEditor({ creatorId, onChange }) {
 
               <span className="lb-h">Collapsed thumbnail image</span>
               <div className="lb-thumbrow">
-                {open.collapsed_thumb_url
-                  ? <span className="lb-thumb lb-thumb-lg" style={{ backgroundImage: `url(${open.collapsed_thumb_url})` }} />
-                  : <span className="lb-thumb lb-thumb-lg lb-thumb-empty"><ImageIcon size={22} /></span>}
-                <div className="lb-thumbside">
-                  <input className="lb-in lb-boxed" value={open.collapsed_thumb_url ?? ''}
-                    onChange={e => setBlocks(prev => prev.map(b => b.id === open.id ? { ...b, collapsed_thumb_url: e.target.value } : b))}
-                    onBlur={e => patchBlock({ collapsed_thumb_url: e.target.value })} placeholder="Image URL" />
-                  <p className="lb-hint">Square, at least 600×600px, JPG/PNG/GIF. Shown on the closed row, so a collapsed block still gives people a reason to open it.</p>
-                </div>
+                <ImagePick
+                  value={open.collapsed_thumb_url ?? ''}
+                  creatorId={creatorId}
+                  size="lg"
+                  onChange={v => { setBlocks(prev => prev.map(b => b.id === open.id ? { ...b, collapsed_thumb_url: v } : b)); patchBlock({ collapsed_thumb_url: v }); }}
+                />
+                <p className="lb-hint lb-thumbside">Square, at least 600&times;600px, JPG/PNG/GIF. Shown on the closed row, so a collapsed block still gives people a reason to open it.</p>
               </div>
             </>
           )}
@@ -629,6 +748,46 @@ function Styles() {
        + blur), so a translucent or shadow-only row is nearly the same tone as
        the panel behind it and reads as nothing. Opaque fill + a real border is
        what makes these read as objects sitting ON the panel. */
+    /* ── Placement sections ──
+       Two lists that must read as two PLACES, not two groups of the same
+       thing. So each gets a solid header band and a left rule tying its rows
+       to that header — the same visual grammar the page itself uses. */
+    .lb-sect { margin-bottom:22px; }
+    .lb-secthead { display:flex; align-items:flex-start; gap:11px; padding:12px 14px;
+      border:1px solid var(--border); border-radius:var(--r) var(--r) 0 0;
+      background:var(--surface-alt); border-bottom:none; }
+    .lb-sectico { flex-shrink:0; width:28px; height:28px; border-radius:8px; display:flex;
+      align-items:center; justify-content:center; background:var(--accent); color:#fff; }
+    .lb-secttext { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+    .lb-secttitle { font-size:14.5px; font-weight:800; color:var(--text); }
+    .lb-sectblurb { font-size:12.5px; line-height:1.45; color:var(--text-secondary); }
+    .lb-sectadd { flex-shrink:0; display:inline-flex; align-items:center; gap:6px; padding:7px 13px;
+      border-radius:var(--r-full); border:1px solid var(--accent); background:transparent;
+      color:var(--accent); font-size:12.5px; font-weight:800; cursor:pointer; white-space:nowrap;
+      transition:background .14s ease, color .14s ease; }
+    .lb-sectadd:hover { background:var(--accent); color:#fff; }
+    .lb-sectempty { margin:0; padding:16px 14px; border:1px solid var(--border); border-top:none;
+      border-radius:0 0 var(--r) var(--r); background:var(--surface);
+      font-size:12.5px; color:var(--text-muted); }
+    .lb-sect .lb-list { padding:10px; border:1px solid var(--border); border-top:none;
+      border-radius:0 0 var(--r) var(--r); background:var(--surface); }
+
+    /* Placement picker in Settings. */
+    .lb-places { display:flex; flex-direction:column; gap:9px; }
+    .lb-place { display:flex; align-items:flex-start; gap:11px; width:100%; text-align:left;
+      padding:13px 14px; border-radius:var(--r); border:1.5px solid var(--border);
+      background:var(--surface); cursor:pointer; white-space:normal;
+      transition:border-color .14s ease, background .14s ease; }
+    .lb-place:hover { border-color:var(--accent-mid); }
+    .lb-place.on { border-color:var(--accent); background:var(--accent-light); }
+    .lb-placeico { flex-shrink:0; width:30px; height:30px; border-radius:8px; display:flex;
+      align-items:center; justify-content:center; background:var(--surface-alt);
+      border:1px solid var(--border); color:var(--text-secondary); }
+    .lb-place.on .lb-placeico { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .lb-placetext { display:flex; flex-direction:column; gap:2px; min-width:0; }
+    .lb-placelabel { font-size:14px; font-weight:800; color:var(--text); }
+    .lb-placeblurb { font-size:12.5px; line-height:1.45; color:var(--text-secondary); }
+
     .lb-list { display:flex; flex-direction:column; gap:10px; }
 
     /* Empty state. Generous vertical rhythm on purpose — this is the first
@@ -680,8 +839,8 @@ function Styles() {
     .lb-chip { display:inline-flex; align-items:center; gap:5px; padding:4px 11px; border-radius:var(--r-full);
       background:var(--surface-alt); border:1px solid var(--border);
       font-size:12px; font-weight:700; color:var(--text-secondary); white-space:nowrap; }
-    .lb-chip-star { background:var(--accent-light); border-color:var(--accent-mid); color:var(--accent-hover); }
-    .lb-chip-warn { background:var(--danger-light); border-color:var(--danger-mid); color:var(--danger); }
+    .lb-chip-star { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .lb-chip-warn { background:var(--danger); border-color:var(--danger); color:#fff; }
     .lb-pill-off { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:var(--r-full);
       background:var(--surface-alt); border:1px solid var(--border); font-size:10px; font-weight:800;
       text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); }
@@ -747,14 +906,38 @@ function Styles() {
     .lb-cardspacer { flex:1; }
     .lb-carddiv { width:1px; height:18px; background:var(--border); margin:0 4px; }
 
-    .lb-thumbwrap { flex-shrink:0; display:flex; flex-direction:column; gap:5px; width:84px; cursor:pointer; }
-    .lb-thumb { width:84px; height:84px; border-radius:var(--r); background:var(--surface-alt) center/cover no-repeat;
-      border:1px solid var(--border); display:inline-flex; align-items:center; justify-content:center; color:var(--text-muted); }
-    .lb-thumb-empty { border-style:dashed; }
-    .lb-thumb-lg { width:110px; height:110px; }
-    .lb-thumbin { width:84px; padding:4px 6px; border:1px solid var(--border); border-radius:4px;
+    /* ── Image picker ──
+       The tile IS the control: click, drop, or paste. The URL box stays but is
+       demoted to a fallback, because a URL is the thing people are least likely
+       to already have. */
+    .ip { flex-shrink:0; display:flex; flex-direction:column; gap:5px; width:84px; }
+    .ip-lg { width:110px; }
+    .ip-tile { position:relative; width:84px; height:84px; border-radius:var(--r);
+      background:var(--surface-alt) center/cover no-repeat; border:1px dashed var(--border-strong);
+      display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text-muted);
+      transition:border-color .14s ease, background-color .14s ease, transform .14s ease; }
+    .ip-lg .ip-tile { width:110px; height:110px; }
+    .ip-tile:hover, .ip-tile:focus-visible { border-color:var(--accent); color:var(--accent); outline:none; }
+    .ip-over { border-color:var(--accent); border-style:solid; transform:scale(1.03);
+      background-color:color-mix(in srgb, var(--accent) 14%, var(--surface-alt)); }
+    .ip-has { border-style:solid; border-color:var(--border); }
+    .ip-state { display:flex; flex-direction:column; align-items:center; gap:3px; pointer-events:none; }
+    .ip-cta { font-size:9.5px; font-weight:700; letter-spacing:.02em; }
+    .ip-spin { animation:ipSpin .9s linear infinite; }
+    @keyframes ipSpin { to { transform:rotate(360deg); } }
+    /* Sits on the image, so it needs its own contrast rather than the theme's. */
+    .ip-clear { position:absolute; top:4px; right:4px; width:20px; height:20px; padding:0;
+      display:flex; align-items:center; justify-content:center; border-radius:999px;
+      border:1px solid rgba(255,255,255,.35); background:rgba(0,0,0,.62); color:#fff;
+      cursor:pointer; opacity:0; transition:opacity .14s ease; }
+    .ip-tile:hover .ip-clear, .ip-tile:focus-within .ip-clear { opacity:1; }
+    .ip-clear:hover { background:var(--danger); border-color:var(--danger); }
+    .ip-url { width:100%; padding:4px 6px; border:1px solid var(--border); border-radius:4px;
       background:var(--surface); font-size:10.5px; color:var(--text-secondary); font-family:inherit; }
-    .lb-thumbin:focus { outline:none; border-color:var(--accent); }
+    .ip-url:focus { outline:none; border-color:var(--accent); }
+    .ip-err { font-size:10px; line-height:1.35; color:var(--danger); }
+    .ip-hint { font-size:10px; line-height:1.35; color:var(--text-muted); }
+
     .lb-thumbrow { display:flex; gap:14px; align-items:flex-start; }
     .lb-thumbside { flex:1; min-width:0; display:flex; flex-direction:column; gap:7px; }
 
@@ -852,7 +1035,7 @@ function Styles() {
     @media (max-width:560px) {
       .lb-tiles { grid-template-columns:repeat(2, minmax(0,1fr)); }
       .lb-card { flex-wrap:wrap; }
-      .lb-thumbwrap { order:-1; }
+      .ip { order:-1; }
     }
     @media (prefers-reduced-motion: reduce) { .lb-knob, .lb-track { transition:none; } }
   `}</style>;

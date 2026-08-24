@@ -144,7 +144,53 @@ area. Now `left: var(--shell-offset, 0px)` — 0 when there's no rail.
 with a chain icon, which reads as a broken image. Omitted entirely now (and the
 dead `Link2` import went with it).
 
+## 8 · The live preview finally renders blocks
+
+Flagged since note 175, closed here. The preview drew **one flat list** of link
+buttons, so the whole Layouts tab — four styles, size, alignment, shape, outline,
+shadow, three colours — produced no visible feedback. You changed a control and
+nothing moved.
+
+It now mirrors the live page: links grouped by block, profile links inside the
+card, featured ones in their own section above the products, each carrying its
+block's style, colours and title.
+
+`PreviewLinkGroup` is a deliberate re-implementation, **not** a reuse of
+`LinkBlock`. That component ships its own full-size stylesheet; dropped into a
+~65%-scale phone frame it would render at the wrong size *and* its CSS would
+leak over the preview's. So the preview mirrors the **shape** — which is what
+the controls actually change — and not the implementation.
+
+Removed with it: the now-dead `.lp-links` / `.lp-linkbtn` rules.
+
+> **Transferable:** a preview that mirrors structure but re-implements styling
+> stays honest without coupling preview scale to production CSS. Reuse would
+> have made every change to the real renderer a preview regression risk.
+
 ## Still open
-- Per-block colour has no live preview (since note 175)
-- Featured-link customization is per-BLOCK; there's no separate page-level
-  "Featured links" panel yet, which the last request also asked for
+- No page-level "Featured links" panel — featured styling is per-block only,
+  which the last request also asked for
+- `medium` size is still accepted on read but no longer offered in the picker
+
+---
+
+## Exercises
+
+1. **Break the cascade on purpose.** Set a page-level link text colour, then set
+   a block-level one. Now delete the block-level value in the DB (`layout.fg`)
+   *without* reloading — does the block fall back to the page colour, or to
+   `--text`? Explain which `var()` fallback in `LinkBlock.jsx` decides that.
+
+2. **Find the override-by-default bug yourself.** Change `shape` in
+   `DEFAULT_BLOCK_LAYOUT` back to `'pill'`. Set the page shape to Sharp. What
+   happens to a block you never touched, and why is an empty-string default the
+   only correct choice for an inheriting level?
+
+3. **Add a fifth link style** (say, `list` — full-bleed rows, no gap). You'll
+   need it in three places: `LINK_STYLES`, `LinkBlock.jsx` CSS, and
+   `PreviewLinkGroup`'s `.lpb-*` CSS. Miss one and the symptom differs —
+   predict all three symptoms before you test.
+
+4. **Prove the preview isn't lying.** Pick one Layouts control, change it, and
+   screenshot the preview beside the real storefront. Where do they diverge, and
+   is each divergence a bug or a deliberate scale difference?

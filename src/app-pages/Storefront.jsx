@@ -16,8 +16,32 @@ import Seo from '@/components/Seo';
 import { injectPixels } from '@/lib/pixels';
 import { listBlocks } from '@/lib/blocks';
 import LinkBlock from '@/components/LinkBlock';
+import { GLOW_TARGETS, glowVars } from '@/lib/storefront';
 
 // Phase 3/7 — public, mobile-first link-in-bio storefront at /@username, themed.
+// Page-level link shape as a raw radius, so it can reach LinkBlock through a
+// variable. The .sf-lnk-* wrap classes only style the legacy flat list.
+const LINK_RADIUS = { rounded: '14px', oval: '999px', sharp: '4px', full: '0px' };
+
+
+// Featured links are their own category, but every featured_* key defaults to
+// empty/null = "inherit the profile-link value". So this emits ONLY the keys
+// that are actually set; the rest fall through to the --sf-link-* vars already
+// defined on .sf-wrap. That is the whole fourth cascade level, in one object.
+function featuredVars(theme) {
+  const v = {};
+  const fill = theme.featured_link_color;
+  const op = theme.featured_link_opacity ?? theme.link_opacity ?? theme.product_opacity ?? 100;
+  if (fill) {
+    v['--sf-link-bg'] = `color-mix(in srgb, ${fill} ${op}%, transparent)`;
+    v['--sf-link-border'] = `color-mix(in srgb, ${fill} 62%, black)`;
+  }
+  if (theme.featured_link_text_color) v['--sf-link-fg'] = theme.featured_link_text_color;
+  if (theme.featured_link_blur != null) v['--sf-link-blur'] = `${theme.featured_link_blur}px`;
+  if (theme.featured_link_shape) v['--sf-link-radius'] = LINK_RADIUS[theme.featured_link_shape] ?? LINK_RADIUS.oval;
+  return v;
+}
+
 export default function Storefront() {
   const { handle = '' } = useParams();
   const username = handle.replace(/^@/, '');
@@ -92,9 +116,16 @@ export default function Storefront() {
   // profile pill — the behaviour every link had before migration 029.
   const withUrl = links.filter(l => l.url);
   const profileLinks = withUrl.filter(l => !l.block_id && l.placement !== 'products');
-  // Featured now comes from the per-link flag (032); placement is the legacy
-  // fallback for rows the backfill hasn't touched.
-  const featuredLinks = withUrl.filter(l => l.featured || (!l.block_id && l.placement === 'products'));
+  // Legacy only: blockless featured links, from before 032/033 attached them.
+  // A link INSIDE a block no longer carries its own placement — its block does
+  // (033), which is what stops one block feeding two page regions at once.
+  const orphanFeatured = withUrl.filter(l => !l.block_id && (l.featured || l.placement === 'products'));
+
+  // Blocks split by where they render. `!== 'featured'` rather than
+  // `=== 'profile'` so a pre-033 block with no placement lands in the profile
+  // card, which is exactly where it rendered before.
+  const visibleBlocks = blocks.filter(b => b.visible);
+  const profileBlocks = visibleBlocks.filter(b => (b.placement || 'profile') !== 'featured');
 
   // Bucket products AND featured links by group_label, preserving first-seen
   // order. '' (no label) is one anonymous group rendered without a heading.
@@ -110,12 +141,12 @@ export default function Storefront() {
   // A featured link with no block (legacy `placement === 'products'`) gets a
   // synthetic block carrying the defaults, so it renders rather than vanishing.
   const featuredBlocks = [
-    ...blocks
-      .filter(b => b.visible)
-      .map(b => ({ block: b, items: featuredLinks.filter(l => l.block_id === b.id) }))
+    ...visibleBlocks
+      .filter(b => (b.placement || 'profile') === 'featured')
+      .map(b => ({ block: b, items: withUrl.filter(l => l.block_id === b.id) }))
       .filter(g => g.items.length > 0),
-    ...(featuredLinks.some(l => !l.block_id)
-      ? [{ block: { id: '__legacy__', visible: true, layout: {} }, items: featuredLinks.filter(l => !l.block_id) }]
+    ...(orphanFeatured.length
+      ? [{ block: { id: '__legacy__', visible: true, layout: {} }, items: orphanFeatured }]
       : []),
   ];
 
@@ -171,6 +202,7 @@ export default function Storefront() {
     // block types and must be stylable independently.
     ...(theme.link_text_color ? { '--sf-link-fg': theme.link_text_color } : null),
     '--sf-link-blur': `${theme.link_blur ?? theme.card_blur ?? 0}px`,
+    '--sf-link-radius': LINK_RADIUS[theme.link_shape] ?? LINK_RADIUS.oval,
     ...(theme.item_text_color ? { '--sf-item-fg': theme.item_text_color } : null),
     // Border tracks the fill when custom, else stays accent-derived.
     '--sf-link-border': theme.link_color
@@ -186,7 +218,10 @@ export default function Storefront() {
     // toggling back restores the creator's exact sliders.
     '--sf-glow': glowOn ? `${theme.glow_intensity ?? 0}px` : '0px',
     '--sf-glow-strong': glowOn ? `${(theme.glow_intensity ?? 0) * 2.4}px` : '0px',
-    '--sf-icon-glow': glowOn ? `${theme.icon_glow ?? 10}px` : '0px',
+    // Per-surface glow. Each is the master value or 0 — so a consumer keeps
+    // reading ONE variable and never has to know about targets. Adding a
+    // surface later means one line here, not a conditional in the CSS.
+    ...glowVars(theme, glowOn),
   };
   if (theme.text_color) {
     wrapStyle['--text'] = theme.text_color;
@@ -288,8 +323,8 @@ export default function Storefront() {
             here too puts the same link on the page twice — which is exactly
             what "pull this one out of the list" is supposed to prevent. */}
         {/* PROFILE links — everything not featured, inside the profile card. */}
-        {blocks.map(b => (
-          <LinkBlock key={b.id} block={b} links={links.filter(l => l.block_id === b.id && !l.featured)} />
+        {profileBlocks.map(b => (
+          <LinkBlock key={b.id} block={b} links={withUrl.filter(l => l.block_id === b.id)} />
         ))}
 
         {/* Legacy: links with no block_id. Same markup as before. */}
@@ -297,7 +332,12 @@ export default function Storefront() {
           <div className="sf-links">
             {profileLinks.map(l => (
               <a key={l.id} href={l.url} target="_blank" rel={l.is_affiliate ? 'noopener noreferrer sponsored' : 'noopener noreferrer'} className="sf-linkbtn">
-                <span className="sf-linkbtn-label"><Link2 size={16} /> {l.label}</span>
+                <span className="sf-linkbtn-label">
+                  {l.cover_url
+                    ? <span className="sf-linkbtn-thumb" style={{ backgroundImage: `url(${l.cover_url})` }} aria-hidden="true" />
+                    : <Link2 size={16} />}
+                  {l.label}
+                </span>
                 {/* Visible disclosure. rel="sponsored" above is a crawler hint only —
                     a human sees nothing from it, and an affiliate relationship has to
                     be disclosed to the READER, not just to Google. */}
@@ -317,7 +357,7 @@ export default function Storefront() {
           featured link is a promoted LINK, not a product, and featuring one
           shouldn't change how it looks. */}
       {featuredBlocks.map(({ block, items }) => (
-        <div key={block.id} className="sf-featured">
+        <div key={block.id} className="sf-featured" style={featuredVars(theme)}>
           <LinkBlock block={block} links={items} />
         </div>
       ))}
@@ -863,7 +903,7 @@ function StoreStyles() {
       -webkit-backdrop-filter:blur(var(--sf-panel-blur, 0px)); backdrop-filter:blur(var(--sf-panel-blur, 0px));
       border:1px solid color-mix(in srgb, var(--border-strong) 55%, transparent);
       box-shadow:var(--shadow-xl), inset 0 1px 0 color-mix(in srgb, #fff 30%, transparent),
-        0 0 var(--sf-glow-strong, 0px) color-mix(in srgb, var(--accent) 62%, transparent); }
+        0 0 var(--sf-glow-card, 0px) color-mix(in srgb, var(--accent) 62%, transparent); }
     /* Banner lives inside the panel — negative margins pull it edge-to-edge, the
        panel's overflow:hidden rounds its top corners to match. */
     .sf-panelbanner { height:150px; margin:-32px -22px 16px; background:var(--surface-alt) center/cover no-repeat; position:relative; }
@@ -977,8 +1017,8 @@ function StoreStyles() {
 
     /* Header / hero — sits inside the glass panel */
     .sf-head { text-align:center; margin:0 0 22px; }
-    .sf-avatar { width:var(--sf-avatar-size, 96px); height:var(--sf-avatar-size, 96px); border-radius:var(--sf-avatar-radius, 50%); margin:0 auto 14px; background:color-mix(in srgb, var(--accent) 14%, white) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(var(--sf-avatar-size, 96px) * 0.34); color:var(--accent); border:4px solid var(--surface); box-shadow:var(--shadow-lg), 0 0 var(--sf-glow-strong, 0px) color-mix(in srgb, var(--accent) 85%, transparent); }
-    .sf-name { font-size:27px; font-weight:800; font-family:var(--font-display); letter-spacing:-.02em; line-height:1.15; color:var(--sf-title, inherit); filter:drop-shadow(0 0 var(--sf-glow, 0px) color-mix(in srgb, var(--accent) 100%, transparent)) drop-shadow(0 0 var(--sf-glow-strong, 0px) color-mix(in srgb, var(--accent) 55%, transparent)); }
+    .sf-avatar { width:var(--sf-avatar-size, 96px); height:var(--sf-avatar-size, 96px); border-radius:var(--sf-avatar-radius, 50%); margin:0 auto 14px; background:color-mix(in srgb, var(--accent) 14%, white) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(var(--sf-avatar-size, 96px) * 0.34); color:var(--accent); border:4px solid var(--surface); box-shadow:var(--shadow-lg), 0 0 var(--sf-glow-avatar, 0px) color-mix(in srgb, var(--accent) 85%, transparent); }
+    .sf-name { font-size:27px; font-weight:800; font-family:var(--font-display); letter-spacing:-.02em; line-height:1.15; color:var(--sf-title, inherit); filter:drop-shadow(0 0 var(--sf-glow-name, 0px) color-mix(in srgb, var(--accent) 100%, transparent)) drop-shadow(0 0 var(--sf-glow-name-strong, 0px) color-mix(in srgb, var(--accent) 55%, transparent)); }
     .sf-handle { color:var(--accent); font-size:14px; font-weight:600; margin-top:3px; }
     /* Muted, not accent — the handle already owns the accent here; a second
        accent line directly under it competes with the display name. */
@@ -1048,8 +1088,8 @@ function StoreStyles() {
       padding:3px 8px; border-radius:var(--r-full); color:var(--accent);
       background:color-mix(in srgb, var(--accent) 14%, transparent);
       border:1px solid color-mix(in srgb, var(--accent) 32%, transparent); }
-    .sf-linkbtn { display:flex; align-items:center; justify-content:center; gap:9px; padding:14px 18px; color:var(--sf-link-fg, var(--text)); border:1.5px solid var(--sf-link-border); border-radius:var(--r-full); background:var(--sf-link-bg); backdrop-filter:blur(var(--sf-link-blur, 0px)); -webkit-backdrop-filter:blur(var(--sf-link-blur, 0px)); text-decoration:none; font-weight:700; box-shadow:0 0 var(--sf-glow, 0px) color-mix(in srgb, var(--accent) 78%, transparent); transition:transform .16s cubic-bezier(.34,1.4,.64,1), background .16s ease, border-color .16s ease, box-shadow .16s ease; }
-    .sf-linkbtn:hover { transform:translateY(-2px); background:color-mix(in srgb, var(--sf-link-bg) 82%, var(--text)); border-color:var(--sf-link-border); box-shadow:0 8px 22px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 var(--sf-glow, 0px) color-mix(in srgb, var(--accent) 60%, transparent); }
+    .sf-linkbtn { display:flex; align-items:center; justify-content:center; gap:9px; padding:14px 18px; color:var(--sf-link-fg, var(--text)); border:1.5px solid var(--sf-link-border); border-radius:var(--r-full); background:var(--sf-link-bg); backdrop-filter:blur(var(--sf-link-blur, 0px)); -webkit-backdrop-filter:blur(var(--sf-link-blur, 0px)); text-decoration:none; font-weight:700; box-shadow:0 0 var(--sf-glow-links, 0px) color-mix(in srgb, var(--accent) 78%, transparent); transition:transform .16s cubic-bezier(.34,1.4,.64,1), background .16s ease, border-color .16s ease, box-shadow .16s ease; }
+    .sf-linkbtn:hover { transform:translateY(-2px); background:color-mix(in srgb, var(--sf-link-bg) 82%, var(--text)); border-color:var(--sf-link-border); box-shadow:0 8px 22px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 var(--sf-glow-links, 0px) color-mix(in srgb, var(--accent) 60%, transparent); }
     /* Link button shape. Separate from .sf-btn-* (product cards) on purpose —
        links and products are distinct categories and were sharing one key. */
     .sf-lnk-rounded .sf-linkbtn { border-radius:14px; }
@@ -1061,7 +1101,16 @@ function StoreStyles() {
       padding-left:max(18px, calc(50vw - 270px + 18px)); padding-right:max(18px, calc(50vw - 270px + 18px)); }
     .sf-lnk-full .sf-linkbtn:hover { transform:translateX(-50%) translateY(-2px); }
     .sf-linkbtn-label { display:inline-flex; align-items:center; gap:9px; }
-    .sf-linkbtn-arrow { color:var(--accent); flex-shrink:0; }
+    .sf-linkbtn-thumb { flex-shrink:0; width:26px; height:26px; border-radius:50%;
+      background:var(--surface-alt) center/cover no-repeat; }
+    /* Same triple bloom as .sf-social, same --sf-icon-glow slider. */
+    .sf-linkbtn-label svg, .sf-linkbtn-arrow { flex-shrink:0;
+      filter:
+        drop-shadow(0 0 calc(var(--sf-icon-glow, 0px) * 0.3) color-mix(in srgb, var(--accent) 90%, transparent))
+        drop-shadow(0 0 var(--sf-icon-glow, 0px) color-mix(in srgb, var(--accent) 55%, transparent))
+        drop-shadow(0 0 calc(var(--sf-icon-glow, 0px) * 2.2) color-mix(in srgb, var(--accent) 38%, transparent));
+      transition:filter .18s ease; }
+    .sf-linkbtn-arrow { color:var(--accent); }
 
     /* Brand footer */
     .sf-foot { text-align:center; margin-top:36px; }

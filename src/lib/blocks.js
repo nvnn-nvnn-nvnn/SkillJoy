@@ -4,9 +4,21 @@ import { supabase } from './supabase';
 // A block owns a set of links AND how that set is laid out. Everything the
 // editor's Layout and Settings tabs control lives here.
 
-const BLOCK_COLS =
+const BLOCK_COLS_LEGACY =
   'id, creator_id, kind, title, subtitle, visible, collapsible, default_collapsed, ' +
   'collapsed_thumb_url, position, layout, created_at';
+// 033 added placement. Selected separately so a creator who hasn't run the
+// migration falls back instead of losing every block — PostgREST rejects the
+// WHOLE query on one unknown column, and the caller swallows it as "no blocks".
+// Same trap listLinks hit in note 180.
+const BLOCK_COLS = `${BLOCK_COLS_LEGACY}, placement`;
+
+export const PLACEMENTS = [
+  { id: 'profile',  label: 'Profile links',
+    blurb: 'Inside your profile card, under your bio. The default home for links.' },
+  { id: 'featured', label: 'Featured links',
+    blurb: 'Its own section above your products. For the one or two things you want clicked.' },
+];
 
 // ── Layout ──────────────────────────────────────────────────────────────────
 // The four styles. `blurb` is shown under each option in the editor — the ask
@@ -106,13 +118,24 @@ export function resolveBlockLayout(layout) {
  *  same way is what made a half-applied migration indistinguishable from an
  *  empty account. */
 export async function listBlocksResult(creatorId) {
-  const { data, error } = await supabase
+  const query = (cols) => supabase
     .from('store_blocks')
-    .select(BLOCK_COLS)
+    .select(cols)
     .eq('creator_id', creatorId)
     .order('position', { ascending: true });
 
+  let { data, error } = await query(BLOCK_COLS);
   if (!error) return { blocks: data ?? [], status: 'ok' };
+
+  // Pre-033: the placement column doesn't exist yet. Retry without it and treat
+  // everything as a profile block, which is what it was before 033 anyway.
+  if (error.code === '42703' || /column .* does not exist/i.test(error.message || '')) {
+    const legacy = await query(BLOCK_COLS_LEGACY);
+    if (!legacy.error) {
+      return { blocks: (legacy.data ?? []).map(b => ({ ...b, placement: 'profile' })), status: 'ok' };
+    }
+    error = legacy.error;
+  }
 
   // 42P01 undefined_table · PGRST205 PostgREST schema-cache miss (the table
   // exists in SQL but the API layer hasn't reloaded — needs
@@ -139,13 +162,21 @@ export async function listBlocks(creatorId) {
   return blocks;
 }
 
-export async function createBlock(creatorId, position, kind = 'links') {
+export async function createBlock(creatorId, position, placement = 'profile', kind = 'links') {
+  const row = { creator_id: creatorId, kind, position, layout: DEFAULT_BLOCK_LAYOUT, placement };
   const { data, error } = await supabase
-    .from('store_blocks')
-    .insert({ creator_id: creatorId, kind, position, layout: DEFAULT_BLOCK_LAYOUT })
-    .select(BLOCK_COLS).single();
-  if (error) throw error;
-  return data;
+    .from('store_blocks').insert(row).select(BLOCK_COLS).single();
+  if (!error) return data;
+
+  // Pre-033 fallback, same reasoning as the read path.
+  if (error.code === '42703' || /column .* does not exist/i.test(error.message || '')) {
+    const { placement: _drop, ...legacyRow } = row;
+    const retry = await supabase
+      .from('store_blocks').insert(legacyRow).select(BLOCK_COLS_LEGACY).single();
+    if (retry.error) throw retry.error;
+    return { ...retry.data, placement: 'profile' };
+  }
+  throw error;
 }
 
 export async function updateBlock(id, patch) {

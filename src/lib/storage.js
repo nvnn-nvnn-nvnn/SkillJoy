@@ -33,6 +33,18 @@ export async function uploadBanner(creatorId, file) {
   return data.publicUrl;
 }
 
+/** Upload a link-block thumbnail to the public covers bucket. Returns public URL.
+ *  Same bucket as covers — RLS scopes writes by the {creatorId}/ prefix, so the
+ *  second path segment is just a folder for humans reading the bucket. */
+export async function uploadLinkThumb(creatorId, file) {
+  const path = safePath(creatorId, 'link-thumbs', file.name);
+  const { error } = await supabase.storage.from(COVERS)
+    .upload(path, file, { cacheControl: '3600', upsert: false });
+  if (error) throw error;
+  const { data } = supabase.storage.from(COVERS).getPublicUrl(path);
+  return data.publicUrl;
+}
+
 /** Upload a storefront background video to the public bucket. Returns public URL.
  *  NOTE: the skill-covers bucket must allow video/* MIME types + a large-enough
  *  file size limit (Supabase dashboard config). */

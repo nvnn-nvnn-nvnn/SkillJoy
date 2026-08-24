@@ -58,6 +58,24 @@ export const DEFAULT_THEME = {
   // the PRODUCT card shape — they were one key and that's exactly the conflation
   // being undone here. 'full' also drops the side margins.
   link_shape: 'oval',
+  // ── Featured links are a THIRD category ──
+  // Profile links sit in the card; featured links get their own section above
+  // the products. They are the same kind of object with a different job, so
+  // they need their own styling — but every key here defaults to empty/null,
+  // meaning "inherit the profile-link value". That is what makes this a fourth
+  // cascade level rather than a fork: block -> featured -> page -> theme.
+  featured_link_color: '',
+  featured_link_text_color: '',
+  featured_link_opacity: null,
+  featured_link_blur: null,
+  featured_link_shape: '',   // '' = follow link_shape
+
+  // ── Which surfaces the glow slider reaches ──
+  // One slider used to light the name, avatar, card, links and icons at once,
+  // so tuning it for one wrecked the others — "the effects just mixing up".
+  // Default is every target, so existing pages are unchanged; unchecking one
+  // collapses only that surface's glow variable to 0.
+  glow_targets: ['name', 'avatar', 'card', 'links', 'icons'],
   item_color: '',
   item_text_color: '',
   show_avatar: true,        // false → hide the profile picture on the storefront
@@ -354,4 +372,31 @@ export async function reorderLinks(ordered) {
   );
   const failed = results.find(r => r.error);
   if (failed) throw failed.error;
+}
+
+// Surfaces the glow slider can reach. Absent from theme.glow_targets = that
+// surface's variable collapses to 0px while the others keep the slider value.
+export const GLOW_TARGETS = [
+  { id: 'name',   label: 'Name' },
+  { id: 'avatar', label: 'Profile picture' },
+  { id: 'card',   label: 'Profile card' },
+  { id: 'links',  label: 'Link buttons' },
+  { id: 'icons',  label: 'Icons' },
+];
+
+export function glowVars(theme, glowOn) {
+  // undefined (saved before this key existed) must mean "all on", not "none" —
+  // otherwise every existing storefront loses its glow on next load.
+  const on = (id) => glowOn && (!Array.isArray(theme.glow_targets) || theme.glow_targets.includes(id));
+  const base = theme.glow_intensity ?? 0;
+  const px = (yes, mult = 1) => (yes ? `${base * mult}px` : '0px');
+  return {
+    '--sf-glow-name':        px(on('name')),
+    '--sf-glow-name-strong': px(on('name'), 2.4),
+    '--sf-glow-avatar':      px(on('avatar'), 2.4),
+    '--sf-glow-card':        px(on('card'), 2.4),
+    '--sf-glow-links':       px(on('links')),
+    '--sf-glow-links-strong': px(on('links'), 2.4),
+    '--sf-icon-glow':        on('icons') ? `${theme.icon_glow ?? 10}px` : '0px',
+  };
 }

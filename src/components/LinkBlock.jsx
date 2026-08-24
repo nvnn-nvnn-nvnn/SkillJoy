@@ -128,12 +128,15 @@ function Styles() {
        keeps the original pill. Border colour derives from the text colour so a
        custom pair stays coherent without a fourth control. */
     .lkb-item { display:flex; align-items:center; gap:12px; padding:15px 17px;
-      border-radius:var(--lkb-shape, var(--r-full)); text-decoration:none;
+      border-radius:var(--lkb-shape, var(--sf-link-radius, var(--r-full))); text-decoration:none;
       background:var(--lkb-bg, var(--sf-link-bg, var(--surface)));
       color:var(--lkb-fg, var(--sf-link-fg, var(--text)));
       border:1.5px solid var(--lkb-fg, var(--sf-link-border, transparent));
+      box-shadow:0 0 var(--sf-glow-links, 0px) color-mix(in srgb, var(--accent) 78%, transparent);
       transition:transform .16s cubic-bezier(.34,1.4,.64,1), box-shadow .16s ease, border-color .16s ease; }
-    .lkb-item:hover { transform:translateY(-2px); }
+    .lkb-item:hover { transform:translateY(-2px);
+      box-shadow:0 8px 22px color-mix(in srgb, var(--accent) 22%, transparent),
+                 0 0 var(--sf-glow-links-strong, 0px) color-mix(in srgb, var(--accent) 60%, transparent); }
     .lkb-body { display:flex; flex-direction:column; gap:2px; flex:1; min-width:0; }
     .lkb-label { font-weight:700; font-size:15.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .lkb-desc { font-size:13px; line-height:1.45; color:var(--lkb-fg, var(--sf-link-fg, var(--text-secondary))); opacity:.75; }
@@ -142,10 +145,21 @@ function Styles() {
     .lkb-thumb { flex-shrink:0; width:44px; height:44px; border-radius:var(--r-sm);
       background:var(--surface-alt) center/cover no-repeat;
       display:inline-flex; align-items:center; justify-content:center; color:var(--text-muted); }
-    .lkb-arrow { flex-shrink:0; opacity:.55; }
+    /* Same triple bloom as .sf-social, off the same --sf-icon-glow slider, so
+       every icon on the page responds to one control. */
+    .lkb-arrow, .lkb-item .lkb-icon { flex-shrink:0; opacity:.75;
+      filter:
+        drop-shadow(0 0 calc(var(--sf-icon-glow, 0px) * 0.3) color-mix(in srgb, var(--accent) 90%, transparent))
+        drop-shadow(0 0 var(--sf-icon-glow, 0px) color-mix(in srgb, var(--accent) 55%, transparent))
+        drop-shadow(0 0 calc(var(--sf-icon-glow, 0px) * 2.2) color-mix(in srgb, var(--accent) 38%, transparent));
+      transition:filter .18s ease, opacity .14s ease; }
+    .lkb-item:hover .lkb-arrow { opacity:1; }
 
-    /* ── Classic: no thumbnail, centred label, arrow only ── */
-    .lkb-classic .lkb-thumb { display:none; }
+    /* ── Classic: compact round thumb, centred label, arrow only ──
+       This used to be 'display:none' on the thumb, from back when a link with
+       no image still rendered a placeholder square. The thumb is now only
+       present when there IS an image, so hiding it discarded real content. */
+    .lkb-classic .lkb-thumb { width:30px; height:30px; border-radius:50%; }
     .lkb-classic .lkb-desc { display:none; }
 
     /* ── Grid ── */
