@@ -1095,11 +1095,16 @@ function StoreStyles() {
     .sf-lnk-rounded .sf-linkbtn { border-radius:14px; }
     .sf-lnk-oval .sf-linkbtn { border-radius:var(--r-full); }
     .sf-lnk-sharp .sf-linkbtn { border-radius:4px; }
-    /* Full width: square edges AND a viewport breakout, so buttons run to the
-       screen edge rather than stopping at the 540px column. */
-    .sf-lnk-full .sf-linkbtn { border-radius:0; width:100vw; margin-left:50%; transform:translateX(-50%);
-      padding-left:max(18px, calc(50vw - 270px + 18px)); padding-right:max(18px, calc(50vw - 270px + 18px)); }
-    .sf-lnk-full .sf-linkbtn:hover { transform:translateX(-50%) translateY(-2px); }
+    /* Full width: square edges, running to the CARD's edges.
+       This used to be a 100vw viewport breakout, which never worked: these
+       buttons live inside .sf-panel, and that is overflow:hidden (it clips the
+       in-card banner). The breakout was cut off at the panel while
+       margin-left:50% still shoved it right — same bug as the carousel, note
+       184 §1.
+       A negative inline margin equal to the panel's 22px padding reaches the
+       panel border exactly, which is what "full width" means for something
+       inside a card. */
+    .sf-lnk-full .sf-linkbtn { border-radius:0; margin-inline:-22px; padding-left:22px; padding-right:22px; }
     .sf-linkbtn-label { display:inline-flex; align-items:center; gap:9px; }
     .sf-linkbtn-thumb { flex-shrink:0; width:26px; height:26px; border-radius:50%;
       background:var(--surface-alt) center/cover no-repeat; }

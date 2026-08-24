@@ -153,20 +153,33 @@ function PreviewLinkGroup({ block, items, featured }) {
   // that IS a value would silently override every level above it.
   const shapeRadius = layout.shape ? LINK_SHAPES.find(x => x.id === layout.shape)?.radius : null;
   const style = {
+    '--lpb-cols': layout.columns || 2,
     ...(shapeRadius ? { '--lpb-shape': shapeRadius } : null),
     ...(layout.bg ? { '--lpb-bg': layout.bg } : null),
     ...(layout.fg ? { '--lpb-fg': layout.fg } : null),
     ...(layout.headingColor ? { '--lpb-head': layout.headingColor } : null),
   };
   return (
-    <div className={`lpb lpb-${layout.style}${featured ? ' lpb-featured' : ''}`} style={style}>
+    <div className={[
+      'lpb', `lpb-${layout.style}`, `lpb-size-${layout.size}`, `lpb-align-${layout.align}`,
+      layout.outline ? 'lpb-outline' : '', layout.shadow ? 'lpb-shadow' : '',
+      featured ? 'lpb-featured' : '',
+    ].filter(Boolean).join(' ')} style={style}>
       {block.title?.trim() && <span className="lpb-title">{block.title}</span>}
       {block.subtitle?.trim() && <span className="lpb-sub">{block.subtitle}</span>}
       <div className="lpb-items">
         {items.slice(0, 4).map(l => (
           <div key={l.id} className="lpb-item">
-            {l.cover_url && <span className="lpb-thumb" style={{ backgroundImage: `url(${l.cover_url})` }} />}
-            <span className="lpb-label">{l.label || 'Link'}</span>
+            {/* Same two-part shape as the live card: a row, then a button that
+                spans the whole thing. */}
+            <span className="lpb-main">
+              {l.cover_url && <span className="lpb-thumb" style={{ backgroundImage: `url(${l.cover_url})` }} />}
+              <span className="lpb-txt">
+                <span className="lpb-label">{l.label || 'Link'}</span>
+                {l.description && <span className="lpb-desc">{l.description}</span>}
+              </span>
+            </span>
+            {l.cta_label?.trim() && <span className="lpb-cta">{l.cta_label}</span>}
           </div>
         ))}
       </div>
@@ -273,7 +286,7 @@ function LivePreview({ theme, name, handle, avatar, bio, location, socials, skil
       {/* FEATURED links — outside the card, above products, matching the live
           page's ordering so the preview doesn't imply a different layout. */}
       {featuredGroups.length > 0 && (
-        <div style={lpFeaturedVars(theme)}>
+        <div className="lp-featured" style={lpFeaturedVars(theme)}>
           {featuredGroups.map(g => (
             <PreviewLinkGroup key={g.block.id} block={g.block} items={g.items} featured />
           ))}
@@ -1658,6 +1671,10 @@ function Styles() {
         drop-shadow(0 0 calc(var(--lp-icon-glow, 6px) * 2.2) color-mix(in srgb, var(--accent) 38%, transparent)); }
     .lp-mono .lp-social svg { filter:grayscale(1); opacity:.8; }
     .lp-ghost { border-color:transparent; box-shadow:none; }
+    /* Featured sits between the profile card and the products, inset to the
+       same gutter as both. */
+    .lp-featured { margin:16px 14px 0; }
+    .lp-featured .lpb:first-child { margin-top:0; }
     .lp-list { display:flex; flex-direction:column; gap:11px; margin:14px 14px 20px; }
     .lp-glow-soft .lp-card { box-shadow:0 0 18px color-mix(in srgb, var(--accent) 45%, transparent); }
     .lp-glow-strong .lp-card { box-shadow:0 0 26px color-mix(in srgb, var(--accent) 70%, transparent), 0 0 44px color-mix(in srgb, var(--accent) 38%, transparent); }
@@ -1686,13 +1703,28 @@ function Styles() {
        Mirrors LinkBlock at preview scale. Colours fall through the same
        cascade as the live page: block -> page -> theme. */
     .lpb { width:100%; margin-top:10px; }
+    .lpb-align-left .lpb-txt { text-align:left; align-items:flex-start; }
+    .lpb-align-center .lpb-txt { text-align:center; align-items:center; }
+    .lpb-align-right .lpb-txt { text-align:right; align-items:flex-end; }
+    .lpb-align-center .lpb-title, .lpb-align-center .lpb-sub { text-align:center; }
+    .lpb-align-right .lpb-title, .lpb-align-right .lpb-sub { text-align:right; }
+    .lpb-outline .lpb-item { border-color:var(--lpb-fg, color-mix(in srgb, var(--lp-text, #000) 45%, transparent)); }
+    .lpb-shadow .lpb-item { box-shadow:0 2px 6px color-mix(in srgb, #000 22%, transparent),
+      0 0 var(--lp-glow-links, 0px) color-mix(in srgb, var(--accent) 78%, transparent); }
+    .lpb-size-small { --lpb-thumb:52px; }
+    .lpb-size-small .lpb-item { padding:9px 11px; }
+    .lpb-size-small .lpb-label { font-size:11px; }
+    .lpb-size-large { --lpb-thumb:78px; }
+    .lpb-size-large .lpb-item { padding:15px 15px; }
+    .lpb-size-large .lpb-label { font-size:14px; }
+    .lpb-classic .lpb-cta { padding:6px 9px; }
     .lpb-featured { margin-top:14px; }
-    .lpb-title { display:block; font-size:12px; font-weight:800; text-align:left;
+    .lpb-title { display:block; font-size:15px; font-weight:800; text-align:left;
       color:var(--lpb-head, var(--lp-text, inherit)); margin-bottom:2px; }
-    .lpb-sub { display:block; font-size:10px; text-align:left; opacity:.75;
+    .lpb-sub { display:block; font-size:11px; text-align:left; opacity:.75;
       color:var(--lpb-head, var(--lp-text, inherit)); margin-bottom:6px; }
-    .lpb-items { display:flex; flex-direction:column; gap:6px; }
-    .lpb-item { display:flex; align-items:center; gap:7px; padding:9px 11px;
+    .lpb-items { display:flex; flex-direction:column; gap:8px; }
+    .lpb-item { display:flex; flex-direction:column; align-items:stretch; gap:0; padding:13px 13px;
       border-radius:var(--lpb-shape, var(--lp-link-radius, 999px));
       font-size:11.5px; font-weight:700; overflow:hidden;
       background:var(--lpb-bg, var(--lp-link-bg, color-mix(in srgb, var(--accent) 12%, var(--lp-item-bg, transparent))));
@@ -1700,19 +1732,33 @@ function Styles() {
       border:1px solid color-mix(in srgb, var(--accent) 30%, transparent);
       /* Mirrors .lkb-item — the Glow slider has to move something here too. */
       box-shadow:0 0 var(--lp-glow-links, 0px) color-mix(in srgb, var(--accent) 78%, transparent); }
-    .lpb-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .lpb-thumb { flex-shrink:0; width:20px; height:20px; border-radius:4px;
+    .lpb-main { display:flex; align-items:center; gap:10px; width:100%; min-width:0; }
+    .lpb-txt { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
+    .lpb-label { font-size:12.5px; font-weight:800; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .lpb-desc { font-size:10.5px; line-height:1.45; opacity:.72; font-weight:500;
+      display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden;
+      -webkit-line-clamp:2; line-clamp:2; }
+    .lpb-cta { display:block; width:100%; margin-top:8px; padding:9px 10px;
+      border-radius:calc(var(--lpb-shape, var(--lp-link-radius, 999px)) * 0.6);
+      font-size:10px; font-weight:800; letter-spacing:.05em; text-transform:uppercase;
+      text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      background:color-mix(in srgb, var(--lpb-fg, var(--lp-link-fg, var(--accent))) 88%, black);
+      color:#fff; }
+    .lpb-thumb { flex-shrink:0; width:var(--lpb-thumb, 62px); height:var(--lpb-thumb, 62px); border-radius:5px;
       background:var(--lp-surface) center/cover no-repeat; }
     /* Style variants — the same four shapes the Layouts tab offers. */
-    .lpb-classic .lpb-thumb { width:16px; height:16px; border-radius:50%; }
-    .lpb-grid .lpb-items { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
-    .lpb-grid .lpb-item, .lpb-carousel .lpb-item { flex-direction:column; align-items:stretch;
-      text-align:center; border-radius:10px; padding:8px; }
-    .lpb-grid .lpb-thumb, .lpb-carousel .lpb-thumb { width:100%; height:34px; border-radius:6px; }
-    .lpb-carousel .lpb-items { display:flex; flex-direction:row; overflow:hidden; }
-    .lpb-carousel .lpb-item { flex:0 0 62px; }
-    .lpb-cards .lpb-item { align-items:flex-start; border-radius:10px; padding:9px; }
-    .lpb-cards .lpb-thumb { width:28px; height:28px; }
+    .lpb-classic .lpb-thumb { width:calc(var(--lpb-thumb, 62px) * 0.9); height:calc(var(--lpb-thumb, 62px) * 0.9); border-radius:50%; }
+    .lpb-grid .lpb-items { display:grid; grid-template-columns:repeat(var(--lpb-cols, 2), minmax(0,1fr)); gap:6px; }
+    .lpb-grid .lpb-item, .lpb-carousel .lpb-item { text-align:center; border-radius:10px; padding:8px; }
+    .lpb-grid .lpb-main, .lpb-carousel .lpb-main { flex-direction:column; align-items:stretch; gap:6px; }
+    .lpb-grid .lpb-thumb, .lpb-carousel .lpb-thumb { width:100%; height:110px; border-radius:7px; }
+    .lpb-carousel .lpb-items { display:flex; flex-direction:row; overflow-x:auto;
+      scrollbar-width:none; }
+    .lpb-carousel .lpb-items::-webkit-scrollbar { display:none; }
+    .lpb-carousel .lpb-item { flex:0 0 136px; }
+    .lpb-cards .lpb-item { border-radius:10px; padding:9px; }
+    .lpb-cards .lpb-main { align-items:flex-start; }
+    .lpb-cards .lpb-thumb { width:var(--lpb-thumb, 62px); height:var(--lpb-thumb, 62px); border-radius:7px; }
     .lp-btn-pill .lp-card, .lp-btn-pill .lp-cover { border-radius:999px; }
     .lp-btn-sharp .lp-card, .lp-btn-sharp .lp-cover { border-radius:5px; }
 

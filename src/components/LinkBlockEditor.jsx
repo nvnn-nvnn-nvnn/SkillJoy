@@ -380,7 +380,21 @@ export default function LinkBlockEditor({ creatorId, onChange }) {
     <div className="lb">
       {/* Header — name, and the three actions that apply to the whole block. */}
       <div className="lb-head">
-        <button className="lb-back" onClick={() => setOpenId(null)}><ChevronLeft size={15} /> Back</button>
+        <button className="lb-back" onClick={() => setOpenId(null)}>
+          <ChevronLeft size={20} strokeWidth={2.6} /> All blocks
+        </button>
+        {(() => {
+          // Orphans belong to no placement — saying "Profile links" there would
+          // be a lie, and they are exactly the rows a creator needs to notice.
+          const pl = open ? PLACEMENTS.find(x => x.id === (open.placement || 'profile')) : null;
+          return (
+            <span className={`lb-crumb${pl?.id === 'featured' ? ' feat' : ''}${pl ? '' : ' orphan'}`}>
+              {pl
+                ? <>{pl.id === 'featured' ? <Star size={13} /> : <Link2 size={13} />}{pl.label}</>
+                : <>Unsorted &mdash; not in a block</>}
+            </span>
+          );
+        })()}
       </div>
       <div className="lb-headmain">
         <span className="lb-headicon"><Link2 size={16} /></span>
@@ -457,6 +471,19 @@ export default function LinkBlockEditor({ creatorId, onChange }) {
                   onChange={e => patchLinkLocal(l.id, { description: e.target.value })}
                   onBlur={e => saveLink(l.id, { description: e.target.value })}
                   placeholder="Description" />
+                {/* cta_label existed in the table and in LINK_COLS since before
+                    blocks, but had no field and no renderer — so the column was
+                    unreachable from either end. Blank = no button. */}
+                <div className="lb-ctafield">
+                  <span className="lb-ctalabel">Button</span>
+                  <input className="lb-in lb-in-cta" value={l.cta_label ?? ''}
+                    onChange={e => patchLinkLocal(l.id, { cta_label: e.target.value })}
+                    onBlur={e => saveLink(l.id, { cta_label: e.target.value })}
+                    maxLength={24} placeholder="Leave blank for no button — e.g. BOOK NOW" />
+                  {l.cta_label?.trim()
+                    ? <span className="lb-ctapreview">{l.cta_label}</span>
+                    : <span className="lb-ctanone">No button on this link</span>}
+                </div>
                 <input className="lb-in lb-in-url" value={l.url ?? ''}
                   onChange={e => patchLinkLocal(l.id, { url: e.target.value })}
                   onBlur={e => saveLink(l.id, { url: e.target.value })}
@@ -853,11 +880,22 @@ function Styles() {
       background:var(--surface-alt); border:1px solid var(--border); padding:2px 6px; border-radius:var(--r-full); }
 
     /* ── Header ── */
-    .lb-head { display:flex; }
-    .lb-back { display:inline-flex; align-items:center; gap:3px; width:auto; padding:5px 9px 5px 5px;
+    .lb-head { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+    .lb-back { display:inline-flex; align-items:center; gap:6px; width:auto; padding:10px 16px 10px 11px;
+      font-size:14.5px; font-weight:800; border-radius:var(--r-full);
+      border:1.5px solid var(--border-strong); background:var(--surface);
       border:none; background:none; color:var(--text-secondary); font-size:13px; font-weight:700;
       font-family:inherit; cursor:pointer; border-radius:var(--r-sm); }
-    .lb-back:hover { background:var(--surface-alt); color:var(--text); }
+    .lb-back:hover { background:var(--accent); border-color:var(--accent); color:#fff; }
+    /* Which list this block lives in. Colour alone would not carry it (note
+       183 §5), so it also switches icon and wording. */
+    .lb-crumb { display:inline-flex; align-items:center; gap:6px;
+      padding:8px 14px; border-radius:var(--r-full); font-size:13px; font-weight:800;
+      background:color-mix(in srgb, var(--accent) 14%, transparent);
+      border:1.5px solid color-mix(in srgb, var(--accent) 45%, transparent);
+      color:var(--accent); white-space:nowrap; }
+    .lb-crumb.feat { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .lb-crumb.orphan { background:var(--danger-light); border-color:var(--danger-mid); color:var(--danger); }
     .lb-headmain { display:flex; align-items:center; gap:11px; }
     .lb-headicon { flex-shrink:0; display:inline-flex; align-items:center; justify-content:center;
       width:32px; height:32px; border-radius:9px; background:var(--green-light); color:var(--green); }
@@ -899,6 +937,20 @@ function Styles() {
     .lb-in:hover { border-color:var(--border); }
     .lb-in:focus { outline:none; border-color:var(--accent); background:var(--surface-alt); }
     .lb-in-title { font-size:15px; font-weight:750; }
+    /* Captioned, because this field is the only one whose output is a whole
+       new element on the page — the others just fill in text that already has
+       a place. The preview underneath is the shortest possible answer to
+       "did that do anything?". */
+    .lb-ctafield { display:flex; flex-direction:column; gap:5px; padding:11px 12px; margin:2px 0;
+      border-radius:var(--r); border:1px dashed var(--border-strong);
+      background:color-mix(in srgb, var(--accent) 5%, transparent); }
+    .lb-ctalabel { font-size:11px; font-weight:800; text-transform:uppercase;
+      letter-spacing:.06em; color:var(--text-secondary); }
+    .lb-in-cta { font-size:13px; }
+    .lb-ctapreview { align-self:flex-start; padding:9px 16px; border-radius:var(--r-full);
+      background:var(--accent); color:#fff; font-size:12px; font-weight:800;
+      letter-spacing:.05em; text-transform:uppercase; }
+    .lb-ctanone { font-size:11.5px; color:var(--text-muted); font-style:italic; }
     .lb-in-desc { color:var(--text-secondary); }
     .lb-in-url { color:var(--accent-hover); }
     .lb-boxed { border-color:var(--border-strong); background:var(--surface); padding:10px 12px; }

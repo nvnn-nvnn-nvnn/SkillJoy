@@ -108,7 +108,14 @@ export function contrastVerdict(ratio) {
 /** Merge a stored layout over the defaults. Unknown keys are kept (forward
  *  compatible); missing ones fall back. Same contract as resolveTheme(). */
 export function resolveBlockLayout(layout) {
-  return { ...DEFAULT_BLOCK_LAYOUT, ...(layout || {}) };
+  const out = { ...DEFAULT_BLOCK_LAYOUT, ...(layout || {}) };
+  // 'medium' was offered before the picker dropped to two sizes. It still
+  // exists in saved blocks, and no stylesheet has ever had a rule for it — so
+  // those blocks were rendering with NO size applied at all. Coerce here, at
+  // the one boundary every renderer goes through, rather than adding dead CSS
+  // to each of them.
+  if (!LINK_SIZES.some(s => s.id === out.size)) out.size = 'large';
+  return out;
 }
 
 // ── Blocks ──────────────────────────────────────────────────────────────────

@@ -83,19 +83,27 @@ export default function LinkBlock({ block, links }) {
               rel={l.is_affiliate ? 'noopener noreferrer sponsored' : 'noopener noreferrer'}
               className={`lkb-item${l.featured ? ' featured' : ''}`}
             >
-              {/* Thumbnail carries the layout: Classic hides it via CSS rather
-                  than omitting it, so switching styles never loses the image. */}
-              {l.cover_url && (
-                <span className="lkb-thumb" style={{ backgroundImage: `url(${l.cover_url})` }} aria-hidden="true" />
-              )}
+              {/* Top row: image, text, arrow. Its own flex container so the
+                  button below can span the FULL card — inside .lkb-body,
+                  width:100% only reached the edge of the text column. */}
+              <span className="lkb-main">
+                {l.cover_url && (
+                  <span className="lkb-thumb" style={{ backgroundImage: `url(${l.cover_url})` }} aria-hidden="true" />
+                )}
 
-              <span className="lkb-body">
-                <span className="lkb-label">{l.label || 'Link'}</span>
-                {l.description && <span className="lkb-desc">{l.description}</span>}
-                {l.is_affiliate && <span className="lkb-aff">Affiliate</span>}
+                <span className="lkb-body">
+                  <span className="lkb-label">{l.label || 'Link'}</span>
+                  {l.description && <span className="lkb-desc">{l.description}</span>}
+                  {l.is_affiliate && <span className="lkb-aff">Affiliate</span>}
+                </span>
+
+                <ArrowUpRight size={22} className="lkb-arrow" aria-hidden="true" />
               </span>
 
-              <ArrowUpRight size={17} className="lkb-arrow" aria-hidden="true" />
+              {/* A span, not a <button> — the whole card is already an <a>, and
+                  nesting interactive elements is invalid and breaks keyboard
+                  navigation. It only has to LOOK like a button. */}
+              {l.cta_label?.trim() && <span className="lkb-cta">{l.cta_label}</span>}
             </a>
           ))}
         </div>
@@ -116,33 +124,55 @@ function Styles() {
     .lkb-headthumb { flex-shrink:0; width:38px; height:38px; border-radius:var(--r-sm);
       background:var(--surface-alt) center/cover no-repeat; }
     .lkb-headtext { display:flex; flex-direction:column; gap:1px; flex:1; min-width:0; }
-    .lkb-title { font-size:16.5px; font-weight:800; color:var(--lkb-head, var(--sf-link-fg, var(--text))); }
-    .lkb-sub { font-size:13.5px; line-height:1.45; color:var(--lkb-head, var(--sf-link-fg, var(--text-secondary))); opacity:.82; }
+    .lkb-title { font-size:22px; font-weight:800; color:var(--lkb-head, var(--sf-link-fg, var(--text))); }
+    .lkb-sub { font-size:15.5px; line-height:1.5; color:var(--lkb-head, var(--sf-link-fg, var(--text-secondary))); opacity:.82; }
     .lkb-caret { flex-shrink:0; color:var(--text-muted); transition:transform .2s ease; }
     .lkb-caret.open { transform:rotate(180deg); }
 
-    .lkb-items { display:flex; flex-direction:column; gap:9px; }
+    .lkb-items { display:flex; flex-direction:column; gap:12px; }
 
     /* Shared item shell. Style variants below only change geometry. */
     /* --lkb-shape is the corner radius (Settings → Block shape); the fallback
        keeps the original pill. Border colour derives from the text colour so a
        custom pair stays coherent without a fourth control. */
-    .lkb-item { display:flex; align-items:center; gap:12px; padding:15px 17px;
+    .lkb-item { display:flex; flex-direction:column; align-items:stretch; gap:0; padding:20px 20px;
       border-radius:var(--lkb-shape, var(--sf-link-radius, var(--r-full))); text-decoration:none;
       background:var(--lkb-bg, var(--sf-link-bg, var(--surface)));
       color:var(--lkb-fg, var(--sf-link-fg, var(--text)));
-      border:1.5px solid var(--lkb-fg, var(--sf-link-border, transparent));
+      border:1.5px solid transparent;
       box-shadow:0 0 var(--sf-glow-links, 0px) color-mix(in srgb, var(--accent) 78%, transparent);
       transition:transform .16s cubic-bezier(.34,1.4,.64,1), box-shadow .16s ease, border-color .16s ease; }
     .lkb-item:hover { transform:translateY(-2px);
       box-shadow:0 8px 22px color-mix(in srgb, var(--accent) 22%, transparent),
                  0 0 var(--sf-glow-links-strong, 0px) color-mix(in srgb, var(--accent) 60%, transparent); }
-    .lkb-body { display:flex; flex-direction:column; gap:2px; flex:1; min-width:0; }
-    .lkb-label { font-weight:700; font-size:15.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .lkb-desc { font-size:13px; line-height:1.45; color:var(--lkb-fg, var(--sf-link-fg, var(--text-secondary))); opacity:.75; }
-    .lkb-aff { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.05em;
+    /* The row. Every style variant reshapes THIS, not .lkb-item — the button
+       must stay a full-width sibling underneath in all four. */
+    .lkb-main { display:flex; align-items:center; gap:16px; width:100%; min-width:0; }
+    .lkb-body { display:flex; flex-direction:column; gap:3px; flex:1; min-width:0; }
+    .lkb-label { font-weight:800; font-size:19px; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .lkb-desc { font-size:15.5px; line-height:1.5; color:var(--lkb-fg, var(--sf-link-fg, var(--text-secondary))); opacity:.75;
+      display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden;
+      -webkit-line-clamp:3; line-clamp:3; }
+    /* Looks like a button, is a span (see the markup note). Border derives from
+       the text colour so it stays legible on any custom block fill. */
+    /* A call to action is the thing you want clicked, so it gets the weight of
+       one: solid fill, full width of the card, real padding. The pill version
+       it replaces read as a tag sitting next to the text. */
+    .lkb-cta { display:block; width:100%; margin-top:15px; padding:18px 20px;
+      border-radius:calc(var(--lkb-shape, var(--sf-link-radius, 999px)) * 0.6);
+      font-size:16px; font-weight:800; letter-spacing:.05em; text-transform:uppercase;
+      text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      background:color-mix(in srgb, var(--lkb-fg, var(--sf-link-fg, var(--accent))) 88%, black);
+      color:#fff;
+      border:1.5px solid transparent;
+      transition:filter .14s ease, transform .14s ease; }
+    .lkb-item:hover .lkb-cta { filter:brightness(1.08); }
+    /* Classic is a single row — a block-level button would break the line, so
+       there it stays inline and compact. */
+    .lkb-classic .lkb-cta { padding:13px 18px; font-size:13.5px; }
+    .lkb-aff { font-size:11px; font-weight:800; margin-top:2px; text-transform:uppercase; letter-spacing:.05em;
       color:var(--text-muted); }
-    .lkb-thumb { flex-shrink:0; width:44px; height:44px; border-radius:var(--r-sm);
+    .lkb-thumb { flex-shrink:0; width:var(--lkb-thumb, 96px); height:var(--lkb-thumb, 96px); border-radius:var(--r-sm);
       background:var(--surface-alt) center/cover no-repeat;
       display:inline-flex; align-items:center; justify-content:center; color:var(--text-muted); }
     /* Same triple bloom as .sf-social, off the same --sf-icon-glow slider, so
@@ -159,54 +189,60 @@ function Styles() {
        This used to be 'display:none' on the thumb, from back when a link with
        no image still rendered a placeholder square. The thumb is now only
        present when there IS an image, so hiding it discarded real content. */
-    .lkb-classic .lkb-thumb { width:30px; height:30px; border-radius:50%; }
-    .lkb-classic .lkb-desc { display:none; }
+    .lkb-classic .lkb-thumb { width:calc(var(--lkb-thumb, 96px) * 0.9); height:calc(var(--lkb-thumb, 96px) * 0.9); border-radius:50%; }
+    .lkb-classic .lkb-desc { -webkit-line-clamp:1; line-clamp:1; }
 
     /* ── Grid ── */
     .lkb-grid .lkb-items { display:grid; grid-template-columns:repeat(var(--lkb-cols, 2), minmax(0,1fr)); gap:9px; }
-    .lkb-grid .lkb-item { flex-direction:column; align-items:stretch; text-align:center;
-      padding:14px; border-radius:var(--r-lg); }
-    .lkb-grid .lkb-thumb { width:100%; height:84px; border-radius:var(--r); }
+    .lkb-grid .lkb-item { text-align:center; padding:14px; border-radius:var(--r-lg); }
+    .lkb-grid .lkb-main { flex-direction:column; align-items:stretch; gap:11px; }
+    .lkb-grid .lkb-thumb { width:100%; height:168px; border-radius:var(--r); }
     .lkb-grid .lkb-arrow { display:none; }
-    .lkb-grid .lkb-desc { display:none; }
+    .lkb-grid .lkb-desc { -webkit-line-clamp:2; line-clamp:2; }
 
     /* ── Carousel ──
        Breaks out of the 540px column so the row can actually run edge to edge;
        the padding puts the first card back in line with everything above it.
        scroll-snap gives it the swipe feel without any JS. */
     .lkb-carousel .lkb-items { display:flex; flex-direction:row; gap:9px;
-      overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none;
-      width:100vw; margin-left:50%; transform:translateX(-50%);
-      padding:2px max(18px, calc(50vw - 270px + 18px)); }
+      overflow-x:auto; overscroll-behavior-x:contain; scroll-snap-type:x mandatory;
+      scrollbar-width:none; padding:2px 1px 6px; }
     .lkb-carousel .lkb-items::-webkit-scrollbar { display:none; }
-    .lkb-carousel .lkb-item { flex:0 0 190px; flex-direction:column; align-items:stretch;
-      scroll-snap-align:start; border-radius:var(--r-lg); padding:14px; }
-    .lkb-carousel .lkb-thumb { width:100%; height:96px; border-radius:var(--r); }
+    .lkb-carousel .lkb-item { flex:0 0 268px; scroll-snap-align:start; border-radius:var(--r-lg); padding:14px; }
+    .lkb-carousel .lkb-main { flex-direction:column; align-items:stretch; gap:11px; }
+    .lkb-carousel .lkb-thumb { width:100%; height:180px; border-radius:var(--r); }
     .lkb-carousel .lkb-arrow { display:none; }
 
     /* ── Cards ── */
-    .lkb-cards .lkb-item { align-items:flex-start; padding:14px; border-radius:var(--r-lg); }
-    .lkb-cards .lkb-thumb { width:56px; height:56px; }
+    .lkb-cards .lkb-item { padding:16px; border-radius:var(--r-lg); }
+    .lkb-cards .lkb-main { align-items:flex-start; }
+    .lkb-cards .lkb-thumb { width:var(--lkb-thumb, 96px); height:var(--lkb-thumb, 96px); border-radius:var(--r); }
     .lkb-cards .lkb-label { white-space:normal; }
 
     /* ── Size ── */
-    .lkb-size-small .lkb-item { padding:10px 13px; }
-    .lkb-size-small .lkb-label { font-size:13.5px; }
-    .lkb-size-large .lkb-item { padding:19px 20px; }
-    .lkb-size-large .lkb-label { font-size:16px; }
+    .lkb-size-small { --lkb-thumb:80px; }
+    .lkb-size-small .lkb-item { padding:15px 17px; }
+    .lkb-size-small .lkb-label { font-size:17px; }
+    .lkb-size-large { --lkb-thumb:120px; }
+    .lkb-size-large .lkb-item { padding:24px 24px; }
+    .lkb-size-large .lkb-label { font-size:22px; }
 
     /* ── Alignment. Classic centres its label by default; the other styles are
        left-aligned unless told otherwise. ── */
+    .lkb-align-left .lkb-main { justify-content:flex-start; }
     .lkb-align-left .lkb-body { text-align:left; align-items:flex-start; }
     .lkb-align-center .lkb-body { text-align:center; align-items:center; }
     .lkb-align-right .lkb-body { text-align:right; align-items:flex-end; }
 
     /* ── Outline / shadow ── */
-    /* Outline and shadow are on/off (see DEFAULT_BLOCK_LAYOUT). Default is OFF,
-       so the base .lkb-item carries no border colour and no shadow. */
-    .lkb-item { border-color:transparent; }
-    .lkb-outline .lkb-item { border-color:var(--sf-link-border, var(--border-strong)); }
-    .lkb-shadow .lkb-item { box-shadow:0 4px 14px rgba(20,18,12,.10); }
+    /* Both default OFF. The base border is transparent in the rule that
+       declares it (above) — an override here would have equal specificity and
+       beat any block-level colour, which is exactly what it used to do. */
+    .lkb-outline .lkb-item { border-color:var(--lkb-fg, var(--sf-link-border, var(--border-strong))); }
+    /* Shadow ADDS to the glow. Replacing box-shadow outright meant switching
+       Shadow on silently switched the glow off. */
+    .lkb-shadow .lkb-item { box-shadow:0 4px 14px rgba(20,18,12,.10),
+      0 0 var(--sf-glow-links, 0px) color-mix(in srgb, var(--accent) 78%, transparent); }
 
     /* Featured reads as promoted without needing its own layout. */
     .lkb-item.featured { border-color:var(--accent); }

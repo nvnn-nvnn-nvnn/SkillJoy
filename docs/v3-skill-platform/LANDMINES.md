@@ -254,3 +254,92 @@ keep scripting for mechanical single-token work.
 **Lint baseline is 87 problems** (72 errors, 15 warnings), almost all
 `react-refresh/only-export-components` in legacy files. A change should not move
 that number.
+
+**Mixed line endings break multi-line search-and-replace.** Files carry CRLF
+from git checkout, but anything a node script writes lands as LF — so a file
+edited twice has both. A multi-line anchor copied from `sed -n` output then
+matches nothing and the replace is a **silent no-op**. Normalise before matching:
+
+```js
+let s = fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
+```
+
+Always assert the anchor exists (`if (!s.includes(old)) throw`) — without it the
+script reports success and nothing changed. This is the same failure that caused
+the missing-import crash in note 178.
+
+**Lint baseline is now 85 problems** (70 errors, 15 warnings). A change should
+not move that number.
+
+---
+
+## 13 · A control exists and nothing downstream listens
+
+Three instances in one week, all the same shape: a slider or picker in the
+editor, wired to a theme key, that no renderer reads.
+
+- Page-level `link_shape` was applied only as a wrap class (`.sf-lnk-oval
+  .sf-linkbtn`) — and `.sf-linkbtn` is the *legacy flat list*, not `LinkBlock`.
+  Setting a page shape did nothing to any block. (Note 181 §3)
+- `LivePreview` computed link fill from `product_opacity`, so the Links panel's
+  own opacity slider moved nothing in the preview. (Note 181 §4)
+- `--sf-glow` / `--sf-icon-glow` had no consumer in `LinkBlock` at all, so links
+  stopped glowing the moment they became blocks. (Note 182 §1)
+
+**Cause:** when you replace a renderer, the *data* migration gets checked. The
+**presentation contract** — which CSS variables the old markup consumed — does
+not come along, and nothing errors.
+
+**Before deleting old markup:** grep its class for every `var(--…)` it read, and
+confirm the replacement reads them all.
+
+**A class-based style cannot fall back to a variable-based one.** If a value has
+to participate in a cascade, it must be a variable, not a class.
+
+---
+
+## 14 · Don't add a migration to answer an offhand sentence
+
+Migrations are the least reversible thing in the repo, and unrun ones stack —
+there were four queued when a fifth got written off a one-line remark. It
+happened to be wanted; the order was still wrong.
+
+Confirm before writing: **anything that adds a migration, or a theme key with no
+UI to set it.** Everything else, just build.
+
+**A wrapper that only carries CSS variables still participates in layout.** A
+`<div style={someVars}>` with no `className` sits flush against its parent while
+everything around it is inset — the content renders correctly and looks like it
+is missing. Cost a round of "featured links don't show in the preview" in note
+185. If a div's only attribute is a style object, ask whether it also needs a
+class.
+
+**Multipliers on a design token opt an element out of the scale.**
+`.lkb-classic .lkb-thumb { width: calc(var(--lkb-thumb) * 0.66) }` meant raising
+`--lkb-thumb` moved Classic two-thirds as much as every other style — invisible
+across one increment, obvious across three, and it produced three consecutive
+"still too tiny" reports. When a token change doesn't show, check whether the
+element *derives* from the token rather than using it.
+
+**Judge sizing on the smallest combination, not the default.** Style multiplier
+× size token compounds; Classic + S was 30px while the default was 62px.
+
+---
+
+## 15 · "It doesn't show up" — check in this order
+
+Three different root causes wore this same symptom in one session. Cheapest
+check first:
+
+1. **Is this build even running?** Which URL — `localhost:5173`, `:3000`, or the
+   live domain? A built bundle needs a rebuild *and* a reload; a deployed site
+   needs a deploy. Ask before the second attempt at any visual bug, not after.
+   (Note 186 — three rounds were spent editing code while looking at production.)
+2. **Can anything write the value?** A column with no editor field is
+   unreachable, not unused. (Note 184 §2 — `cta_label`.)
+3. **Is the result off-screen or clipped?** An `overflow:hidden` ancestor, or a
+   wrapper with no layout class. (Notes 184 §1, 185 §1.)
+
+**When the source is verified correct and the symptom persists, stop editing the
+source.** Further edits produce the same ambiguous result. Prove what is
+executing instead.
