@@ -26,3 +26,11 @@ Rule for this folder: **no vibe.** Every claim points at a real file/function.
   live preview, presets/import-export, drag-to-order sections, link buttons) —
   the trick that makes it work, the real code, and the trap. Ends with a landmine
   index and ten hands-on exercises.
+
+- [05 — Finishing the link-in-bio](05-finishing-the-link-in-bio.md) — a **build
+  guide for five unbuilt features**: click tracking, per-page OG tags, email
+  capture as a placeable block, auto-fetched link thumbnails, and link
+  scheduling. Not a change note — nothing in it is implemented. For each: the
+  one decision that's expensive to get wrong (anonymous-write surface, crawlers
+  that don't run JS, SSRF, hidden-vs-secret), the schema, the traps that bite
+  after it works, and checkpoints to verify it. Ends with a suggested order.

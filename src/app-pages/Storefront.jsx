@@ -37,10 +37,41 @@ function featuredVars(theme) {
     v['--sf-link-border'] = `color-mix(in srgb, ${fill} 62%, black)`;
   }
   if (theme.featured_link_text_color) v['--sf-link-fg'] = theme.featured_link_text_color;
+  if (theme.featured_link_cta_color) v['--sf-cta-bg'] = theme.featured_link_cta_color;
+  if (theme.featured_link_cta_text_color) v['--sf-cta-fg'] = theme.featured_link_cta_text_color;
   if (theme.featured_link_blur != null) v['--sf-link-blur'] = `${theme.featured_link_blur}px`;
   if (theme.featured_link_shape) v['--sf-link-radius'] = LINK_RADIUS[theme.featured_link_shape] ?? LINK_RADIUS.oval;
+  // Featured links read their own glow target. Rebinding the variable here
+  // means LinkBlock needs no idea which region it is rendering in.
+  v['--sf-glow-links'] = 'var(--sf-glow-featured, 0px)';
+  v['--sf-glow-links-strong'] = 'var(--sf-glow-featured-strong, 0px)';
   return v;
 }
+
+// Should this device get the background video at all?
+//
+// Deliberately conservative — it answers "is video a good idea here", not "is
+// video technically possible here". A false negative costs a still image; a
+// false positive costs someone's data plan and shows a black rectangle.
+//
+// Evaluated once at module scope, not per render: none of these inputs change
+// without a reload, and reading them in a render would run on every state
+// change for no benefit.
+function shouldPlayBgVideo() {
+  if (typeof window === 'undefined') return false;
+  // Coarse pointer + narrow viewport is the honest definition of "phone" here.
+  // A tablet in landscape is fine; a phone is not.
+  const narrow = window.matchMedia?.('(max-width: 820px)')?.matches;
+  const coarse = window.matchMedia?.('(pointer: coarse)')?.matches;
+  if (narrow && coarse) return false;
+  // Respect the user's own settings before anything else.
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return false;
+  const c = navigator.connection;
+  if (c?.saveData) return false;
+  if (c?.effectiveType && ['slow-2g', '2g', '3g'].includes(c.effectiveType)) return false;
+  return true;
+}
+
 
 export default function Storefront() {
   const { handle = '' } = useParams();
@@ -176,7 +207,9 @@ export default function Storefront() {
       ? { backgroundImage: `url(${theme.bg_image})`, backgroundSize: 'cover', backgroundPosition: 'center' } :
     undefined;
   const isAnimatedBg = theme.bg === 'animated';
-  const hasBgVideo = theme.bg === 'video' && !!theme.bg_video;
+  // The poster (bg_image) is painted by bgStyle either way, so a device that
+  // is refused the video still gets the intended look — just still.
+  const hasBgVideo = theme.bg === 'video' && !!theme.bg_video && shouldPlayBgVideo();
   const wrapClass = [
     'sf-wrap', `sf-mode-${theme.mode}`, `sf-btn-${theme.button_style}`,
     `sf-glow-${theme.product_glow || 'none'}`,
@@ -207,6 +240,8 @@ export default function Storefront() {
     // Text colours, separate per category — links and products are distinct
     // block types and must be stylable independently.
     ...(theme.link_text_color ? { '--sf-link-fg': theme.link_text_color } : null),
+    ...(theme.link_cta_color ? { '--sf-cta-bg': theme.link_cta_color } : null),
+    ...(theme.link_cta_text_color ? { '--sf-cta-fg': theme.link_cta_text_color } : null),
     '--sf-link-blur': `${theme.link_blur ?? theme.card_blur ?? 0}px`,
     '--sf-link-radius': LINK_RADIUS[theme.link_shape] ?? LINK_RADIUS.oval,
     ...(theme.item_text_color ? { '--sf-item-fg': theme.item_text_color } : null),
@@ -216,6 +251,7 @@ export default function Storefront() {
       : 'color-mix(in srgb, var(--accent) 32%, transparent)',
     '--sf-item-blur': `${theme.product_blur ?? 0}px`,
     '--sf-avatar-size': `${theme.avatar_size ?? 96}px`,
+    '--sf-icon-size': `${theme.icon_size ?? 23}px`,
     '--sf-avatar-radius': theme.avatar_shape === 'square' ? '14%' : theme.avatar_shape === 'rounded' ? '26%' : '50%',
     '--sf-bio-size': `${theme.bio_size ?? 15}px`,
     '--sf-bio-weight': theme.bio_weight ?? 400,
@@ -715,7 +751,7 @@ function CursorFx({ kind, color }) {
 
 function StoreStyles() {
   return <style>{`
-    .sf-wrap { max-width:600px; margin:0 auto; padding:0 22px 96px; position:relative; }
+    .sf-wrap { --sf-panel-pad:26px; max-width:600px; margin:0 auto; padding:0 22px 96px; position:relative; }
     .sf-center { text-align:center; padding-top:40px; }
     .sf-h1 { font-size:26px; font-weight:800; letter-spacing:-.02em; }
     .sf-muted { color:var(--text-muted); }
@@ -989,7 +1025,7 @@ function StoreStyles() {
 
     /* Main glass panel — wraps the profile info so the background never bleeds
        into the text. Opacity + blur sliders drive --sf-panel-bg / --sf-panel-blur. */
-    .sf-panel { position:relative; z-index:1; margin-top:28px; padding:34px 26px 30px; border-radius:var(--r-2xl); overflow:hidden;
+    .sf-panel { position:relative; z-index:1; margin-top:28px; padding:34px var(--sf-panel-pad, 26px) 30px; border-radius:var(--r-2xl); overflow:hidden;
       background:var(--sf-panel-bg, var(--surface));
       -webkit-backdrop-filter:blur(var(--sf-panel-blur, 0px)); backdrop-filter:blur(var(--sf-panel-blur, 0px));
       border:1px solid color-mix(in srgb, var(--border-strong) 55%, transparent);
@@ -997,7 +1033,7 @@ function StoreStyles() {
         0 0 var(--sf-glow-card, 0px) color-mix(in srgb, var(--accent) 62%, transparent); }
     /* Banner lives inside the panel — negative margins pull it edge-to-edge, the
        panel's overflow:hidden rounds its top corners to match. */
-    .sf-panelbanner { height:150px; margin:-34px -26px 16px; background:var(--surface-alt) center/cover no-repeat; position:relative; }
+    .sf-panelbanner { height:150px; margin:-34px calc(-1 * var(--sf-panel-pad, 26px)) 16px; background:var(--surface-alt) center/cover no-repeat; position:relative; }
     .sf-panelbanner::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg, transparent 50%, rgba(20,18,12,.28)); }
 
     /* ══ Cover banner (banner_style: 'cover') ══════════════════════════════
@@ -1118,7 +1154,10 @@ function StoreStyles() {
     .sf-location svg { flex-shrink:0; opacity:.85; }
     .sf-bio { color:var(--text-secondary); font-size:var(--sf-bio-size, 15px); font-weight:var(--sf-bio-weight, 400); margin:12px auto 0; line-height:1.55; max-width:42ch;
       filter:drop-shadow(0 0 var(--sf-bio-glow, 0px) color-mix(in srgb, var(--accent) 70%, transparent)); }
-    .sf-socials { display:flex; gap:16px; justify-content:center; margin-top:20px; }
+    .sf-socials { display:flex; gap:16px; justify-content:center; margin-top:20px; flex-wrap:wrap; }
+    /* Driven by the theme so the icon row can be scaled to match a bigger or
+       smaller avatar — the two read as one unit and looked wrong apart. */
+    .sf-social svg { width:var(--sf-icon-size, 23px); height:var(--sf-icon-size, 23px); }
     /* Bare icons (no circle) with a shape-hugging glow via filter:drop-shadow.
        Driven by --sf-icon-glow (0–60px slider): triple layered bloom — tight
        core + halo + wide outer wash — so cranked all the way it reads as a
@@ -1140,7 +1179,11 @@ function StoreStyles() {
     .sf-links { display:flex; flex-direction:column; gap:10px; margin-top:18px; width:100%; }
     /* Featured links sit outside the profile card, in the same column as the
        product groups, so they read as page content rather than profile chrome. */
-    .sf-featured { margin-top:22px; }
+    /* Aligned with the profile card CONTENT, not its outer edge — a link button
+       should be the same width wherever it appears. --sf-panel-pad is the single
+       source for that number and the panel reads it too, so the two cannot drift
+       apart again (they already had: note 186 addendum). */
+    .sf-featured { margin-top:22px; padding-inline:var(--sf-panel-pad, 26px); }
     .sf-group { margin-top:22px; }
     /* Section header: title + accent-fading rule + item-count pill. */
     .sf-grouphead { display:flex; align-items:center; gap:12px; margin:0 4px 2px; }
@@ -1157,10 +1200,10 @@ function StoreStyles() {
     .sf-cover { width:88px; height:88px; flex-shrink:0; border-radius:var(--r); background:var(--surface-alt) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-size:30px; }
     .sf-grid .sf-cover { width:100%; height:auto; aspect-ratio:16/10; }
     .sf-card-body { flex:1; min-width:0; }
-    .sf-card-title { font-weight:700; color:var(--text); font-size:15.5px; }
+    .sf-card-title { font-weight:700; color:var(--sf-item-fg, var(--text)); font-size:15.5px; }
     .sf-card-outcome { font-size:13px; color:var(--text-secondary); margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
     .sf-card-foot { display:flex; align-items:center; gap:8px; margin-top:10px; }
-    .sf-price { font-weight:800; color:var(--text); font-size:15px; }
+    .sf-price { font-weight:800; color:var(--sf-item-fg, var(--text)); font-size:15px; }
     /* CTA sits where a product's price sits, and matches its weight/size so the
        two card types line up in a mixed grid. Accent-coloured, because unlike a
        price it is an ACTION — and so it can never be mistaken for one. */
@@ -1184,7 +1227,8 @@ function StoreStyles() {
     /* Link button shape. Separate from .sf-btn-* (product cards) on purpose —
        links and products are distinct categories and were sharing one key. */
     .sf-lnk-rounded .sf-linkbtn { border-radius:14px; }
-    .sf-lnk-oval .sf-linkbtn { border-radius:var(--r-full); }
+    .sf-lnk-oval .sf-linkbtn { border-radius:var(--r-full); padding-inline:26px; }
+    .sf-lnk-oval .lkb-item { --lkb-xpad:26px; }
     .sf-lnk-sharp .sf-linkbtn { border-radius:4px; }
     /* Full width: square edges, running to the CARD's edges.
        This used to be a 100vw viewport breakout, which never worked: these
@@ -1195,7 +1239,8 @@ function StoreStyles() {
        A negative inline margin equal to the panel's 22px padding reaches the
        panel border exactly, which is what "full width" means for something
        inside a card. */
-    .sf-lnk-full .sf-linkbtn { border-radius:0; margin-inline:-26px; padding-left:26px; padding-right:26px; }
+    .sf-lnk-full .sf-linkbtn { border-radius:0; margin-inline:calc(-1 * var(--sf-panel-pad, 26px));
+      padding-inline:var(--sf-panel-pad, 26px); }
     .sf-linkbtn-label { display:inline-flex; align-items:center; gap:9px; }
     .sf-linkbtn-thumb { flex-shrink:0; width:26px; height:26px; border-radius:50%;
       background:var(--surface-alt) center/cover no-repeat; }

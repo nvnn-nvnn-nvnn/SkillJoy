@@ -62,17 +62,17 @@ export default function LandingPage() {
 
   return (
     <>
-      <title>SkillJoy — Your link in bio, built to sell</title>
+      <title>SkillJoy — The Ultimate Link-In-Bio Store for Creators</title>
 
       <main className="lx">
         {/* ── Hero ── */}
         <section className="lx-hero">
           <div className="lx-hero-copy reveal">
             <span className="sj-pill"><span className="sj-dot" />The customizable link-in-bio store</span>
-            <h1 className="lx-title">Your link in bio,<br />built to sell.</h1>
+            <h1 className="lx-title">The Ultimate Link-In-Bio<br />Store for Creators.</h1>
             <p className="lx-sub">
               Sell courses, coaching, memberships and digital products from one page —
-              and make it look like yours, not a template. Built for creators, not coders.
+              and make it look like yours, not a template.
             </p>
             <div className="lx-cta">
               <Link to="/login" className="btn btn-primary lx-cta-main">Start free <Arrow /></Link>

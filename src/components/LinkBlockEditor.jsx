@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import {
   listBlocksResult, createBlock, updateBlock, updateBlockLayout, deleteBlock,
-  reorderBlocks, resolveBlockLayout, LINK_STYLES, LINK_SIZES, LINK_SHAPES, PLACEMENTS, contrast, contrastVerdict,
+  reorderBlocks, resolveBlockLayout, LINK_STYLES, LINK_SIZES, LINK_SHAPES, PLACEMENTS, TITLE_STYLES, contrast, contrastVerdict,
 } from '@/lib/blocks';
 import { listLinks, addLink, updateLink, deleteLink, reorderLinks } from '@/lib/storefront';
 import { useDialog } from '@/components/Dialog';
@@ -106,6 +106,21 @@ function ImagePick({ value, onChange, creatorId, size = 'sm', hint }) {
 // Every option still carries a blurb; the difference from a plain settings form
 // is that Layouts is a set of DIAGRAMS. A layout question is about shape, and a
 // shape is recognised faster than a word is read.
+
+// Miniature of what each heading style looks like — panel vs bare text.
+function TitleArt({ id }) {
+  return (
+    <svg viewBox="0 0 64 40" width="100%" height="100%" aria-hidden="true">
+      {id === 'bar' && (
+        <rect x="6" y="6" width="52" height="13" rx="3"
+          fill="currentColor" opacity=".16" stroke="currentColor" strokeOpacity=".3" />
+      )}
+      <rect x={id === 'bar' ? 10 : 6} y={id === 'bar' ? 10 : 8} width="30" height="5" rx="2.5" fill="currentColor" opacity=".75" />
+      <rect x="6" y="25" width="52" height="6" rx="3" fill="currentColor" opacity=".22" />
+      <rect x="6" y="34" width="52" height="6" rx="3" fill="currentColor" opacity=".22" />
+    </svg>
+  );
+}
 
 const ORPHAN_ID = '__orphans__';
 const TABS = [
@@ -463,7 +478,7 @@ export default function LinkBlockEditor({ creatorId, onChange }) {
               <span className="lb-drag" aria-hidden="true"><GripVertical size={15} /></span>
 
               <div className="lb-cardbody">
-                <input className="lb-in lb-in-title" value={l.label ?? ''}
+                <input className="lb-in lb-in-title" value={l.label ?? ''} maxLength={40}
                   onChange={e => patchLinkLocal(l.id, { label: e.target.value })}
                   onBlur={e => saveLink(l.id, { label: e.target.value })}
                   placeholder="Link title" />
@@ -592,6 +607,11 @@ export default function LinkBlockEditor({ creatorId, onChange }) {
           <ColorRow label="Link background" value={layout.bg} onChange={v => patchLayout({ bg: v })} fallback="#ffffff" />
           <ColorRow label="Link text" value={layout.fg} onChange={v => patchLayout({ fg: v })} fallback="#1a1916" />
           <ColorRow label="Title & subtitle" value={layout.headingColor} onChange={v => patchLayout({ headingColor: v })} fallback="#1a1916" />
+          {/* The CTA is its own surface. Derived from the link text colour by
+              default, which is why these two sit last — most blocks never need
+              them, and the ones that do are usually featured. */}
+          <ColorRow label="Button fill" value={layout.ctaBg} onChange={v => patchLayout({ ctaBg: v })} fallback="#1a1916" />
+          <ColorRow label="Button text" value={layout.ctaFg} onChange={v => patchLayout({ ctaFg: v })} fallback="#ffffff" />
 
           {/* Live verdict on the pair that actually decides readability. Only
               shown when BOTH are set — with either inheriting the theme we
@@ -635,6 +655,53 @@ export default function LinkBlockEditor({ creatorId, onChange }) {
           <input className="lb-in lb-boxed" value={open.subtitle ?? ''}
             onChange={e => setBlocks(prev => prev.map(b => b.id === open.id ? { ...b, subtitle: e.target.value } : b))}
             onBlur={e => patchBlock({ subtitle: e.target.value })} placeholder="Subtitle" />
+
+          {/* Hiding is not deleting. Someone who hides a heading and shows it
+              again gets their words back — so this toggles a layout flag and
+              never touches block.title. */}
+          <Switch on={layout.titleShow !== false}
+            onChange={v => patchLayout({ titleShow: v })}
+            label="Show the heading"
+            blurb="Off keeps your text but hides it on the page — for blocks that speak for themselves." />
+
+          {layout.titleShow !== false && (
+            <>
+              <span className="lb-h">Heading style</span>
+              <div className="lb-tiles lb-tiles-2">
+                {TITLE_STYLES.map(t => (
+                  <button key={t.id} className={`lb-tile${(layout.titleStyle || 'bar') === t.id ? ' on' : ''}`}
+                    onClick={() => patchLayout({ titleStyle: t.id })} title={t.blurb}
+                    aria-pressed={(layout.titleStyle || 'bar') === t.id}>
+                    <span className="lb-tileart"><TitleArt id={t.id} /></span>
+                    <span className="lb-tilelabel">{t.label}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="lb-hint">
+                {TITLE_STYLES.find(t => t.id === (layout.titleStyle || 'bar'))?.blurb}
+              </p>
+
+              <span className="lb-h">Heading alignment</span>
+              {/* Separate from the links' own alignment below: a centred
+                  heading over left-aligned buttons is a normal thing to want,
+                  and one control could not express it. */}
+              <div className="lb-seg">
+                {[
+                  { v: '', label: 'Match links' },
+                  { v: 'left', label: <AlignLeft size={14} /> },
+                  { v: 'center', label: <AlignCenter size={14} /> },
+                  { v: 'right', label: <AlignRight size={14} /> },
+                ].map(o => (
+                  <button key={o.v || 'inherit'}
+                    className={(layout.titleAlign || '') === o.v ? 'on' : ''}
+                    onClick={() => patchLayout({ titleAlign: o.v })}
+                    aria-pressed={(layout.titleAlign || '') === o.v}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           <span className="lb-h">Links block visibility</span>
           {/* Two tiles rather than a toggle: "exposed" and "collapsed" are two

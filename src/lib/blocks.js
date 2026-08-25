@@ -69,7 +69,41 @@ export const DEFAULT_BLOCK_LAYOUT = {
   // '' = inherit the page-level link_shape. A concrete default here would make
   // every block silently override the page setting.
   shape: '',         // '' | 'pill' | 'rounded' | 'square'
+
+  // ── The block heading ──
+  // A title sitting directly on artwork is the fastest way to make a page
+  // unreadable — the same problem the scenic presets solve for cards with
+  // glass. 'bar' gives the heading its own tinted panel so it holds contrast
+  // over any background; 'plain' is bare text for a background that can take it.
+  //
+  // NOTE this default is 'bar', not '' — unlike `shape` above, which must stay
+  // empty so it inherits. There is no page-level heading style to inherit FROM,
+  // so a concrete default is correct here. It does change existing blocks: they
+  // gain a heading panel on next load.
+  titleStyle: 'bar',   // 'bar' | 'plain'
+  // Independent of `align` above, which positions the LINKS. A centred heading
+  // over left-aligned links is a normal thing to want, and one control could not
+  // express it. '' follows the links so nothing changes until it is touched.
+  titleAlign: '',      // '' | 'left' | 'center' | 'right'
+  // Some blocks are self-evident and a heading is just noise. Hiding it must
+  // not mean deleting the text — a creator who hides a title and shows it again
+  // should get their words back.
+  titleShow: true,
+
+  // ── The call-to-action button ──
+  // It used to derive from `fg` — the block TEXT colour — so changing the text
+  // also repainted the button, and there was no way to have dark text on a
+  // bright button. They are different surfaces and want different colours.
+  //
+  // '' keeps the derived behaviour, so no existing block changes appearance.
+  ctaBg: '',         // '' = derived from the block text colour
+  ctaFg: '',         // '' = white
 };
+
+export const TITLE_STYLES = [
+  { id: 'bar',   label: 'Panel', blurb: 'Tinted background behind the heading. Stays readable over any image or video.' },
+  { id: 'plain', label: 'Plain', blurb: 'Bare text, no panel. Best on a calm background.' },
+];
 
 // ── Contrast ────────────────────────────────────────────────────────────────
 // Duplicated deliberately from storefront.js rather than imported: that module

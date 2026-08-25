@@ -4,7 +4,7 @@ const { serverError } = require('../lib/http');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const supabase = require('../config/supabase');
 const { skillFeeCents } = require('../config/fees');
-const { fulfillGuestPurchase } = require('../lib/guestFulfillment');
+const { fulfillGuestPurchase, fulfillFreeClaim } = require('../lib/guestFulfillment');
 const { isStaleDestinationError, clearStaleAccount } = require('../lib/connectGuard');
 const { isPlatformLive, paywallEnabled } = require('../lib/platformSub');
 
@@ -152,10 +152,58 @@ router.post('/:skillId/confirm', async (req, res) => {
             return res.status(403).json({ error: 'Payment does not match this product.' });
         }
 
-        await fulfillGuestPurchase(pi);
-        res.json({ success: true });
+        const { signInToken } = await fulfillGuestPurchase(pi);
+        // Only present when this purchase created the account — see
+        // signInTokenFor. Lets the buyer land on the product instead of being
+        // told to go and check their email after they have already paid.
+        res.json({ success: true, signInToken: signInToken || null });
     } catch (err) {
         console.error('Guest confirm error:', err);
+        serverError(res, err);
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CLAIM — a FREE product, with no account and no payment.
+//
+// Free products are lead magnets: the entire point is that a stranger gets the
+// thing in exchange for an email. Forcing them to create an account first is
+// the highest-friction possible step at the exact moment they have the least
+// invested — and it was the one path guest checkout did not cover.
+//
+// This is the paid guest flow minus Stripe. Same findOrCreateBuyer, same
+// purchases row, same magic-link email — so the product lands in the same
+// Locker, and the buyer can come back to it without ever setting a password.
+//
+// NO PAYMENT INTENT EXISTS HERE, which removes the thing that made the paid
+// flow safe: Stripe confirming the caller actually paid. So the guard is the
+// price itself — the route re-reads the skill server-side and refuses anything
+// that is not a published, free, one-time product. A client claiming a paid
+// product gets nothing.
+// ═══════════════════════════════════════════════════════════════════════════
+router.post('/:skillId/claim', async (req, res) => {
+    try {
+        const name = String(req.body?.name || '').trim().slice(0, 80);
+        const email = String(req.body?.email || '').trim().toLowerCase().slice(0, 160);
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ error: 'Enter a valid email address.' });
+        }
+
+        const { data: skill, error } = await supabase.from('skills')
+            .select('id, title, creator_id, version, status, price_cents, pricing_type, confirmation_message')
+            .eq('id', req.params.skillId).single();
+        if (error || !skill) return res.status(404).json({ error: 'Product not found.' });
+
+        // The price IS the authorisation. Read server-side, never from the client.
+        if (skill.status !== 'published') return res.status(400).json({ error: 'This product is not available.' });
+        if (skill.price_cents || skill.pricing_type !== 'onetime') {
+            return res.status(400).json({ error: 'This product is not free.' });
+        }
+
+        const { signInToken } = await fulfillFreeClaim({ skill, email, name });
+        res.json({ success: true, signInToken: signInToken || null });
+    } catch (err) {
+        console.error('Guest claim error:', err);
         serverError(res, err);
     }
 });

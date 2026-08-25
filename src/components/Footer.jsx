@@ -28,7 +28,7 @@ export default function Footer() {
                         </div> */}
                         <img src={SkillJoyGreenWhite} alt="" style={{width: "150px"}} />
                         <p style={{ fontSize: 13, lineHeight: 1.6, color: '#a3a3a3', margin: 0 }}>
-                            Sell your skills from one link — courses, templates, prompts, and coaching, all from one storefront.
+                            The Ultimate Link-In-Bio Store for Creators — courses, coaching, memberships and digital products, all from one storefront.
                         </p>
                     </div>
 

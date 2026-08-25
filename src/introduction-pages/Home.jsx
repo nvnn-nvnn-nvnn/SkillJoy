@@ -74,15 +74,15 @@ export default function LandingPage() {
 
   return (
     <>
-      <title>SkillJoy — The Ultimate Link-in-Bio Solution</title>
+      <title>SkillJoy — The Ultimate Link-In-Bio Store for Creators</title>
 
       <main className="lp">
         {/* ── 1. Intro / hero ── */}
         <section className="lp-hero">
           <div className="lp-hero-copy reveal">
-            <span className="sj-pill"><span className="sj-dot" />The customizable link-in-bio store</span>
-            <h1 className="lp-title">Your link in bio,<br /><span className="accent-text">built to sell.</span></h1>
-            <p className="lp-sub">Sell courses, coaching, memberships and digital products from one page — and make it look like nothing else out there. Built for creators, not coders.</p>
+            <span className="sj-pill"><span className="sj-dot" />Courses · coaching · memberships · downloads</span>
+            <h1 className="lp-title">The Ultimate<br />Link-In-Bio Store<br /><span className="accent-text">for Creators.</span></h1>
+            <p className="lp-sub">Sell courses, coaching, memberships and digital products from one page — and make it look like nothing else out there.</p>
             <div className="lp-cta">
               <Link to="/login" className="btn btn-primary lp-cta-main">Start free <Arrow /></Link>
               <Link to="/how-it-works" className="btn btn-secondary">How it works</Link>
@@ -236,7 +236,7 @@ export default function LandingPage() {
         .lp-hero { display: grid; grid-template-columns: 1.05fr 0.95fr; align-items: center; gap: 56px; padding: clamp(52px, 9vw, 100px) 24px clamp(40px, 6vw, 72px); position: relative; }
         .lp-hero::before { content: ''; position: absolute; top: -10%; left: 30%; width: 60%; height: 70%; background: radial-gradient(closest-side, rgb(var(--accent-rgb) / 0.14), transparent); pointer-events: none; z-index: 0; }
         .lp-hero-copy, .lp-phone-wrap { position: relative; z-index: 1; }
-        .lp-title { font-size: clamp(40px, 5.8vw, 68px); line-height: 1.04; letter-spacing: -0.03em; color: var(--text); margin: 22px 0 20px; }
+        .lp-title { font-size: clamp(33px, 4.6vw, 54px); line-height: 1.06; letter-spacing: -0.03em; color: var(--text); margin: 22px 0 20px; text-wrap: balance; }
         .lp-sub { font-size: clamp(16px, 1.5vw, 19px); line-height: 1.6; color: var(--text-secondary); max-width: 490px; margin-bottom: 30px; }
         .lp-cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
         .lp-cta-main { gap: 8px; }

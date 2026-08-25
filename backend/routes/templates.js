@@ -52,35 +52,80 @@ function limitFor(mime) {
 }
 
 /**
- * Copy one asset from the author's folder into the platform-owned prefix.
+ * Read an asset and report its size WITHOUT writing anything.
  *
- * Downloads and re-uploads rather than using storage.copy(): copy() keeps the
- * source's metadata and, more importantly, gives us no size to enforce a budget
- * against. Reading the blob is the only way to know what we are about to make
- * everyone download.
+ * Split from the write on purpose. Validating while copying means the first
+ * oversized file aborts the request after earlier files are already in storage
+ * — and the old catch never removed them, so every failed save leaked orphans.
  */
-async function copyAsset(srcPath, templateId) {
-    const { data: blob, error: dlErr } = await supabase.storage.from(BUCKET).download(srcPath);
-    if (dlErr) throw new Error(`could not read ${srcPath}: ${dlErr.message}`);
+async function measureAsset(srcPath) {
+    const { data: blob, error } = await supabase.storage.from(BUCKET).download(srcPath);
+    if (error) throw new Error(`could not read ${srcPath}: ${error.message}`);
+    return { blob, bytes: blob.size, mime: blob.type || 'application/octet-stream' };
+}
 
-    const bytes = blob.size;
-    const mime = blob.type || 'application/octet-stream';
-    const cap = limitFor(mime);
-    if (bytes > cap) {
-        throw new Error(
-            `${srcPath.split('/').pop()} is ${(bytes / 1048576).toFixed(1)}MB, over the `
-            + `${(cap / 1048576).toFixed(0)}MB limit for ${mime.split('/')[0]} — every visitor downloads this.`
-        );
-    }
-
+/**
+ * Write one already-measured asset into the platform-owned prefix.
+ *
+ * Re-uploads rather than storage.copy(): copy() hands back no size, and the
+ * size is the whole point — it decides what every visitor downloads on every
+ * page view of every storefront using this template.
+ */
+async function writeAsset({ blob, bytes, mime }, srcPath, templateId) {
     const name = srcPath.split('/').pop();
     const destPath = `${PREFIX}/${templateId}/${name}`;
     const buffer = Buffer.from(await blob.arrayBuffer());
-    const { error: upErr } = await supabase.storage.from(BUCKET)
+    const { error } = await supabase.storage.from(BUCKET)
         .upload(destPath, buffer, { contentType: mime, cacheControl: '31536000', upsert: true });
-    if (upErr) throw new Error(`could not write ${destPath}: ${upErr.message}`);
-
+    if (error) throw new Error(`could not write ${destPath}: ${error.message}`);
     return { path: destPath, url: publicUrl(destPath), bytes, mime };
+}
+
+const mb = (b) => (b / 1048576).toFixed(1);
+
+/**
+ * Which assets does this theme actually render, and where do they live?
+ *
+ * Shared by the save route and the preflight route so the size readout in the
+ * editor is produced by the same logic that decides whether a save succeeds.
+ */
+function collectCandidates(theme, includeAudio) {
+    const wanted = [];
+    if (theme.bg === 'image' || theme.bg === 'video') wanted.push('bg_image'); // background, or the video's poster
+    if (theme.bg === 'video') wanted.push('bg_video');
+    if (theme.banner_url) wanted.push('banner_url');
+    if (theme.cursor_url) wanted.push('cursor_url');
+
+    const out = [];
+    for (const key of wanted) {
+        const path = storagePathFromUrl(theme[key]);
+        if (path) out.push({ key, path, name: key.replace(/_/g, ' ') });
+    }
+    if (includeAudio && Array.isArray(theme.audio_tracks)) {
+        for (const track of theme.audio_tracks) {
+            const path = storagePathFromUrl(track?.url);
+            if (path) out.push({ key: 'audio_tracks', path, name: track.name || 'Track' });
+        }
+    }
+    return { wanted, candidates: out };
+}
+
+/** Measure a candidate set and report every problem, not just the first. */
+async function measureAll(candidates) {
+    const problems = [];
+    let total = 0;
+    for (const c of candidates) {
+        c.measured = await measureAsset(c.path);
+        total += c.measured.bytes;
+        const cap = limitFor(c.measured.mime);
+        c.over = c.measured.bytes > cap;
+        c.cap = cap;
+        if (c.over) problems.push(`${c.name} is ${mb(c.measured.bytes)}MB (max ${mb(cap)}MB)`);
+    }
+    if (total > MAX_TOTAL_BYTES) {
+        problems.push(`everything together is ${mb(total)}MB (max ${mb(MAX_TOTAL_BYTES)}MB)`);
+    }
+    return { problems, total };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -99,6 +144,39 @@ router.get('/', async (req, res) => {
         res.json({ templates: data ?? [] });
     } catch (e) {
         return serverError(res, e, 'Could not load templates');
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PREFLIGHT — admin only. "Would this save, and what does it weigh?"
+//
+// Exists because the budget was invisible until you pressed save and read an
+// error. Runs the identical measurement the save runs, so the readout in the
+// editor cannot promise something the save then refuses.
+// ═══════════════════════════════════════════════════════════════════════════
+router.get('/preflight', authMiddleware, async (req, res) => {
+    try {
+        if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden' });
+        const includeAudio = req.query.includeAudio !== 'false';
+
+        const { data: profile, error } = await supabase
+            .from('profiles').select('storefront_theme').eq('id', req.user.id).single();
+        if (error) throw error;
+        const theme = profile?.storefront_theme;
+        if (!theme || typeof theme !== 'object') return res.json({ assets: [], total: 0, problems: [] });
+
+        const { candidates } = collectCandidates(theme, includeAudio);
+        const { problems, total } = await measureAll(candidates);
+
+        res.json({
+            assets: candidates.map(c => ({
+                key: c.key, name: c.name, bytes: c.measured.bytes,
+                mime: c.measured.mime, cap: c.cap, over: !!c.over,
+            })),
+            total, maxTotal: MAX_TOTAL_BYTES, problems,
+        });
+    } catch (e) {
+        return serverError(res, e, 'Could not check template size');
     }
 });
 
@@ -135,47 +213,46 @@ router.post('/', authMiddleware, async (req, res) => {
         delete theme.socials;
 
         const id = crypto.randomUUID();
-        const assets = [];
-        let total = 0;
 
-        // Background image / video.
-        for (const key of ASSET_KEYS) {
-            const path = storagePathFromUrl(theme[key]);
-            if (!path) continue;
-            const copied = await copyAsset(path, id);
-            theme[key] = copied.url;
-            assets.push({ key, ...copied });
-            total += copied.bytes;
+        // ── Which assets does this theme actually RENDER? ──
+        // bg_video is only painted when bg === 'video'. Copying it regardless
+        // meant a page set to 'image' still dragged its unused video into the
+        // template — spending the budget on bytes nobody would ever see.
+        const { wanted, candidates } = collectCandidates({ ...theme, audio_tracks: src.audio_tracks }, includeAudio);
+        // Anything the theme does not render must not survive into the template
+        // still pointing at the author's storage.
+        for (const key of ASSET_KEYS) if (!wanted.includes(key)) theme[key] = '';
+
+        // ── Measure everything BEFORE writing anything ──
+        // Report every problem at once. Failing on the first oversized file
+        // tells you about one of four, and you fix them one round trip at a time.
+        const { problems, total } = await measureAll(candidates);
+        if (problems.length) {
+            return res.status(400).json({
+                error: `Too heavy to share — ${problems.join('; ')}. `
+                    + 'Every visitor downloads these on every page view. Trim the files, '
+                    + 'or turn off "Include my music" and save again.',
+            });
         }
 
-        // Music. Every track copied, or the array is dropped entirely — a
-        // partially-copied playlist would half-point at the author's storage.
-        if (includeAudio && Array.isArray(src.audio_tracks) && src.audio_tracks.length) {
+        // ── Past this point nothing can fail on size, so writing is safe ──
+        const assets = [];
+        try {
             const tracks = [];
-            for (const track of src.audio_tracks) {
-                const path = storagePathFromUrl(track?.url);
-                if (!path) continue;
-                const copied = await copyAsset(path, id);
-                tracks.push({ url: copied.url, name: track.name || 'Track' });
-                assets.push({ key: 'audio_tracks', ...copied });
-                total += copied.bytes;
+            for (const c of candidates) {
+                const written = await writeAsset(c.measured, c.path, id);
+                assets.push({ key: c.key, ...written });
+                if (c.key === 'audio_tracks') tracks.push({ url: written.url, name: c.name });
+                else theme[c.key] = written.url;
             }
             theme.audio_tracks = tracks;
             // audio_url is the deprecated single-track field, still read by some
             // surfaces. Out of sync means the music silently disappears there.
             theme.audio_url = tracks[0]?.url || '';
-        } else {
-            theme.audio_tracks = [];
-            theme.audio_url = '';
-        }
-
-        if (total > MAX_TOTAL_BYTES) {
-            // Clean up before refusing — a rejected save must not leave files behind.
-            await supabase.storage.from(BUCKET).remove(assets.map(a => a.path));
-            return res.status(400).json({
-                error: `Assets total ${(total / 1048576).toFixed(1)}MB, over the `
-                    + `${MAX_TOTAL_BYTES / 1048576}MB budget for one template.`,
-            });
+        } catch (copyErr) {
+            // A half-written template must not leave files behind.
+            if (assets.length) await supabase.storage.from(BUCKET).remove(assets.map(a => a.path));
+            throw copyErr;
         }
 
         const { data: row, error: insErr } = await supabase

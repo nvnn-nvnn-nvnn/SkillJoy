@@ -308,7 +308,7 @@ export default function OnboardingPage() {
                         <div>
                             <Logo height={30} className="onb-logo-img" />
                             <h2 className="onb-brand-h">
-                                {step === 6 ? <>Your page is<br />ready to share.</> : <>Your link in bio,<br />built to sell.</>}
+                                {step === 6 ? <>Your page is<br />ready to share.</> : <>The Ultimate Link-In-Bio<br />Store for Creators.</>}
                             </h2>
                             <p className="onb-brand-sub">
                                 {step === 6
@@ -560,34 +560,63 @@ export default function OnboardingPage() {
                                         {PRESET_CATEGORIES.find(c => c.id === tplCat)?.blurb}
                                     </p>
 
+                                    {/* Each tile is a MINIATURE OF THE PAGE, not a colour swatch.
+                                        A template decides how your avatar, name and links look
+                                        together — a gradient rectangle cannot answer that, so
+                                        people were picking blind and the screen felt cheap. */}
                                     <div className="onb-tplgrid">
-                                        {[...presetsByCategory(tplCat), ...savedTpls.filter(t => t.category === tplCat)].map(t => (
-                                            <button key={t.id} type="button" className="onb-tpl"
-                                                onClick={() => chooseTemplate(t)} title={t.blurb}>
-                                                <span className="onb-tplart" style={
-                                                    t.theme.bg === 'animated'
-                                                        ? { background: `radial-gradient(60% 70% at 22% 24%, ${t.theme.bg_color2 || t.theme.accent} 0%, transparent 62%), radial-gradient(58% 66% at 78% 74%, ${t.theme.accent} 0%, transparent 60%), ${t.theme.bg_color}` }
-                                                        : (t.theme.bg === 'image' || t.theme.bg === 'video') && t.theme.bg_image
-                                                        ? { backgroundImage: `url(${t.theme.bg_image})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-                                                        : t.theme.bg === 'gradient'
-                                                            ? { background: `linear-gradient(160deg, ${t.theme.bg_color}, ${t.theme.bg_color2})` }
-                                                            : t.theme.bg === 'solid'
-                                                                ? { background: t.theme.bg_color }
-                                                                : { background: t.theme.mode === 'dark' ? '#121316' : '#FBF8F2' }
-                                                }>
-                                                    <span className="onb-tpldot" style={{
-                                                        background: t.theme.accent,
-                                                        boxShadow: `0 0 14px ${t.theme.accent}`,
-                                                    }} />
-                                                    <span className="onb-tplbar" style={{ background: t.theme.accent }} />
-                                                    <span className="onb-tplbar short" style={{
-                                                        background: t.theme.mode === 'dark' ? '#ffffff44' : '#0000002e',
-                                                    }} />
-                                                </span>
-                                                <span className="onb-tplname">{t.emoji} {t.name}</span>
-                                                <span className="onb-tplblurb">{t.blurb}</span>
-                                            </button>
-                                        ))}
+                                        {[...presetsByCategory(tplCat), ...savedTpls.filter(t => t.category === tplCat)].map(t => {
+                                            const th = t.theme;
+                                            const dark = th.mode === 'dark';
+                                            const ink = dark ? '#F1EFEA' : '#1A1916';
+                                            const bg =
+                                                th.bg === 'animated'
+                                                    ? { background: `radial-gradient(60% 70% at 22% 24%, ${th.bg_color2 || th.accent} 0%, transparent 62%), radial-gradient(58% 66% at 78% 74%, ${th.accent} 0%, transparent 60%), ${th.bg_color}` }
+                                                : (th.bg === 'image' || th.bg === 'video') && th.bg_image
+                                                    ? { backgroundImage: `url(${th.bg_image})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                                                : th.bg === 'gradient'
+                                                    ? { background: `linear-gradient(160deg, ${th.bg_color}, ${th.bg_color2})` }
+                                                : th.bg === 'solid'
+                                                    ? { background: th.bg_color }
+                                                    : { background: dark ? '#121316' : '#FBF8F2' };
+                                            // The card is the biggest single signal — glassy vs
+                                            // solid is most of what separates these looks.
+                                            const cardBg = dark
+                                                ? `rgba(255,255,255,${(0.06 + (1 - (th.card_opacity ?? 100) / 100) * 0.05).toFixed(3)})`
+                                                : `rgba(255,255,255,${((th.card_opacity ?? 100) / 100 * 0.82).toFixed(3)})`;
+                                            const radius = th.link_shape === 'sharp' ? 2 : th.link_shape === 'rounded' ? 4 : 999;
+                                            const linkFill = th.link_color || `color-mix(in srgb, ${th.accent} 22%, transparent)`;
+                                            const linkEdge = `color-mix(in srgb, ${th.accent} 45%, transparent)`;
+                                            const on = pickedTemplate === t.name;
+                                            return (
+                                                <button key={t.id} type="button"
+                                                    className={`onb-tpl${on ? ' on' : ''}`}
+                                                    onClick={() => chooseTemplate(t)} title={t.blurb}>
+                                                    <span className="onb-tplart" style={bg}>
+                                                        <span className="onb-tplcard" style={{
+                                                            background: cardBg,
+                                                            backdropFilter: th.card_blur ? `blur(${Math.min(th.card_blur, 10)}px)` : undefined,
+                                                            borderColor: dark ? 'rgba(255,255,255,.14)' : 'rgba(0,0,0,.08)',
+                                                        }}>
+                                                            <span className="onb-tplav" style={{
+                                                                background: th.accent,
+                                                                borderRadius: th.avatar_shape === 'square' ? '3px' : th.avatar_shape === 'rounded' ? '5px' : '50%',
+                                                                boxShadow: (th.glow_intensity ?? 0) > 12 ? `0 0 9px ${th.accent}` : 'none',
+                                                            }} />
+                                                            <span className="onb-tplbar-name" style={{ background: ink }} />
+                                                            <span className="onb-tplbar-bio" style={{ background: ink }} />
+                                                            <span className="onb-tpllink" style={{ background: linkFill, borderRadius: radius, borderColor: linkEdge }} />
+                                                            <span className="onb-tpllink" style={{ background: linkFill, borderRadius: radius, borderColor: linkEdge }} />
+                                                        </span>
+                                                        {on && <span className="onb-tpltick"><Check size={13} strokeWidth={3.4} /></span>}
+                                                    </span>
+                                                    <span className="onb-tplmeta">
+                                                        <span className="onb-tplname">{t.emoji} {t.name}</span>
+                                                        <span className="onb-tplblurb">{t.blurb}</span>
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
                                     </div>
 
                                     <button type="button" className="onb-skip" onClick={() => chooseTemplate(null)}>
@@ -752,37 +781,66 @@ function Styles() {
     /* Skip is a visible peer of Continue, never hidden — a skip people can't
        find turns into an abandon. Quiet, but present and full height. */
     /* ── Template picker (screen 5) ──
-       The swatch IS the control: a template is a visual question, so the tile
-       shows the actual background, the actual accent, and a stand-in for the
-       name and a link. Names alone would make people guess. */
+       Each tile is a MINIATURE OF THE PAGE: background, profile card, avatar,
+       name, bio and two link buttons. A colour swatch cannot answer the
+       question a template actually poses — "how will MY page look" — so people
+       picked blind and the screen read as unfinished.
+
+       Everything in the miniature is driven by the same theme keys the real
+       storefront reads, so a template that changes card opacity, avatar shape
+       or link shape SHOWS that here. */
     .onb-tplcats { display:flex; flex-wrap:wrap; gap:7px; margin-top:6px; }
-    .onb-tplcat { width:auto; padding:8px 14px; border-radius:var(--r-full);
+    .onb-tplcat { width:auto; padding:9px 15px; border-radius:var(--r-full);
       border:1.5px solid var(--border-strong); background:var(--surface);
-      font-size:12.5px; font-weight:700; color:var(--text-secondary); cursor:pointer;
+      font-size:13px; font-weight:700; color:var(--text-secondary); cursor:pointer;
       transition:background .14s ease, border-color .14s ease, color .14s ease; }
     .onb-tplcat:hover { border-color:var(--accent); color:var(--text); }
     .onb-tplcat.on { background:var(--accent); border-color:var(--accent); color:#fff; }
-    .onb-tplcatblurb { margin:9px 2px 2px; font-size:12.5px; line-height:1.45;
+    .onb-tplcatblurb { margin:10px 2px 0; font-size:13px; line-height:1.45;
       color:var(--text-secondary); }
-    .onb-tplgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(146px, 1fr));
-      gap:11px; margin-top:12px; }
-    .onb-tpl { display:flex; flex-direction:column; gap:6px; padding:9px; text-align:left;
-      border-radius:var(--r-lg); border:1.5px solid var(--border); background:var(--surface);
-      cursor:pointer; transition:border-color .14s ease, transform .14s ease; }
-    .onb-tpl:hover { border-color:var(--accent); transform:translateY(-2px); }
-    .onb-tplart { position:relative; height:74px; border-radius:var(--r); overflow:hidden;
-      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; }
-    .onb-tpldot { width:19px; height:19px; border-radius:50%; }
-    .onb-tplbar { width:56%; height:7px; border-radius:999px; }
-    .onb-tplbar.short { width:38%; }
+
+    .onb-tplgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
+      gap:13px; margin-top:14px; }
+    .onb-tpl { display:flex; flex-direction:column; gap:0; padding:0; text-align:left;
+      border-radius:14px; overflow:hidden; border:2px solid var(--border);
+      background:var(--surface); cursor:pointer;
+      transition:border-color .16s ease, transform .16s ease, box-shadow .16s ease; }
+    .onb-tpl:hover { transform:translateY(-3px); border-color:var(--accent-mid);
+      box-shadow:0 10px 24px color-mix(in srgb, var(--accent) 18%, transparent); }
+    .onb-tpl.on { border-color:var(--accent);
+      box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent); }
+
+    /* The page, in miniature. 4:5 so it reads as a phone, not a banner. */
+    .onb-tplart { position:relative; aspect-ratio:4 / 5; width:100%;
+      display:flex; align-items:center; justify-content:center;
+      background-size:cover; background-position:center; }
+    /* The profile card — the single biggest signal between these looks, since
+       glassy vs solid is most of what separates them. */
+    .onb-tplcard { width:74%; padding:11px 9px 10px; border-radius:9px;
+      border:1px solid transparent; display:flex; flex-direction:column;
+      align-items:center; gap:5px; }
+    .onb-tplav { width:22px; height:22px; flex-shrink:0; }
+    .onb-tplbar-name { width:56%; height:5px; border-radius:3px; opacity:.85; }
+    .onb-tplbar-bio { width:74%; height:3px; border-radius:3px; opacity:.34; }
+    .onb-tpllink { width:100%; height:11px; margin-top:2px; border:1px solid transparent; }
+    /* Selected state carries a tick as well as a border — colour alone is not
+       a state signal (note 183 §5). */
+    .onb-tpltick { position:absolute; top:7px; right:7px; width:21px; height:21px;
+      display:flex; align-items:center; justify-content:center; border-radius:50%;
+      background:var(--accent); color:#fff;
+      box-shadow:0 2px 8px rgba(0,0,0,.3); }
+
+    .onb-tplmeta { display:flex; flex-direction:column; gap:2px; padding:9px 10px 11px;
+      border-top:1px solid var(--border); background:var(--surface); }
     .onb-tplname { font-size:12.5px; font-weight:800; color:var(--text); }
     .onb-tplblurb { font-size:11px; line-height:1.4; color:var(--text-secondary);
       display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden;
       -webkit-line-clamp:2; line-clamp:2; }
+
     /* Full width here, unlike the inline Skip on screens 2 and 3 — this one is
        the only action on its row, and a right-hugging button would read as
        secondary to nothing. */
-    .onb-tplgrid + .onb-skip { width:100%; margin-top:16px; }
+    .onb-tplgrid + .onb-skip { width:100%; margin-top:18px; }
 
     .onb-skip { padding:14px 20px; width:auto; flex-shrink:0; border:1.5px solid var(--border-strong);
       border-radius:var(--r-full); background:var(--surface); color:var(--text-secondary);

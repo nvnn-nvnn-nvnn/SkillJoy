@@ -343,3 +343,126 @@ check first:
 **When the source is verified correct and the symptom persists, stop editing the
 source.** Further edits produce the same ambiguous result. Prove what is
 executing instead.
+
+**Validate everything before writing anything.** Validating while copying leaks
+partial state on failure *and* reports only the first problem — so the user fixes
+one thing, retries, and learns about the next. Two phases (measure all → report
+all → then write) fixes both at once. Note 189 §4c: a failed template save was
+leaving orphaned files in storage that nothing referenced and nothing would clean
+up.
+
+**A field being set is not a field being used.** When copying state, copy what
+the *renderer* reads — its conditions are the specification. A theme with
+`bg: 'image'` still had a 7MB `bg_video` from an earlier experiment, and the
+first version of the template saver dutifully copied it. (Note 189 §4a.)
+
+**Enumerate assets from the schema, not from memory.** `banner_url` and
+`cursor_url` were missed by the template saver's asset list — two of six keys
+holding uploaded URLs. Grep `DEFAULT_THEME` for every URL-valued key and diff it
+against whatever list you're maintaining. (Note 189 §4b.)
+
+**`curl` status 000 ≠ 404.** `000` is connection refused — nothing is listening.
+`404` means the server is up and your route is wrong. Confusing them sends you
+debugging the wrong layer. Pairs with §15.
+
+---
+
+## 16 · A scrollable "page" is not a page
+
+The live preview is a **scroll container** (`height:100%; overflow-y:auto`); the
+real storefront scrolls the document. Full-bleed layers do not port between them.
+
+- `position:absolute; inset:0` inside a scroll container resolves against the
+  **visible box**, not the scrollable content height — so backgrounds, video and
+  overlay effects stop at the first screenful. (Note 190 §1.)
+- `position:fixed` is the live page's answer and is *wrong* in the preview — it
+  escapes the frame and covers the editor.
+- The scroll-container equivalent is `position:sticky; top:0` with a negative
+  margin cancelling the height it adds.
+
+**Percentage margins resolve against WIDTH — vertical ones too.**
+`margin-bottom:-100%` on a 300×600 frame pulls back 300px, not 600px. Use a
+length. `height:50%` is half the height; `margin-top:50%` is half the width.
+
+**Growing a layer turns latent z-index bugs into live ones.** A positioned
+element paints above a non-positioned sibling regardless of DOM order — harmless
+while the layer is small, breaking once it covers everything.
+
+---
+
+## 17 · A losing control must say it's losing
+
+The block → featured → page → theme cascade is correct, and the page-level shape
+picker still felt broken: every block carried a concrete `layout.shape` left over
+from a pre-note-180 default, so the page setting could never win and nothing said
+why. One dead control discredits the ones beside it — colour was working fine and
+got reported as broken too.
+
+**Anywhere a cascade exists, the lower level needs to be able to say "something
+above me is winning, here's what, here's how to stop it."** The fix is feedback
+plus a one-click clear that writes the *inherit* value — never a change to the
+precedence rule, and never guessing a replacement.
+
+Inverse of §13: there the control existed and nothing listened; here everything
+listens and something nearer the element is louder.
+
+---
+
+## 18 · `??` next to `?:` always wants parentheses
+
+`a ?? b ? c : d` parses as `(a ?? b) ? c : d`. In `StorefrontEditor` this made an
+*animated* background take the plain-solid branch — and it survived a build, a
+lint pass and several screenshots because the solid branch painted the animated
+ground colour, so the wrong answer looked almost right.
+
+The mixed-operator bugs that survive are the ones whose wrong output resembles
+the right one.
+
+---
+
+## 19 · "They paid" is not "they own this identity"
+
+Guest checkout wanted to sign the buyer in after payment instead of sending them
+to their inbox. The obvious implementation is an **account takeover for the price
+of the product**:
+
+```
+open a $1 product → type victim@example.com → pay → get a session as the victim
+```
+
+Every individual check passes — the PaymentIntent is real, verified server-side,
+and its metadata matches the skill. The gap is between *this payment is genuine*
+and *this person owns that inbox*. Nothing in a checkout flow ever proves the
+second.
+
+**Rule:** any flow that converts "paid" into an identity — a session, a linked
+account, a password reset — must prove identity separately.
+
+The gate used here: issue a session **only when this transaction created the
+account**. A brand-new shadow account holds exactly the thing just bought, so
+there is nothing to steal; an account that already existed gets the emailed link,
+which proves inbox ownership first. `findOrCreateBuyer` returns
+`{ id, created }`, and `created` is a security signal, not a statistic.
+
+**When you remove a payment step, find what the payment was PROVING and replace
+it explicitly.** The free-claim route has no PaymentIntent, so its authorisation
+is the price itself, re-read server-side — never trusted from the client.
+"It's free so it doesn't matter" is how a free endpoint ends up granting a paid
+product. (Note 191.)
+
+---
+
+## 20 · `upsert(..., { ignoreDuplicates: true })` silently drops your columns
+
+`findOrCreateBuyer` wrote `full_name` via an upsert with `ignoreDuplicates`, and
+a DB trigger creates the profile row the instant the auth user is made — so the
+row always already existed and the name was dropped for **every** guest buyer,
+paid and free, for as long as the feature has shipped.
+
+Two things had to be true: a trigger racing ahead of the upsert, and a flag that
+turns a conflict into a no-op rather than an update. Neither is visible at the
+call site.
+
+Found by reading a smoke-test row, not by reading the code. **When an upsert
+carries data you care about, verify the row afterwards** — and backfill only
+when the field is empty, so you never overwrite something the user set later.

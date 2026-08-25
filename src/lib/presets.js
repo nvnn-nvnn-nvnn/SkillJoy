@@ -65,6 +65,15 @@ const BASE = {
   glow_targets: ['name', 'avatar', 'card', 'links', 'icons'],
 };
 
+// ── PARKED PRESETS ──
+// Entries wrapped in /* PARKED — reason */ are commented out, not deleted.
+// Each note says which sibling made it redundant. Uncomment to bring one
+// back; the validator will check it like any other.
+//
+// Why trim at all: a picker with 38 tiles is a wall, and a wall gets
+// scrolled past. Fewer, more distinct options get chosen more often — the
+// cost of a weak preset is not the preset, it is the attention it takes
+// from a strong one.
 export const THEME_PRESETS = [
   // ── Clean & minimal ──────────────────────────────────────────────────────
   { id: 'clean', name: 'Clean Light', emoji: '🤍', category: 'clean',
@@ -92,6 +101,7 @@ export const THEME_PRESETS = [
       card_opacity: 55, card_blur: 20, product_opacity: 60, product_blur: 14,
       button_style: 'pill', link_shape: 'oval' } },
 
+  /* PARKED — near-duplicate of paper (both light, square, ink accent)
   { id: 'mono', name: 'Monochrome', emoji: '⬛', category: 'clean',
     blurb: 'Greyscale everything. Your images become the only colour.',
     theme: { ...BASE, mode: 'light', bg: 'solid', bg_color: '#F2F2F0', accent: '#3A3A38',
@@ -99,11 +109,15 @@ export const THEME_PRESETS = [
       avatar_shape: 'rounded', icon_glow: 0 } },
 
   // ── Bold & bright ────────────────────────────────────────────────────────
+  */
+
+  /* PARKED — same warm-light territory as bubblegum, with less personality
   { id: 'citrus', name: 'Citrus', emoji: '🍊', category: 'bold',
     blurb: 'Orange on cream. Cheerful, high energy, still readable.',
     theme: { ...BASE, mode: 'light', bg: 'gradient', bg_color: '#FFF4E0', bg_color2: '#FFD9A8',
       accent: '#B54708', product_glow: 'soft', button_style: 'pill', link_shape: 'oval',
       avatar_shape: 'circle', bio_weight: 500 } },
+  */
 
   { id: 'bubblegum', name: 'Bubblegum', emoji: '🩷', category: 'bold',
     blurb: 'Pink gradient, rounded everything. Reads young and friendly.',
@@ -132,19 +146,23 @@ export const THEME_PRESETS = [
       button_style: 'sharp', link_shape: 'sharp', avatar_shape: 'square',
       icon_glow: 0, card_opacity: 92 } },
 
+  /* PARKED — sits between midnight and sunset without being either
   { id: 'ember', name: 'Ember', emoji: '🔥', category: 'dark',
     blurb: 'Charcoal with a burning orange accent. Warm, not cold.',
     theme: { ...BASE, mode: 'dark', bg: 'gradient', bg_color: '#141110', bg_color2: '#33201A',
       accent: '#FB7A3C', glow_intensity: 26, product_glow: 'soft', overlay: 'particles',
       card_opacity: 78, card_blur: 8, product_opacity: 78, product_blur: 6,
       button_style: 'rounded', link_shape: 'rounded' } },
+  */
 
+  /* PARKED — overlaps forest and tide; teal-on-dark is covered
   { id: 'deepsea', name: 'Deep Sea', emoji: '🌊', category: 'dark',
     blurb: 'Teal on navy with a slow drift. Calm but still dark.',
     theme: { ...BASE, mode: 'dark', bg: 'gradient', bg_color: '#06131C', bg_color2: '#0D3B4A',
       accent: '#2DD4BF', glow_intensity: 20, product_glow: 'soft', overlay: 'rain',
       card_opacity: 74, card_blur: 12, product_opacity: 74, product_blur: 8,
       profile_fx: 'float', button_style: 'pill', link_shape: 'oval' } },
+  */
 
   { id: 'sunset', name: 'Sunset', emoji: '🌅', category: 'dark',
     blurb: 'Plum to rose with a gradient name. Flatters photography.',
@@ -166,12 +184,15 @@ export const THEME_PRESETS = [
       accent: '#A34E30', button_style: 'rounded', link_shape: 'rounded',
       avatar_shape: 'rounded', bio_weight: 450 } },
 
+  /* PARKED — clay does the warm-neutral look with more character
   { id: 'linen', name: 'Linen', emoji: '🌾', category: 'nature',
     blurb: 'Barely-there beige with soft glass. Quiet and expensive-looking.',
     theme: { ...BASE, mode: 'light', bg: 'gradient', bg_color: '#FAF6F0', bg_color2: '#F0E7DA',
       accent: '#75603F', card_opacity: 68, card_blur: 16, product_opacity: 72, product_blur: 10,
       button_style: 'pill', link_shape: 'oval', avatar_shape: 'circle' } },
+  */
 
+  /* PARKED — moss (motion) is the same palette with something happening
   { id: 'forest', name: 'Forest', emoji: '🌲', category: 'nature',
     blurb: 'Dark green with rain. Natural without going pastel.',
     theme: { ...BASE, mode: 'dark', bg: 'gradient', bg_color: '#0C1710', bg_color2: '#1D3524',
@@ -180,6 +201,8 @@ export const THEME_PRESETS = [
       button_style: 'rounded', link_shape: 'rounded' } },
 
   // ── Retro & playful ──────────────────────────────────────────────────────
+  */
+
   { id: 'vapor', name: 'Vaporwave', emoji: '🌴', category: 'retro',
     blurb: 'Purple-to-blue with VHS grain and a rainbow name. Maximal.',
     theme: { ...BASE, mode: 'dark', bg: 'gradient', bg_color: '#2B1055', bg_color2: '#7597DE',
@@ -194,13 +217,16 @@ export const THEME_PRESETS = [
       mono_icons: true, card_opacity: 75, card_blur: 6, product_opacity: 75, product_blur: 4,
       button_style: 'sharp', link_shape: 'sharp', avatar_shape: 'square' } },
 
+  /* PARKED — synthwave is the stronger version of this idea
   { id: 'arcade', name: 'Arcade', emoji: '👾', category: 'retro',
     blurb: 'Hot magenta on deep blue, square everything, cursor sparkles.',
     theme: { ...BASE, mode: 'dark', bg: 'gradient', bg_color: '#0B0F2B', bg_color2: '#241A5C',
       accent: '#FF3CAC', glow_intensity: 32, product_glow: 'strong', overlay: 'stars',
       cursor_fx: 'sparkle', card_opacity: 72, card_blur: 8, product_opacity: 72, product_blur: 6,
       button_style: 'sharp', link_shape: 'sharp', avatar_shape: 'square', animated_name: true } },
+  */
 
+  /* PARKED — softfocus covers pastel-light better and is calmer
   { id: 'candyshop', name: 'Candy Shop', emoji: '🍬', category: 'retro',
     blurb: 'Mint and lilac with a floating card. Sweet, deliberately.',
     theme: { ...BASE, mode: 'light', bg: 'gradient', bg_color: '#E6FBF4', bg_color2: '#EDE4FF',
@@ -217,6 +243,8 @@ export const THEME_PRESETS = [
   // Cards go glassy here on purpose — text sitting directly on artwork is the
   // single fastest way to make a page unreadable. The blur is what keeps the
   // background decorative instead of competing.
+  */
+
   { id: 'aurora', name: 'Aurora', emoji: '🌠', category: 'scenic',
     blurb: 'Deep blue and violet light. The safest of the image backgrounds.',
     theme: { ...BASE, mode: 'dark', bg: 'image', bg_image: '/templates/aurora.svg',
@@ -233,6 +261,7 @@ export const THEME_PRESETS = [
       link_opacity: 68, link_blur: 14,
       button_style: 'rounded', link_shape: 'rounded' } },
 
+  /* PARKED — aurora is the same night palette, less busy
   { id: 'starfield', name: 'Starfield', emoji: '✨', category: 'scenic',
     blurb: 'Real stars in the image, not an overlay — so it never animates.',
     theme: { ...BASE, mode: 'dark', bg: 'image', bg_image: '/templates/stars.svg',
@@ -240,6 +269,7 @@ export const THEME_PRESETS = [
       card_opacity: 58, card_blur: 18, product_opacity: 62, product_blur: 12,
       link_opacity: 66, link_blur: 12,
       button_style: 'pill', link_shape: 'oval' } },
+  */
 
   { id: 'blueprint', name: 'Blueprint', emoji: '📐', category: 'scenic',
     blurb: 'Technical grid fading into cyan. Reads engineered, not decorative.',
@@ -248,19 +278,23 @@ export const THEME_PRESETS = [
       card_opacity: 70, card_blur: 10, product_opacity: 72, product_blur: 8,
       button_style: 'sharp', link_shape: 'sharp', avatar_shape: 'square' } },
 
+  /* PARKED — seafoam and deepsea already cover teal
   { id: 'tide', name: 'Tide', emoji: '🌊', category: 'scenic',
     blurb: 'Layered waves along the bottom. Leaves the top clear for your face.',
     theme: { ...BASE, mode: 'dark', bg: 'image', bg_image: '/templates/waves.svg',
       accent: '#5EEAD4', glow_intensity: 18, product_glow: 'soft',
       card_opacity: 66, card_blur: 14, product_opacity: 70, product_blur: 10,
       button_style: 'pill', link_shape: 'oval' } },
+  */
 
+  /* PARKED — texture-on-dark, thin next to blueprint
   { id: 'contour', name: 'Contour', emoji: '🗺️', category: 'scenic',
     blurb: 'Topographic lines on warm charcoal. Outdoors without being literal.',
     theme: { ...BASE, mode: 'dark', bg: 'image', bg_image: '/templates/topo.svg',
       accent: '#E9A163', glow_intensity: 12, product_glow: 'none',
       card_opacity: 74, card_blur: 10, product_opacity: 76, product_blur: 6,
       button_style: 'rounded', link_shape: 'rounded' } },
+  */
 
   { id: 'seafoam', name: 'Seafoam', emoji: '🫧', category: 'scenic',
     blurb: 'Pale mint and lilac wash. A light image background that stays readable.',
@@ -269,20 +303,25 @@ export const THEME_PRESETS = [
       card_opacity: 72, card_blur: 16, product_opacity: 76, product_blur: 10,
       button_style: 'pill', link_shape: 'oval' } },
 
+  /* PARKED — peach territory already held by softfocus
   { id: 'apricot', name: 'Apricot', emoji: '🍑', category: 'scenic',
     blurb: 'Soft peach and butter tones. Warm, light, and gentle on text.',
     theme: { ...BASE, mode: 'light', bg: 'image', bg_image: '/templates/peach.svg',
       accent: '#B03A5B', product_glow: 'none',
       card_opacity: 74, card_blur: 14, product_opacity: 78, product_blur: 10,
       button_style: 'rounded', link_shape: 'rounded' } },
+  */
 
+  /* PARKED — obsidian is the same idea with a cleaner ground
   { id: 'graphite', name: 'Graphite', emoji: '⬛', category: 'scenic',
     blurb: 'Near-black with a subtle depth wash. Your images supply the colour.',
     theme: { ...BASE, mode: 'dark', bg: 'image', bg_image: '/templates/ink.svg',
       accent: '#D4D4D8', product_glow: 'none', icon_glow: 0,
       card_opacity: 80, card_blur: 8, product_opacity: 82, product_blur: 6,
       button_style: 'sharp', link_shape: 'sharp', avatar_shape: 'rounded' } },
+  */
 
+  /* PARKED — paper covers editorial-light
   { id: 'halftone', name: 'Halftone', emoji: '⚪', category: 'scenic',
     blurb: 'Printed-dot texture on warm paper. Editorial with a bit of grain.',
     theme: { ...BASE, mode: 'light', bg: 'image', bg_image: '/templates/dots.svg',
@@ -298,6 +337,8 @@ export const THEME_PRESETS = [
   //
   // bg_color is the ground the motion composites over; bg_color2 and accent are
   // the two moving colours. So every one of these is a palette plus a movement.
+  */
+
   { id: 'nightdrive', name: 'Night Drive', emoji: '🌃', category: 'showcase',
     blurb: 'Violet and cyan sweeping across black. The most cinematic look here.',
     theme: { ...BASE, mode: 'dark', bg: 'animated', bg_motion: 'sweep', bg_speed: 90,
@@ -307,6 +348,7 @@ export const THEME_PRESETS = [
       link_opacity: 66, link_blur: 14,
       button_style: 'pill', link_shape: 'oval', tilt_enabled: true } },
 
+  /* PARKED — nightdrive and inferno bracket this
   { id: 'lavalamp', name: 'Lava Lamp', emoji: '🫠', category: 'showcase',
     blurb: 'Warm blobs rotating slowly. Hypnotic without being distracting.',
     theme: { ...BASE, mode: 'dark', bg: 'animated', bg_motion: 'nebula', bg_speed: 70,
@@ -315,6 +357,7 @@ export const THEME_PRESETS = [
       card_opacity: 62, card_blur: 18, product_opacity: 66, product_blur: 12,
       link_opacity: 70, link_blur: 12,
       button_style: 'rounded', link_shape: 'rounded' } },
+  */
 
   { id: 'northern', name: 'Northern Lights', emoji: '🌌', category: 'showcase',
     blurb: 'Green and blue drifting overhead. Calm, slow, genuinely pretty.',
@@ -333,13 +376,16 @@ export const THEME_PRESETS = [
       link_opacity: 80, link_blur: 10,
       button_style: 'pill', link_shape: 'oval' } },
 
+  /* PARKED — seafoam covers light teal; drift motion is subtle at this palette
   { id: 'tidepool', name: 'Tide Pool', emoji: '🐚', category: 'showcase',
     blurb: 'Teal and sand sliding sideways. Light, airy, easy to read on.',
     theme: { ...BASE, mode: 'light', bg: 'animated', bg_motion: 'drift', bg_speed: 60,
       bg_color: '#F4FBFA', bg_color2: '#99E2D0', accent: '#0E7490',
       card_opacity: 74, card_blur: 14, product_opacity: 78, product_blur: 10,
       button_style: 'rounded', link_shape: 'rounded' } },
+  */
 
+  /* PARKED — loudest of the set and the least reusable
   { id: 'inferno', name: 'Inferno', emoji: '🔥', category: 'showcase',
     blurb: 'Red and amber churning. Loud on purpose — for launches and drops.',
     theme: { ...BASE, mode: 'dark', bg: 'animated', bg_motion: 'nebula', bg_speed: 130,
@@ -348,6 +394,7 @@ export const THEME_PRESETS = [
       card_opacity: 58, card_blur: 16, product_opacity: 62, product_blur: 12,
       link_opacity: 66, link_blur: 12,
       button_style: 'sharp', link_shape: 'sharp', animated_name: true, tilt_enabled: true } },
+  */
 
   { id: 'synthwave', name: 'Synthwave', emoji: '🕹️', category: 'showcase',
     blurb: 'Magenta and cyan sweeping over grain. Retro-futurist, full send.',

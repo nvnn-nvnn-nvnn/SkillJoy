@@ -73,6 +73,43 @@ export async function startCheckout(skillId, code = null, bump = false) {
 /** Guest (no account) checkout for a one-time product. apiFetch just sends no
  *  auth token when there's no session — the /api/guest routes don't require one.
  *  Returns { clientSecret, paymentIntentId, amountCents }. */
+/**
+ * Claim a FREE product with no account: name + email, nothing else.
+ *
+ * Separate from startGuestCheckout because there is no PaymentIntent, no
+ * client secret and no Stripe step — sharing the function would mean a
+ * pile of "if free" branches in a flow whose whole job is handling money.
+ */
+/**
+ * Turn a one-time sign-in token into a real session, in this tab.
+ *
+ * The buyer has just paid (or claimed a free product) and is looking at the
+ * page. Telling them to go to their inbox to get in is the worst possible
+ * moment for a detour — they have already done the hard part.
+ *
+ * Returns true if the session took. Never throws: a failure here just means
+ * they use the emailed link instead, which still works.
+ */
+export async function redeemSignInToken(tokenHash) {
+  if (!tokenHash) return false;
+  try {
+    const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'email' });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function claimFreeProduct(skillId, { name, email }) {
+  const res = await apiFetch(`/api/guest/${skillId}/claim`, {
+    method: 'POST',
+    body: JSON.stringify({ name, email }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || 'Could not get access. Try again.');
+  return body;
+}
+
 export async function startGuestCheckout(skillId, { name, email, code = null, bump = false }) {
   const res = await apiFetch(`/api/guest/${skillId}/intent`, {
     method: 'POST',

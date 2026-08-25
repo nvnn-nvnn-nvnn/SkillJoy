@@ -6,7 +6,7 @@ import { useUser } from '@/lib/stores';
 import { getPublicSkill } from '@/lib/skills';
 import { resolveTheme, MODE_PALETTES, readableOn, contrastRatio } from '@/lib/storefront';
 import { getProfileTheme } from '@/lib/profiles';
-import { startCheckout, confirmCheckout, validateCode, startGuestCheckout, confirmGuestCheckout } from '@/lib/purchases';
+import { startCheckout, confirmCheckout, validateCode, startGuestCheckout, confirmGuestCheckout, claimFreeProduct, redeemSignInToken } from '@/lib/purchases';
 import { recordEvent } from '@/lib/metrics';
 import BackLink from '@/components/BackLink';
 
@@ -66,10 +66,16 @@ export default function Checkout() {
           } catch { /* bump is optional — ignore */ }
         }
 
-        // Guests can only check out one-time PAID products. Free (lead) and
-        // membership need an account → send them to log in first.
+        // Guests can complete any ONE-TIME product without an account — paid
+        // through Stripe, free through the claim route.
+        //
+        // Free used to redirect to login, which was backwards: a lead magnet
+        // exists to trade a file for an email, and demanding a password first
+        // is the highest-friction step at the moment someone has the least
+        // invested. Membership still needs an account, because a subscription
+        // has to belong to someone who can manage and cancel it.
         if (!user) {
-          if (s.price_cents && s.pricing_type === 'onetime') { setStatus('promo'); return; }
+          if (s.pricing_type === 'onetime') { setStatus('promo'); return; }
           navigate(`/login?redirect=${encodeURIComponent(`/checkout/${skillId}`)}`);
           return;
         }
@@ -104,6 +110,14 @@ export default function Checkout() {
     }
     setContinuing(true); setErr('');
     try {
+      // Free + guest: no payment to take, so grant it and go straight to the
+      // "check your email" screen rather than through Stripe.
+      if (isGuest && !skill.price_cents) {
+        const out = await claimFreeProduct(skillId, { name: guestName.trim(), email: guestEmail.trim() });
+        if (await redeemSignInToken(out?.signInToken)) { navigate(`/locker/${skillId}`); return; }
+        setStatus('guest-success');
+        return;
+      }
       const out = isGuest
         ? await startGuestCheckout(skillId, { name: guestName.trim(), email: guestEmail.trim(), code: applied?.code || null, bump: bumpOn })
         : await startCheckout(skillId, applied?.code || null, bumpOn);
@@ -187,7 +201,11 @@ export default function Checkout() {
                 placeholder="Full name" autoComplete="name" />
               <input className="ck-in" type="email" value={guestEmail} onChange={e => setGuestEmail(e.target.value)}
                 placeholder="you@email.com" autoComplete="email" />
-              <p className="ck-fine ck-guest-note">We’ll email your purchase here with a link to access it — no account needed.</p>
+              <p className="ck-fine ck-guest-note">
+                {skill.price_cents
+                  ? "We’ll email your purchase here with a link to access it — no account needed."
+                  : "We’ll email it straight here with a link to open it — no account, no password."}
+              </p>
             </div>
           )}
 
@@ -235,7 +253,7 @@ export default function Checkout() {
               <span className="ck-totalrow-v">${(displayTotal / 100).toFixed(2)}</span>
             </div>
             <button className="btn btn-primary ck-pay" onClick={toPayment} disabled={continuing}>
-              {continuing ? '…' : 'Continue to payment'}
+              {continuing ? '…' : (skill.price_cents ? 'Continue to payment' : 'Get it free')}
             </button>
           </div>
           {err && <p className="ck-err">{err}</p>}
@@ -244,10 +262,13 @@ export default function Checkout() {
 
       {status === 'pay' && clientSecret && (
         <Elements stripe={stripePromise} options={{ clientSecret, appearance }}>
-          <CheckoutForm skill={skill} amountCents={amountCents} guest={isGuest} onPaid={() => {
+          <CheckoutForm skill={skill} amountCents={amountCents} guest={isGuest} onPaid={(signedIn) => {
             recordEvent('purchase', { skillId: skill.id, creatorId: skill.creator_id, buyerId: user?.id ?? null });
-            if (isGuest) setStatus('guest-success');
-            else navigate(`/locker/${skillId}`);
+            // A guest whose session took goes straight to the product — the
+            // whole point of paying is getting the thing, not an inbox errand.
+            // Anyone else lands on the success screen with the emailed link.
+            if (!isGuest || signedIn) navigate(`/locker/${skillId}`);
+            else setStatus('guest-success');
           }} />
         </Elements>
       )}
@@ -256,7 +277,11 @@ export default function Checkout() {
         <div className="ck-done">
           <p style={{ fontSize: 44 }}>✅</p>
           <p className="ck-done-t">You’re all set!</p>
-          <p className="ck-muted">We’ve emailed <strong>{guestEmail}</strong> a receipt and a link to access <strong>{skill.title}</strong> — no password needed. Check your inbox (and spam, just in case).</p>
+          <p className="ck-muted">
+            <strong>{skill.title}</strong> is yours. We’ve emailed <strong>{guestEmail}</strong> a
+            receipt and a one-tap link to open it — no password needed. Check your inbox
+            (and spam, just in case).
+          </p>
           <button className="btn btn-primary ck-pay" style={{ marginTop: 20 }} onClick={() => navigate(-1)}>Go back</button>
         </div>
       )}
@@ -300,12 +325,20 @@ function CheckoutForm({ skill, amountCents, onPaid, guest = false }) {
         confirmParams: { return_url: `${window.location.origin}/checkout/${skill.id}` },
       });
       if (error) throw new Error(error.message);
+      let signedIn = false;
       if (paymentIntent?.status === 'succeeded') {
         try {
-          if (guest) await confirmGuestCheckout(skill.id, paymentIntent.id);
-          else await confirmCheckout(skill.id, paymentIntent.id);
+          if (guest) {
+            const out = await confirmGuestCheckout(skill.id, paymentIntent.id);
+            // Only issued when this purchase CREATED the account (see
+            // signInTokenFor) — an email that already had one still has to be
+            // proven via the emailed link.
+            signedIn = await redeemSignInToken(out?.signInToken);
+          } else {
+            await confirmCheckout(skill.id, paymentIntent.id);
+          }
         } catch { /* webhook will catch up */ }
-        onPaid();
+        onPaid(signedIn);
       } else {
         throw new Error(`Payment ${paymentIntent?.status ?? 'incomplete'}.`);
       }

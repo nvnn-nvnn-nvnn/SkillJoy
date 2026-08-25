@@ -24,11 +24,15 @@ export default function LinkBlock({ block, links }) {
 
   const collapsible = !!block.collapsible;
   const showBody = !collapsible || open;
-  const hasHeader = !!(block.title?.trim() || block.subtitle?.trim() || collapsible);
+  const showTitle = layout.titleShow !== false;
+  const headText = showTitle && !!(block.title?.trim() || block.subtitle?.trim());
+  const hasHeader = headText || collapsible;
 
   const cls = [
     'lkb',
     `lkb-${layout.style}`,
+    `lkb-title-${layout.titleStyle || 'bar'}`,
+    `lkb-talign-${layout.titleAlign || layout.align || 'left'}`,
     `lkb-size-${layout.size}`,
     `lkb-align-${layout.align}`,
     // Booleans, so these are present-or-absent rather than a value suffix.
@@ -47,6 +51,11 @@ export default function LinkBlock({ block, links }) {
         ...(layout.fg ? { '--lkb-fg': layout.fg } : null),
         ...(layout.headingColor ? { '--lkb-head': layout.headingColor } : null),
         ...(shapeRadius ? { '--lkb-shape': shapeRadius } : null),
+        ...(layout.ctaBg ? { '--lkb-cta-bg': layout.ctaBg } : null),
+        ...(layout.ctaFg ? { '--lkb-cta-fg': layout.ctaFg } : null),
+        // A pill overrides its own padding at the same moment it overrides its
+        // radius — the two are one decision.
+        ...(shapeRadius === '999px' ? { '--lkb-xpad': '26px' } : null),
       }}
     >
       {hasHeader && (
@@ -57,18 +66,22 @@ export default function LinkBlock({ block, links }) {
             {block.collapsed_thumb_url && (
               <span className="lkb-headthumb" style={{ backgroundImage: `url(${block.collapsed_thumb_url})` }} aria-hidden="true" />
             )}
-            <span className="lkb-headtext">
-              {block.title?.trim() && <span className="lkb-title">{block.title}</span>}
-              {block.subtitle?.trim() && <span className="lkb-sub">{block.subtitle}</span>}
-            </span>
+            {headText && (
+              <span className="lkb-headtext">
+                {block.title?.trim() && <span className="lkb-title">{block.title}</span>}
+                {block.subtitle?.trim() && <span className="lkb-sub">{block.subtitle}</span>}
+              </span>
+            )}
             <ChevronDown size={17} className={`lkb-caret${open ? ' open' : ''}`} aria-hidden="true" />
           </button>
         ) : (
           <div className="lkb-head">
-            <span className="lkb-headtext">
-              {block.title?.trim() && <span className="lkb-title">{block.title}</span>}
-              {block.subtitle?.trim() && <span className="lkb-sub">{block.subtitle}</span>}
-            </span>
+            {headText && (
+              <span className="lkb-headtext">
+                {block.title?.trim() && <span className="lkb-title">{block.title}</span>}
+                {block.subtitle?.trim() && <span className="lkb-sub">{block.subtitle}</span>}
+              </span>
+            )}
           </div>
         )
       )}
@@ -117,6 +130,7 @@ export default function LinkBlock({ block, links }) {
 function Styles() {
   return <style>{`
     .lkb { margin-top:16px; }
+    .lkb-headtext { display:flex; flex-direction:column; gap:2px; min-width:0; }
     .lkb-head { display:flex; align-items:center; gap:11px; width:100%; margin-bottom:10px;
       padding:0; border:none; background:none; text-align:left; color:inherit; }
     .lkb-head-btn { cursor:pointer; padding:9px 11px; border-radius:var(--r);
@@ -124,6 +138,24 @@ function Styles() {
     .lkb-headthumb { flex-shrink:0; width:38px; height:38px; border-radius:var(--r-sm);
       background:var(--surface-alt) center/cover no-repeat; }
     .lkb-headtext { display:flex; flex-direction:column; gap:1px; flex:1; min-width:0; }
+    /* ── Heading panel ──
+       A title on artwork is unreadable without something behind it — the same
+       problem glass cards solve for content. The panel is built from the block
+       text colour so it inherits the cascade and never needs its own control. */
+    .lkb-title-bar .lkb-headtext { padding:10px 15px; border-radius:var(--r);
+      background:color-mix(in srgb, var(--lkb-head, var(--sf-link-fg, var(--text))) 12%, transparent);
+      border:1px solid color-mix(in srgb, var(--lkb-head, var(--sf-link-fg, var(--text))) 20%, transparent);
+      -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); }
+    /* Heading alignment is independent of the links: a centred title over
+       left-aligned buttons is a normal thing to want. */
+    .lkb-talign-left .lkb-head { justify-content:flex-start; }
+    .lkb-talign-center .lkb-head { justify-content:center; }
+    .lkb-talign-right .lkb-head { justify-content:flex-end; }
+    .lkb-talign-center .lkb-headtext { text-align:center; align-items:center; }
+    .lkb-talign-right .lkb-headtext { text-align:right; align-items:flex-end; }
+    /* The collapsible toggle is a full-width row, so its text block stretches
+       and the alignment has to come from text-align rather than justify. */
+    .lkb-head-btn .lkb-headtext { flex:1; }
     .lkb-title { font-size:17.5px; font-weight:800; color:var(--lkb-head, var(--sf-link-fg, var(--text))); }
     .lkb-sub { font-size:13.5px; line-height:1.5; color:var(--lkb-head, var(--sf-link-fg, var(--text-secondary))); opacity:.82; }
     .lkb-caret { flex-shrink:0; color:var(--text-muted); transition:transform .2s ease; }
@@ -135,7 +167,8 @@ function Styles() {
     /* --lkb-shape is the corner radius (Settings → Block shape); the fallback
        keeps the original pill. Border colour derives from the text colour so a
        custom pair stays coherent without a fourth control. */
-    .lkb-item { display:flex; flex-direction:column; align-items:stretch; gap:0; padding:14px 15px;
+    .lkb-item { display:flex; flex-direction:column; align-items:stretch; gap:0;
+      padding-block:14px; padding-inline:var(--lkb-xpad, 15px);
       border-radius:var(--lkb-shape, var(--sf-link-radius, var(--r-full))); text-decoration:none;
       background:var(--lkb-bg, var(--sf-link-bg, var(--surface)));
       color:var(--lkb-fg, var(--sf-link-fg, var(--text)));
@@ -149,7 +182,9 @@ function Styles() {
        must stay a full-width sibling underneath in all four. */
     .lkb-main { display:flex; align-items:center; gap:12px; width:100%; min-width:0; }
     .lkb-body { display:flex; flex-direction:column; gap:3px; flex:1; min-width:0; }
-    .lkb-label { font-weight:800; font-size:15.5px; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .lkb-label { font-weight:800; font-size:15.5px; line-height:1.3;
+      display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden;
+      -webkit-line-clamp:2; line-clamp:2; overflow-wrap:anywhere; }
     .lkb-desc { font-size:13px; line-height:1.5; color:var(--lkb-fg, var(--sf-link-fg, var(--text-secondary))); opacity:.75;
       display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden;
       -webkit-line-clamp:3; line-clamp:3; }
@@ -162,8 +197,9 @@ function Styles() {
       border-radius:calc(var(--lkb-shape, var(--sf-link-radius, 999px)) * 0.6);
       font-size:13px; font-weight:800; letter-spacing:.05em; text-transform:uppercase;
       text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-      background:color-mix(in srgb, var(--lkb-fg, var(--sf-link-fg, var(--accent))) 88%, black);
-      color:#fff;
+      background:var(--lkb-cta-bg, var(--sf-cta-bg,
+        color-mix(in srgb, var(--lkb-fg, var(--sf-link-fg, var(--accent))) 88%, black)));
+      color:var(--lkb-cta-fg, var(--sf-cta-fg, #fff));
       border:1.5px solid transparent;
       transition:filter .14s ease, transform .14s ease; }
     .lkb-item:hover .lkb-cta { filter:brightness(1.08); }
@@ -191,6 +227,7 @@ function Styles() {
        present when there IS an image, so hiding it discarded real content. */
     .lkb-classic .lkb-thumb { width:calc(var(--lkb-thumb, 54px) * 0.9); height:calc(var(--lkb-thumb, 54px) * 0.9); border-radius:50%; }
     .lkb-classic .lkb-desc { -webkit-line-clamp:1; line-clamp:1; }
+    .lkb-classic .lkb-label { -webkit-line-clamp:1; line-clamp:1; }
 
     /* ── Grid ── */
     .lkb-grid .lkb-items { display:grid; grid-template-columns:repeat(var(--lkb-cols, 2), minmax(0,1fr)); gap:9px; }

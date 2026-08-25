@@ -48,6 +48,10 @@ export const DEFAULT_THEME = {
   // the page design depends on.
   link_color: '',
   link_text_color: '',
+  // The CTA button is its own surface. '' derives it from the link text colour,
+  // which is the behaviour every existing page already has.
+  link_cta_color: '',
+  link_cta_text_color: '',
   // Opacity and blur are per-category too. They read product_opacity /
   // card_blur before, so a glassy product grid forced glassy link buttons.
   // null = "follow the product value", which keeps every existing storefront
@@ -66,6 +70,8 @@ export const DEFAULT_THEME = {
   // cascade level rather than a fork: block -> featured -> page -> theme.
   featured_link_color: '',
   featured_link_text_color: '',
+  featured_link_cta_color: '',
+  featured_link_cta_text_color: '',
   featured_link_opacity: null,
   featured_link_blur: null,
   featured_link_shape: '',   // '' = follow link_shape
@@ -109,6 +115,9 @@ export const DEFAULT_THEME = {
   product_opacity: 100,     // 40–100 — product/link fill opacity (glass)
   product_blur: 0,          // 0–24 px — backdrop blur behind products/links (glass)
   avatar_size: 96,          // px — profile picture diameter on the public page
+  // Social icon diameter. Sized with the avatar rather than fixed: the two sit
+  // together and read as one unit, so a large avatar over 23px icons looks off.
+  icon_size: 23,            // 14-44 px
   avatar_shape: 'circle',   // 'circle' | 'rounded' | 'square' — profile picture shape
   bio_size: 15,             // px — bio font size
   bio_weight: 400,          // 300–800 — bio font weight
@@ -378,14 +387,28 @@ export const GLOW_TARGETS = [
   { id: 'name',   label: 'Name' },
   { id: 'avatar', label: 'Profile picture' },
   { id: 'card',   label: 'Profile card' },
-  { id: 'links',  label: 'Link buttons' },
+  // Split from one "Link buttons" target: profile links sit inside the card and
+  // featured links sit on the raw background, so the glow that flatters one
+  // routinely blows out the other. They are already separate everywhere else
+  // (colour, shape, opacity, blur) — glow was the last shared control.
+  { id: 'links',    label: 'Profile links' },
+  { id: 'featured', label: 'Featured links' },
   { id: 'icons',  label: 'Icons' },
 ];
 
 export function glowVars(theme, glowOn) {
   // undefined (saved before this key existed) must mean "all on", not "none" —
   // otherwise every existing storefront loses its glow on next load.
-  const on = (id) => glowOn && (!Array.isArray(theme.glow_targets) || theme.glow_targets.includes(id));
+  const on = (id) => {
+    if (!glowOn) return false;
+    const t = theme.glow_targets;
+    if (!Array.isArray(t)) return true;   // saved before this key existed → all on
+    // 'featured' was split out of 'links'. A theme saved before the split lists
+    // only 'links', and must keep glowing in both regions — otherwise the split
+    // silently turns something off that the creator never switched off.
+    if (id === 'featured') return t.includes('featured') || t.includes('links');
+    return t.includes(id);
+  };
   const base = theme.glow_intensity ?? 0;
   const px = (yes, mult = 1) => (yes ? `${base * mult}px` : '0px');
   return {
@@ -393,8 +416,10 @@ export function glowVars(theme, glowOn) {
     '--sf-glow-name-strong': px(on('name'), 2.4),
     '--sf-glow-avatar':      px(on('avatar'), 2.4),
     '--sf-glow-card':        px(on('card'), 2.4),
-    '--sf-glow-links':       px(on('links')),
-    '--sf-glow-links-strong': px(on('links'), 2.4),
+    '--sf-glow-links':          px(on('links')),
+    '--sf-glow-links-strong':   px(on('links'), 2.4),
+    '--sf-glow-featured':        px(on('featured')),
+    '--sf-glow-featured-strong': px(on('featured'), 2.4),
     '--sf-icon-glow':        on('icons') ? `${theme.icon_glow ?? 10}px` : '0px',
   };
 }

@@ -19,8 +19,8 @@ import {
 } from 'lucide-react';
 import { BrandIcon } from '@/lib/brandIcons';
 import LinkBlockEditor from '@/components/LinkBlockEditor';
-import { listBlocks, resolveBlockLayout, LINK_SHAPES } from '@/lib/blocks';
-import { listTemplates, saveTemplate, deleteTemplate } from '@/lib/templates';
+import { listBlocks, resolveBlockLayout, updateBlockLayout, LINK_SHAPES } from '@/lib/blocks';
+import { listTemplates, saveTemplate, deleteTemplate, preflightTemplate } from '@/lib/templates';
 import { useDialog } from '@/components/Dialog';
 
 // Same constant the Admin page uses. Gating the SAVE UI here is convenience,
@@ -162,7 +162,10 @@ function lpFeaturedVars(theme) {
   const op = theme.featured_link_opacity ?? theme.link_opacity ?? theme.product_opacity ?? 100;
   if (fill) v['--lp-link-bg'] = `color-mix(in srgb, ${fill} ${op}%, transparent)`;
   if (theme.featured_link_text_color) v['--lp-link-fg'] = theme.featured_link_text_color;
+  if (theme.featured_link_cta_color) v['--lp-cta-bg'] = theme.featured_link_cta_color;
+  if (theme.featured_link_cta_text_color) v['--lp-cta-fg'] = theme.featured_link_cta_text_color;
   if (theme.featured_link_shape) v['--lp-link-radius'] = LP_LINK_RADIUS[theme.featured_link_shape] ?? LP_LINK_RADIUS.oval;
+  v['--lp-glow-links'] = 'var(--lp-glow-featured, 0px)';
   return v;
 }
 
@@ -174,6 +177,9 @@ function PreviewLinkGroup({ block, items, featured }) {
   const style = {
     '--lpb-cols': layout.columns || 2,
     ...(shapeRadius ? { '--lpb-shape': shapeRadius } : null),
+    ...(shapeRadius === '999px' ? { '--lpb-xpad': '16px' } : null),
+    ...(layout.ctaBg ? { '--lpb-cta-bg': layout.ctaBg } : null),
+    ...(layout.ctaFg ? { '--lpb-cta-fg': layout.ctaFg } : null),
     ...(layout.bg ? { '--lpb-bg': layout.bg } : null),
     ...(layout.fg ? { '--lpb-fg': layout.fg } : null),
     ...(layout.headingColor ? { '--lpb-head': layout.headingColor } : null),
@@ -181,11 +187,16 @@ function PreviewLinkGroup({ block, items, featured }) {
   return (
     <div className={[
       'lpb', `lpb-${layout.style}`, `lpb-size-${layout.size}`, `lpb-align-${layout.align}`,
+      `lpb-title-${layout.titleStyle || 'bar'}`, `lpb-talign-${layout.titleAlign || layout.align || 'left'}`,
       layout.outline ? 'lpb-outline' : '', layout.shadow ? 'lpb-shadow' : '',
       featured ? 'lpb-featured' : '',
     ].filter(Boolean).join(' ')} style={style}>
-      {block.title?.trim() && <span className="lpb-title">{block.title}</span>}
-      {block.subtitle?.trim() && <span className="lpb-sub">{block.subtitle}</span>}
+      {layout.titleShow !== false && (block.title?.trim() || block.subtitle?.trim()) && (
+        <span className="lpb-headtext">
+          {block.title?.trim() && <span className="lpb-title">{block.title}</span>}
+          {block.subtitle?.trim() && <span className="lpb-sub">{block.subtitle}</span>}
+        </span>
+      )}
       <div className="lpb-items">
         {items.slice(0, 4).map(l => (
           <div key={l.id} className={`lpb-item${l.cover_url ? '' : ' lpb-noimg'}`}>
@@ -233,11 +244,11 @@ function LivePreview({ theme, name, handle, avatar, bio, location, socials, skil
     ? { background: `radial-gradient(60% 70% at 22% 24%, ${theme.bg_color2 || theme.accent} 0%, transparent 62%),`
         + ` radial-gradient(58% 66% at 78% 74%, ${theme.accent} 0%, transparent 60%), ${theme.bg_color}` }
     : null;
-  const bgStyle = animatedBg ??
-    theme.bg === 'solid' ? { background: theme.bg_color } :
+  const bgStyle = animatedBg ||
+    (theme.bg === 'solid' ? { background: theme.bg_color } :
     theme.bg === 'gradient' ? { background: `linear-gradient(160deg, ${theme.bg_color}, ${theme.bg_color2})` } :
     (theme.bg === 'image' && theme.bg_image) ? { backgroundImage: `url(${theme.bg_image})`, backgroundSize: 'cover', backgroundPosition: 'center' } :
-    undefined;
+    undefined);
   const cls = [
     'lp', `lp-mode-${theme.mode}`, `lp-btn-${theme.button_style}`, `lp-glow-${theme.product_glow || 'none'}`,
     theme.mono_icons ? 'lp-mono' : '', glowOn && theme.animated_name ? 'lp-anim' : '',
@@ -248,10 +259,14 @@ function LivePreview({ theme, name, handle, avatar, bio, location, socials, skil
     '--lp-card-bg': `color-mix(in srgb, ${theme.card_color || 'var(--lp-surface)'} ${theme.card_opacity ?? 100}%, transparent)`,
     '--lp-card-blur': `${theme.card_blur ?? 0}px`,
     '--lp-item-bg': `color-mix(in srgb, ${theme.item_color || 'var(--lp-surface)'} ${theme.product_opacity ?? 100}%, transparent)`,
+    ...(theme.item_text_color ? { '--lp-item-fg': theme.item_text_color } : null),
+    '--lp-icon-size': `${Math.round((theme.icon_size ?? 23) * 0.85)}px`,
     '--lp-link-bg': theme.link_color
       ? `color-mix(in srgb, ${theme.link_color} ${theme.link_opacity ?? theme.product_opacity ?? 100}%, transparent)`
       : `color-mix(in srgb, var(--lp-accent, var(--accent)) 10%, var(--lp-surface))`,
     ...(theme.link_text_color ? { '--lp-link-fg': theme.link_text_color } : null),
+    ...(theme.link_cta_color ? { '--lp-cta-bg': theme.link_cta_color } : null),
+    ...(theme.link_cta_text_color ? { '--lp-cta-fg': theme.link_cta_text_color } : null),
     '--lp-link-radius': LP_LINK_RADIUS[theme.link_shape] ?? LP_LINK_RADIUS.oval,
     '--lp-item-blur': `${theme.product_blur ?? 0}px`,
     '--lp-avatar-size': `${Math.round((theme.avatar_size ?? 96) * 0.7)}px`, // preview is ~70% scale
@@ -356,6 +371,8 @@ export default function StorefrontEditor() {
   const [tplForm, setTplForm] = useState({ name: '', blurb: '', category: 'showcase', emoji: '🎨', includeAudio: true });
   const [tplBusy, setTplBusy] = useState(false);
   const [tplMsg, setTplMsg] = useState(null);
+  // What the assets weigh, measured server-side. null until checked.
+  const [tplWeight, setTplWeight] = useState(null);
   const [savingBanner, setSavingBanner] = useState(false);
   const [savingBg, setSavingBg] = useState(false);
   const [savingBgVideo, setSavingBgVideo] = useState(false);
@@ -393,6 +410,20 @@ export default function StorefrontEditor() {
     listBlocks(user.id).then(setBlocks).catch(() => {});
     listTemplates().then(setSavedTpls);
   }, [user]);
+
+  // Measure the template assets whenever the music toggle flips. That switch is
+  // the biggest single lever on the total, so it is exactly when the number
+  // matters — and the budget was previously invisible until a save failed.
+  //
+  // Above the early return on purpose: hooks must run in the same order on
+  // every render, and this component returns a loading state before profile
+  // arrives.
+  useEffect(() => {
+    if (user?.email !== ADMIN_EMAIL) return;
+    let live = true;
+    preflightTemplate(tplForm.includeAudio).then(r => { if (live) setTplWeight(r); });
+    return () => { live = false; };
+  }, [user?.email, tplForm.includeAudio]);
 
   if (!user || !profile) return <div className="std-loading">Loading…<Styles /></div>;
 
@@ -482,6 +513,22 @@ export default function StorefrontEditor() {
   function applyPreset(p) { setTheme(t => ({ ...t, ...p.theme })); setErr(''); }
 
   const isAdmin = user?.email === ADMIN_EMAIL;
+
+  // Blocks whose own layout.shape shadows the page-level link_shape. '' means
+  // inherit — what a block should carry unless someone deliberately overrode it.
+  const shapeOverrides = (blocks || []).filter(bl => (bl.layout?.shape || '') !== '');
+
+
+  // Clear the override on every block, so the page control starts working
+  // again. Writes shape = '' — it removes the thing that was winning rather
+  // than guessing a replacement value.
+  async function clearShapeOverrides() {
+    setErr('');
+    try {
+      for (const bl of shapeOverrides) await updateBlockLayout(bl.id, bl.layout, { shape: '' });
+      setBlocks(await listBlocks(user.id));
+    } catch (e) { setErr(e.message); }
+  }
 
   // Saves the theme AS ALREADY PERSISTED, not the unsaved draft — the backend
   // reads storefront_theme from the profile row. So an unsaved tweak would be
@@ -760,7 +807,14 @@ export default function StorefrontEditor() {
                       <input type="file" accept="video/*" hidden onChange={onBgVideo} />
                       <span>{savingBgVideo ? 'Uploading…' : <><Video size={15} /> {theme.bg_video ? 'Change video' : 'Upload video'}</>}</span>
                     </label>
-                    <p className="std-note">Max {formatBytes(LIMITS.bgVideo.max)} — but keep it well under that, big files load slowly on phones.</p>
+                    <p className="std-note">Max {formatBytes(LIMITS.bgVideo.max)} — keep it well under that.</p>
+                    <p className="std-note std-xref">
+                      <strong>Phones get the still image, not the video.</strong> iOS Low Power Mode
+                      blocks autoplay outright, and a multi-megabyte file over cellular stalls or
+                      eats someone's data — so it's skipped on small touch screens, on
+                      Data&nbsp;Saver, and on slow connections. Set a <em>background image</em> below:
+                      it's the poster, and it's what most of your visitors will actually see.
+                    </p>
                     {theme.bg_video && <button className="std-removebtn" onClick={() => set({ bg_video: '' })}><X size={13} /> Remove video</button>}
                   </>
                 )}
@@ -810,7 +864,12 @@ export default function StorefrontEditor() {
                   <div className="std-subgroup">
                     <Field label="Glow intensity"><Slider value={theme.glow_intensity ?? 0} min={0} max={80} suffix="px" onChange={v => set({ glow_intensity: v })} /></Field>
                     <p className="std-note">Master accent glow across your name, picture, card &amp; links.</p>
-                    <Field label="Icon glow"><Slider value={theme.icon_glow ?? 10} min={0} max={60} suffix="px" onChange={v => set({ icon_glow: v })} /></Field>
+                    <Field label="Social icon size">
+                  <Slider value={theme.icon_size ?? 23} min={14} max={44} suffix="px"
+                    onChange={v => set({ icon_size: v })} />
+                  <p className="std-note">Scales the row under your bio. Pair it with the avatar size so the two read as one block.</p>
+                </Field>
+                <Field label="Icon glow"><Slider value={theme.icon_glow ?? 10} min={0} max={60} suffix="px" onChange={v => set({ icon_glow: v })} /></Field>
                     <p className="std-note">Neon halo on every icon — socials, link buttons and block arrows. Crank it for a full burst, 0 to turn it off.</p>
                     {/* One slider used to light all five surfaces at once, so
                         tuning it for links also lit the name and avatar. Each
@@ -936,6 +995,18 @@ export default function StorefrontEditor() {
                     Rounded is a soft card · Oval is the classic pill · Sharp is square-cornered ·
                     Full width removes the side margins so buttons run edge to edge.
                   </p>
+                  {shapeOverrides.length > 0 && (
+                    <p className="std-note std-xref">
+                      <strong>
+                        {shapeOverrides.length} link block{shapeOverrides.length === 1 ? ' is' : 's are'} overriding this
+                      </strong>{' '}
+                      ({shapeOverrides.map(bl => bl.title?.trim() || 'Untitled').join(', ')}) — a block’s own
+                      shape always wins, so changing it here does nothing to {shapeOverrides.length === 1 ? 'it' : 'them'}.
+                      <button className="std-clearover" onClick={clearShapeOverrides}>
+                        Use this shape everywhere
+                      </button>
+                    </p>
+                  )}
                 </Field>
                 <Field label="Button colour">
                   <div className="std-colorrow">
@@ -1225,6 +1296,30 @@ export default function StorefrontEditor() {
                       onChange={e => setTplForm(f => ({ ...f, emoji: e.target.value }))} />
                   </Field>
                 </div>
+                {tplWeight && (
+                  <div className={`std-weigh${tplWeight.problems?.length ? " bad" : ""}`}>
+                    <div className="std-weigh-head">
+                      <span>Assets</span>
+                      <span>{(tplWeight.total / 1048576).toFixed(1)} MB of {(tplWeight.maxTotal / 1048576).toFixed(0)} MB</span>
+                    </div>
+                    {tplWeight.assets.map((a, i) => (
+                      <div key={i} className={`std-weigh-row${a.over ? " over" : ""}`}>
+                        <span className="std-weigh-name">{a.name}</span>
+                        <span className="std-weigh-size">
+                          {(a.bytes / 1048576).toFixed(1)} MB
+                          {a.over && <em> · max {(a.cap / 1048576).toFixed(0)} MB</em>}
+                        </span>
+                      </div>
+                    ))}
+                    {tplWeight.problems?.length > 0 && (
+                      <p className="std-weigh-note">
+                        Too heavy to share. Everyone who uses this template downloads these on
+                        every page view — trim the flagged files, or turn off <strong>Include my
+                        music</strong> below.
+                      </p>
+                    )}
+                  </div>
+                )}
                 <Toggle on={tplForm.includeAudio}
                   onChange={v => setTplForm(f => ({ ...f, includeAudio: v }))}
                   label="Include my music"
@@ -1658,6 +1753,26 @@ function Styles() {
       border-left:2px solid color-mix(in srgb, var(--accent) 60%, transparent);
       background:color-mix(in srgb, var(--accent) 8%, transparent); }
     .std-xref em { font-style:normal; font-weight:700; color:var(--text); }
+    .std-clearover { display:block; width:auto; margin-top:9px; padding:8px 14px;
+      border-radius:var(--r-full); border:1.5px solid var(--accent);
+      background:var(--accent); color:#fff; font-size:12.5px; font-weight:800;
+      cursor:pointer; }
+    .std-clearover:hover { filter:brightness(1.06); }
+    /* Asset budget, shown BEFORE saving. The budget used to be invisible until
+       a save failed, which made a correct refusal look like a broken button. */
+    .std-weigh { margin:14px 0 4px; padding:12px 13px; border-radius:var(--r);
+      border:1px solid var(--border); background:var(--surface-alt); }
+    .std-weigh.bad { border-color:var(--danger-mid); background:var(--danger-light); }
+    .std-weigh-head { display:flex; justify-content:space-between; gap:10px;
+      font-size:11.5px; font-weight:800; text-transform:uppercase;
+      letter-spacing:.05em; color:var(--text-secondary); margin-bottom:8px; }
+    .std-weigh-row { display:flex; justify-content:space-between; gap:12px;
+      font-size:12.5px; padding:3px 0; color:var(--text-secondary); }
+    .std-weigh-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .std-weigh-size { flex-shrink:0; font-variant-numeric:tabular-nums; }
+    .std-weigh-row.over { color:var(--danger); font-weight:700; }
+    .std-weigh-row.over em { font-style:normal; font-weight:600; opacity:.8; }
+    .std-weigh-note { margin:9px 0 0; font-size:12px; line-height:1.5; color:var(--danger); }
     .std-panel-lede { font-size:13px; color:var(--text-secondary); line-height:1.55; margin:0 0 14px; }
     .std-upload-wide { width:100%; aspect-ratio:3 / 1; }
 
@@ -1763,14 +1878,24 @@ function Styles() {
       padding:11px 20px; border-radius:var(--r); font-size:14px; font-weight:600; box-shadow:var(--shadow-lg); }
 
     /* ── Mini live-preview storefront ── */
-    .lp { --lp-surface:#fff; position:relative; height:100%; overflow-y:auto; text-align:center; color:var(--lp-text, #1a1916); }
+    .lp { --lp-preview-h:600px; --lp-surface:#fff; position:relative; height:100%; overflow-y:auto; text-align:center; color:var(--lp-text, #1a1916); }
     .lp::-webkit-scrollbar { width:0; }
     .lp-mode-dark { --lp-surface:#1b1c20; color:var(--lp-text, #f2f0ea); }
-    .lp-bg { position:absolute; inset:0; z-index:0; background:var(--bg); }
+    /* Sticky, not absolute: .lp is the scroll container, and an absolutely
+       positioned child resolves inset:0 against the VISIBLE box, so the
+       background stopped at the first screenful. Sticky pins it to the
+       scrollport instead, and the negative margin removes the height it would
+       otherwise add to the scroll length. That margin must be a LENGTH —
+       percentage margins resolve against width. */
+    .lp-bg { position:sticky; top:0; height:var(--lp-preview-h, 600px);
+      margin-bottom:calc(-1 * var(--lp-preview-h, 600px)); z-index:0;
+      background:var(--bg); background-size:cover; background-position:center; }
     .lp-mode-dark .lp-bg { background:#121316; }
-    .lp-bgvideo { position:absolute; inset:0; z-index:0; width:100%; height:100%; object-fit:cover; }
+    .lp-bgvideo { position:sticky; top:0; height:var(--lp-preview-h, 600px);
+      margin-bottom:calc(-1 * var(--lp-preview-h, 600px)); z-index:0;
+      width:100%; object-fit:cover; display:block; }
     /* Overlay effect mirrors (scaled-down versions of the storefront's) */
-    .lp-overlay { position:absolute; inset:0; z-index:1; pointer-events:none; }
+    .lp-overlay { position:sticky; top:0; height:var(--lp-preview-h, 600px); margin-bottom:calc(-1 * var(--lp-preview-h, 600px)); z-index:1; pointer-events:none; }
     .lp-overlay-rain { background-image:linear-gradient(107deg, transparent 0 45%, color-mix(in srgb, var(--lp-text, #000) 42%, transparent) 47% 51%, transparent 53% 100%); background-size:8px 56px; animation:lpRain .55s linear infinite; opacity:.55; }
     @keyframes lpRain { to { background-position:-8px 56px; } }
     .lp-overlay-snow { --lpsnow:color-mix(in srgb, var(--lp-text, #000) 60%, transparent); background-image:radial-gradient(2px 2px at 20% 15%, var(--lpsnow) 60%, transparent), radial-gradient(1.5px 1.5px at 65% 40%, var(--lpsnow) 60%, transparent), radial-gradient(2px 2px at 40% 70%, var(--lpsnow) 60%, transparent), radial-gradient(1.5px 1.5px at 85% 20%, var(--lpsnow) 60%, transparent); background-size:140px 140px; animation:lpSnow 8s linear infinite; opacity:.55; }
@@ -1806,7 +1931,7 @@ function Styles() {
     @keyframes lpPfxGlow { 0%,100% { box-shadow:0 0 12px color-mix(in srgb, var(--accent) 22%, transparent); } 50% { box-shadow:0 0 24px color-mix(in srgb, var(--accent) 48%, transparent); } }
     .lp-pfx-float { animation:lpPfxFloat 4.5s ease-in-out infinite; }
     @keyframes lpPfxFloat { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-4px); } }
-    .lp-inner { position:relative; z-index:1; margin:20px 14px; padding:24px 16px 22px; border-radius:20px; overflow:hidden;
+    .lp-inner { position:relative; z-index:2; margin:20px 14px; padding:24px 16px 22px; border-radius:20px; overflow:hidden;
       background:var(--lp-card-bg, var(--lp-surface)); -webkit-backdrop-filter:blur(var(--lp-card-blur,0px)); backdrop-filter:blur(var(--lp-card-blur,0px));
       border:1px solid color-mix(in srgb, var(--lp-text,#000) 12%, transparent);
       box-shadow:var(--shadow-lg), 0 0 var(--lp-glow-card, 0px) color-mix(in srgb, var(--accent) 62%, transparent);
@@ -1838,6 +1963,7 @@ function Styles() {
     .lp-bio { font-size:var(--lp-bio-size, 15px); font-weight:var(--lp-bio-weight, 400); color:color-mix(in srgb, var(--lp-text, #5b574e) 75%, transparent); margin-top:10px; max-width:34ch; line-height:1.5;
       filter:drop-shadow(0 0 var(--lp-bio-glow, 0px) color-mix(in srgb, var(--accent) 70%, transparent)); }
     .lp-socials { display:flex; gap:8px; justify-content:center; margin-top:14px; color:var(--lp-text, #5b574e) }
+    .lp-social svg { width:var(--lp-icon-size, 20px); height:var(--lp-icon-size, 20px); }
     .lp-social { display:inline-flex; align-items:center; justify-content:center; padding:3px; color:var(--lp-text, #1a1916);
       filter:
         drop-shadow(0 0 calc(var(--lp-icon-glow, 6px) * 0.3) color-mix(in srgb, var(--accent) 90%, transparent))
@@ -1847,9 +1973,9 @@ function Styles() {
     .lp-ghost { border-color:transparent; box-shadow:none; }
     /* Featured sits between the profile card and the products, inset to the
        same gutter as both. */
-    .lp-featured { margin:16px 14px 0; }
+    .lp-featured { position:relative; z-index:2; margin:16px 14px 0; padding-inline:16px; }
     .lp-featured .lpb:first-child { margin-top:0; }
-    .lp-list { display:flex; flex-direction:column; gap:11px; margin:14px 14px 20px; }
+    .lp-list { position:relative; z-index:2; display:flex; flex-direction:column; gap:11px; margin:14px 14px 20px; padding-inline:16px; }
     .lp-glow-soft .lp-card { box-shadow:0 0 18px color-mix(in srgb, var(--accent) 45%, transparent); }
     .lp-glow-strong .lp-card { box-shadow:0 0 26px color-mix(in srgb, var(--accent) 70%, transparent), 0 0 44px color-mix(in srgb, var(--accent) 38%, transparent); }
     .lp-grid { display:grid; grid-template-columns:1fr 1fr; }
@@ -1861,8 +1987,8 @@ function Styles() {
     .lp-cover { width:52px; height:52px; flex-shrink:0; border-radius:11px; background:color-mix(in srgb, var(--lp-text,#000) 8%, transparent) center/cover no-repeat; }
     .lp-grid .lp-cover { width:100%; height:auto; aspect-ratio:16/10; }
     .lp-card-body { min-width:0; }
-    .lp-card-title { font-size:13.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .lp-price { font-size:13px; font-weight:800; margin-top:3px; }
+    .lp-card-title { font-size:13.5px; font-weight:700; color:var(--lp-item-fg, inherit); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .lp-price { font-size:13px; font-weight:800; margin-top:3px; color:var(--lp-item-fg, inherit); }
     /* Display-name effects mirror (matches Storefront .sf-fx-*) */
     .lp-fx-gradient .lp-name, .lp-fx-rainbow .lp-name, .lp-fx-shimmer .lp-name { color:transparent; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
     .lp-fx-gradient .lp-name { background-image:linear-gradient(92deg, var(--accent), color-mix(in srgb, var(--accent) 45%, #fff)); }
@@ -1895,13 +2021,22 @@ function Styles() {
     .lpb-size-large .lpb-label { font-size:11.5px; }
     .lpb-classic .lpb-cta { padding:6px 9px; }
     .lpb-featured { margin-top:14px; }
-    .lpb-title { display:block; font-size:12.5px; font-weight:800; text-align:left;
+    .lpb { display:flex; flex-direction:column; }
+    .lpb-headtext { display:flex; flex-direction:column; gap:1px; margin-bottom:6px; }
+    .lpb-title-bar .lpb-headtext { padding:6px 9px; border-radius:7px;
+      background:color-mix(in srgb, var(--lpb-head, var(--lp-text, #000)) 12%, transparent);
+      border:1px solid color-mix(in srgb, var(--lpb-head, var(--lp-text, #000)) 20%, transparent); }
+    .lpb-talign-left .lpb-headtext { align-self:flex-start; text-align:left; }
+    .lpb-talign-center .lpb-headtext { align-self:center; text-align:center; }
+    .lpb-talign-right .lpb-headtext { align-self:flex-end; text-align:right; }
+    .lpb-title { display:block; font-size:12.5px; font-weight:800; text-align:inherit;
       color:var(--lpb-head, var(--lp-text, inherit)); margin-bottom:2px; }
     .lpb-sub { display:block; font-size:11px; text-align:left; opacity:.75;
       color:var(--lpb-head, var(--lp-text, inherit)); margin-bottom:6px; }
     .lpb-items { display:flex; flex-direction:column; gap:8px; }
     .lpb-item { display:flex; flex-direction:column; align-items:stretch; gap:0; padding:9px 10px;
       border-radius:var(--lpb-shape, var(--lp-link-radius, 999px));
+      padding-inline:var(--lpb-xpad, 11px);
       font-size:11.5px; font-weight:700; overflow:hidden;
       background:var(--lpb-bg, var(--lp-link-bg, color-mix(in srgb, var(--accent) 12%, var(--lp-item-bg, transparent))));
       color:var(--lpb-fg, var(--lp-link-fg, var(--lp-text, inherit)));
@@ -1910,7 +2045,9 @@ function Styles() {
       box-shadow:0 0 var(--lp-glow-links, 0px) color-mix(in srgb, var(--accent) 78%, transparent); }
     .lpb-main { display:flex; align-items:center; gap:8px; width:100%; min-width:0; }
     .lpb-txt { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
-    .lpb-label { font-size:11px; font-weight:800; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .lpb-label { font-size:11px; font-weight:800; line-height:1.3;
+      display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden;
+      -webkit-line-clamp:2; line-clamp:2; overflow-wrap:anywhere; }
     .lpb-desc { font-size:10.5px; line-height:1.45; opacity:.72; font-weight:500;
       display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden;
       -webkit-line-clamp:2; line-clamp:2; }
@@ -1918,11 +2055,13 @@ function Styles() {
       border-radius:calc(var(--lpb-shape, var(--lp-link-radius, 999px)) * 0.6);
       font-size:10px; font-weight:800; letter-spacing:.05em; text-transform:uppercase;
       text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-      background:color-mix(in srgb, var(--lpb-fg, var(--lp-link-fg, var(--accent))) 88%, black);
-      color:#fff; }
+      background:var(--lpb-cta-bg, var(--lp-cta-bg,
+        color-mix(in srgb, var(--lpb-fg, var(--lp-link-fg, var(--accent))) 88%, black)));
+      color:var(--lpb-cta-fg, var(--lp-cta-fg, #fff)); }
     .lpb-thumb { flex-shrink:0; width:var(--lpb-thumb, 35px); height:var(--lpb-thumb, 35px); border-radius:5px;
       background:var(--lp-surface) center/cover no-repeat; }
     /* Style variants — the same four shapes the Layouts tab offers. */
+    .lpb-classic .lpb-label { -webkit-line-clamp:1; line-clamp:1; }
     .lpb-classic .lpb-thumb { width:calc(var(--lpb-thumb, 35px) * 0.9); height:calc(var(--lpb-thumb, 35px) * 0.9); border-radius:50%; }
     .lpb-grid .lpb-items { display:grid; grid-template-columns:repeat(var(--lpb-cols, 2), minmax(0,1fr)); gap:6px; }
     .lpb-grid .lpb-item, .lpb-carousel .lpb-item { text-align:center; border-radius:10px; padding:8px; }
