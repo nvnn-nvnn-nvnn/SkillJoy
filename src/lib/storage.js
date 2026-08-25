@@ -51,7 +51,7 @@ export async function uploadLinkThumb(creatorId, file) {
 export async function uploadBgVideo(creatorId, file) {
   const path = safePath(creatorId, 'bgvideo', file.name);
   const { error } = await supabase.storage.from(COVERS)
-    .upload(path, file, { cacheControl: '3600', upsert: false });
+    .upload(path, file, { cacheControl: '31536000', upsert: false });
   if (error) throw error;
   const { data } = supabase.storage.from(COVERS).getPublicUrl(path);
   return data.publicUrl;

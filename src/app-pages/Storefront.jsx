@@ -128,6 +128,41 @@ export default function Storefront() {
     return () => { alive = false; };
   }, [username]);
 
+  // Autoplay can be refused for reasons no feature check can see — iOS Low
+  // Power Mode being the big one. When that happens the element just sits on
+  // its poster, which looks identical to "the video is broken".
+  //
+  // A user gesture lifts the restriction, so: try to play, and if the promise
+  // rejects, arm one-shot listeners that try again on the first interaction.
+  // Listeners are { once: true } and removed on cleanup, so a page where
+  // autoplay worked never carries them.
+  const bgVideoRef = useRef(null);
+  useEffect(() => {
+    const el = bgVideoRef.current;
+    // Null whenever the video is not rendered — a non-video background, or a
+    // device the gate refused. Nothing to start in either case.
+    if (!el) return;
+    let retry = null;
+
+    const tryPlay = () => el.play().catch(() => {
+      if (retry) return;
+      retry = () => { el.play().catch(() => {}); };
+      // pointerdown covers touch and mouse; scroll and keydown catch the
+      // people who never tap anything.
+      for (const ev of ['pointerdown', 'touchstart', 'scroll', 'keydown']) {
+        window.addEventListener(ev, retry, { once: true, passive: true });
+      }
+    });
+
+    tryPlay();
+    return () => {
+      if (!retry) return;
+      for (const ev of ['pointerdown', 'touchstart', 'scroll', 'keydown']) {
+        window.removeEventListener(ev, retry);
+      }
+    };
+  }, [theme.bg, theme.bg_video, theme.bg_video_mobile]);
+
   // Dead-centered in the visible area, and it renders StoreStyles — the old
   // version shipped neither, so it was a bare left-aligned line of text at the
   // top of the page with none of the storefront CSS even loaded.
@@ -314,10 +349,11 @@ export default function Storefront() {
       )}
       {hasBgVideo && (
         <video
+          ref={bgVideoRef}
           className="sf-bgvideo"
           src={theme.bg_video}
           poster={theme.bg_image || undefined}
-          preload="metadata"
+          preload="auto"
           autoPlay muted loop playsInline
           aria-hidden="true"
           style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: -1 }}
