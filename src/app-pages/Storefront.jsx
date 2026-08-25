@@ -461,8 +461,11 @@ export default function Storefront() {
                     src={v.src}
                     title={`Video ${i + 1}`}
                     loading="lazy"
-                    sandbox="allow-scripts allow-popups allow-presentation"
-                    allow="accelerometer; encrypted-media; picture-in-picture; fullscreen"
+                    // NO sandbox — see the note above. Without allow-same-origin the
+                    // player gets an opaque origin and cannot reach its own cookies or
+                    // storage, so it fails to play; with it, the attribute buys nothing
+                    // a cross-origin frame does not already give us.
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                     referrerPolicy="strict-origin-when-cross-origin"
                     allowFullScreen
                   />

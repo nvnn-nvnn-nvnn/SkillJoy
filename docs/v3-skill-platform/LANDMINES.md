@@ -516,3 +516,47 @@ videos    live=1  preview=1
 
 **After any move-don't-rewrite refactor, grep for the moved markers and assert
 the count.** Duplicate renders look fine and clash on React keys.
+
+---
+
+## 24 · Do not sandbox a cross-origin embed
+
+A `sandbox` without `allow-same-origin` gives the iframe a **unique opaque
+origin** — which isolates the frame from ITSELF, not just from you. YouTube and
+TikTok players need their own cookies, their own localStorage and same-origin
+calls to their own API; an opaque origin denies all three and the player fails,
+usually showing nothing at all.
+
+**A cross-origin iframe is already fully isolated by the same-origin policy.**
+It cannot read your DOM, cookies or storage, sandbox or no sandbox.
+`allow-same-origin` restores the frame's access to ITS OWN origin, never yours —
+so on a third-party embed the attribute buys no protection and removes
+capabilities the embed needs. YouTube's own published snippet ships no sandbox.
+
+`sandbox` is for frames you would otherwise trust: same-origin, `srcdoc`, or
+user-supplied HTML.
+
+**What actually restricts an embed:** `allow="…"` is a permissions policy where
+anything unlisted is denied — that is the real control. Plus `referrerPolicy`
+and `loading="lazy"`.
+
+**It builds and lints cleanly.** The failure only appears when a real player
+initialises, so an embed has to be loaded, not just compiled. (Note 192
+addendum.)
+
+---
+
+## 25 · Check which mechanism the threat needs
+
+Three times now a DEFENSIVE measure caused the problem instead of preventing
+one:
+
+- §188 — a blanket ban on preset background images: right reason, wrong scope,
+  blocking the legitimate case with the illegitimate
+- §191 — auto sign-in genuinely WAS an account takeover; the fix was a narrow
+  gate, not abandoning the feature
+- §192 — a sandbox that protected nothing and disabled everything
+
+The pattern: a real threat is identified, then a countermeasure is applied
+without checking **which specific mechanism** the threat actually requires.
+Ask what the attacker needs, and block that — not the nearest available switch.

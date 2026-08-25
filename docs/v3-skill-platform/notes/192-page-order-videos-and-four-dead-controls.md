@@ -168,9 +168,10 @@ what people actually paste. `toEmbed` still exists unchanged for old callers.
 renderer slices anyway. The editor is a courtesy; the renderer is the guarantee,
 because a theme can arrive by import or template and never touch the editor.
 
-**`allow-same-origin` is deliberately absent** from the iframe sandbox. These
-are third-party frames and have no business reading anything of ours. Plus
-`loading="lazy"` and a strict referrer policy.
+**~~`allow-same-origin` is deliberately absent from the iframe sandbox.~~**
+This was wrong and broke every embed — see the addendum at the end. The frames
+carry no sandbox now; `allow="…"` is the real restriction, plus `loading="lazy"`
+and a strict referrer policy.
 
 **The preview shows a placeholder, not a live player.** Two third-party embeds
 inside a 300px frame that re-renders on every slider drag would be slow, and
@@ -506,3 +507,91 @@ negative margins whose only job is to cancel it:
 Note 186 identified these as duplicated constants and left them. Changing the
 padding used to misalign the banner and the full-width links by a few pixels,
 with no error anywhere.
+
+---
+
+# Addendum — the sandbox that broke every embed
+
+Reported an hour after shipping §3: **video not playing.** Cause was mine, from
+the same change.
+
+```jsx
+sandbox="allow-scripts allow-popups allow-presentation"   // ← no allow-same-origin
+```
+
+## What actually happens
+
+A sandboxed iframe **without `allow-same-origin` is assigned a unique opaque
+origin**. The wording matters: the frame is not merely isolated *from us*, it is
+isolated **from itself**. Its own origin is replaced with one that matches
+nothing.
+
+YouTube and TikTok players need three things that an opaque origin denies:
+
+- their own cookies (playback state, consent, age gates)
+- their own `localStorage`
+- same-origin requests back to their own API
+
+So the player initialises, fails, and in most cases shows nothing rather than an
+error. Which is why it read as "not playing" rather than "broken".
+
+## Why I added it, and why that reasoning was wrong
+
+The comment I wrote at the time:
+
+> `allow-same-origin` is deliberately ABSENT: these are third-party frames and
+> they have no business reading anything of ours.
+
+The claim is true. The conclusion does not follow.
+
+**A cross-origin iframe cannot read our DOM, cookies or storage regardless of
+the sandbox attribute.** The browser's same-origin policy already guarantees
+that, and it is not something `sandbox` adds. What `allow-same-origin` restores
+is the frame's access to **its own** origin — `youtube.com` reaching
+`youtube.com` — never ours.
+
+So the attribute was buying **no protection at all** while costing the entire
+feature. The security instinct was right; the mechanism was misunderstood.
+
+> **Transferable:** `sandbox` is for frames you would otherwise trust — a
+> same-origin frame, a `srcdoc`, user-supplied HTML. On a cross-origin embed the
+> isolation is already there, and the attribute mostly just removes capabilities
+> the embed needs. YouTube's own published snippet ships no sandbox.
+
+## What restricts these frames now
+
+| attribute | what it actually does |
+|---|---|
+| `allow="…"` | a **permissions policy** — anything *not* listed is denied, so camera, microphone and geolocation are unavailable to the embed. This is the real control. |
+| `referrerPolicy="strict-origin-when-cross-origin"` | the embed learns our origin, never the full page URL |
+| `loading="lazy"` | costs nothing until scrolled to |
+
+The `allow` list also widened — `autoplay`, `gyroscope` and `clipboard-write`
+are all used by TikTok's player, and omitting them silently degrades it.
+
+## The general shape of this mistake
+
+It is the third time in these notes that a **defensive** measure caused the
+outage rather than preventing one:
+
+- note 188 §1 — a blanket ban on `bg: 'image'` in presets, right reason, wrong
+  scope, blocking the legitimate case along with the illegitimate one
+- note 191 §3 — auto sign-in *would* have been an account takeover, and the
+  correct fix was a narrow gate rather than abandoning the feature
+- here — a sandbox that protected nothing and disabled everything
+
+The pattern: a real threat is identified, and the countermeasure is applied
+without checking **which specific mechanism** the threat actually needs. Two of
+the three were caught before shipping. This one was not, because it built
+cleanly, linted cleanly, and the failure is invisible until a real player tries
+to initialise.
+
+> **Testing note:** an embed you cannot exercise locally is one you have to
+> load. A build passing tells you the JSX is valid, not that the frame works.
+
+## Exercise
+
+7. **Reproduce it.** Put the sandbox back and open a page with a YouTube embed.
+   Then add `allow-same-origin` alone and reload. Explain, in terms of origins,
+   why the second version works — and then say what the sandbox is now
+   preventing that the same-origin policy was not already preventing.
