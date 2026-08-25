@@ -885,7 +885,7 @@ export default function StorefrontEditor() {
                     <Toggle on={theme.bg_video_mobile !== false}
                       onChange={v => set({ bg_video_mobile: v })}
                       label="Play it on phones too"
-                      hint="Off shows the still image instead on small touch screens" />
+                      hint="On by default. Turn off to serve the still image on small touch screens instead" />
                     <p className="std-note std-xref">
                       <strong>Always set a background image below.</strong> It is the poster, and
                       it is what shows while the video loads — and instead of it on iOS

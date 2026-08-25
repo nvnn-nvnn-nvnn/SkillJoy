@@ -133,7 +133,17 @@ export const DEFAULT_THEME = {
   bg_color2: '#FDEBE6',     // gradient end
   bg_image: '',             // full-page background image url
   bg_video: '',             // full-page background video url (bg === 'video')
-  // Play the background video on phones too.
+  // Play the background video on phones too. ON by default.
+  //
+  // Phones are where the cost is highest and the payoff lowest: it is a
+  // background, behind a card, on a six-inch screen, often over cellular. iOS
+  // Low Power Mode also blocks autoplay outright with no API to detect it, so
+  // a share of phones would show the poster regardless and the rest pay for a
+  // file they barely see.
+  //
+  // It is a SETTING rather than a rule because some pages are worth the bytes,
+  // and that is the creator's call — but the default should be the one that is
+  // right more often.
   //
   // This was hardcoded OFF, which was the wrong call to make on a creator's
   // behalf: plenty of phones play it fine, and turning it off for all of them

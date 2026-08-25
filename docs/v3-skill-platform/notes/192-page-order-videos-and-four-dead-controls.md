@@ -233,7 +233,8 @@ multi-megabyte file over cellular is expensive — but the call was not mine to
 make. Plenty of phones play it fine, and turning it off for all of them meant
 the feature did not exist for most visitors.
 
-`bg_video_mobile`, **default on**. The split:
+`bg_video_mobile`, **default on** (it moved on/off/on before settling — see
+addendum 2). The split:
 
 - **The creator's call** — whether phones get video at all
 - **The visitor's call** — `prefers-reduced-motion`, Save-Data, 2G. Explicit
@@ -595,3 +596,98 @@ to initialise.
    Then add `allow-same-origin` alone and reload. Explain, in terms of origins,
    why the second version works — and then say what the sandbox is now
    preventing that the same-origin policy was not already preventing.
+
+---
+
+# Addendum 2 — the default I changed three times
+
+Background video on phones, across about two hours:
+
+| # | State | Prompted by |
+|---|---|---|
+| 1 | hardcoded **off** | my own call, note 189 §7 |
+| 2 | setting, default **on** | "the mp4s won't even load in the background on mobile" |
+| 3 | setting, default **off** | "background videos are showing on mobile devices, fix this" |
+| 4 | setting, default **on** | "no no i need them on" |
+
+Steps 2, 3 and 4 all edited the same constant.
+
+## What I got right, and what I kept getting wrong
+
+Step 2 was the correct structural move. Hardcoding it off encoded a *preference*
+as a *rule*, and the rule was mine to hold rather than the creator's. Turning it
+into `bg_video_mobile` was right and is why steps 3 and 4 were one-line changes
+instead of refactors.
+
+What I got wrong is that I treated **which way a default points** as though it
+were the same size of decision as **whether the setting exists**. It is not,
+and the difference is worth stating precisely:
+
+- *Does the control exist* is architecture. Getting it wrong means a feature is
+  unreachable, and fixing it later means touching every consumer.
+- *Which way it points* is a preference. Getting it wrong means one line, and
+  the person who should decide it already has the toggle in front of them.
+
+The first deserves the reasoning I gave it. The second deserved a question, or
+simply doing what was asked and moving on. Instead each flip came with a
+paragraph justifying the new direction — which is noise when the owner of the
+product is standing right there and can see it on their own phone.
+
+> **Transferable:** once you have built the switch, stop arguing about its
+> position. The switch is the deliverable. Its default is a one-line preference
+> belonging to whoever owns the product, and defending it costs more than
+> flipping it.
+
+## The one part that is not a preference
+
+Three conditions ignore `bg_video_mobile` entirely and always show the poster:
+
+- `prefers-reduced-motion: reduce`
+- `navigator.connection.saveData`
+- `effectiveType` of `slow-2g` / `2g`
+
+The first two are settings the **visitor** chose on their own device. A creator
+preference does not get to override those, and that boundary is the reason the
+gate reads them unconditionally before it looks at the theme at all:
+
+```js
+// Visitor's explicit choices — never overridable.
+if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return false;
+if (navigator.connection?.saveData) return false;
+if (['slow-2g','2g'].includes(navigator.connection?.effectiveType)) return false;
+
+// Creator's choice, checked only after.
+if (theme?.bg_video_mobile === false) { /* phone check */ }
+```
+
+2G is the odd one out — not a preference, but the case where the video reliably
+never finishes loading, so the poster is strictly better than a stall.
+
+**Which is why `bg_image` matters more than the toggle does.** It is the poster:
+what shows during load, and instead of the video in all three cases above.
+Without one, those visitors get a flat colour. That is a real slice of an
+audience, and no setting reaches them.
+
+## The default-flipping detail worth keeping
+
+Each flip also moved the comparison, not just the constant:
+
+```js
+if (theme?.bg_video_mobile === false)   // default ON  — unset means play
+if (theme?.bg_video_mobile !== true)    // default OFF — unset means poster
+```
+
+Both readings have to agree with `DEFAULT_THEME`, or an unset key and a fresh
+theme give different answers. Changing the constant without changing the
+comparison — or the reverse — produces a default that depends on whether someone
+has ever opened the editor, which is close to unreproducible as a bug report.
+
+> **Transferable:** a boolean default lives in two places — the default object
+> and every `=== false` / `!== true` that reads it. Flip both, or neither.
+
+## Exercise
+
+8. **Break the pairing.** Set `bg_video_mobile: false` in `DEFAULT_THEME` but
+   leave the check as `=== false`. Describe what a creator sees before and after
+   they first open the editor and save. Then write the rule that would have
+   caught it — is it a test, a comment, or a different way of storing defaults?

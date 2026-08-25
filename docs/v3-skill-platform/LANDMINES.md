@@ -560,3 +560,38 @@ one:
 The pattern: a real threat is identified, then a countermeasure is applied
 without checking **which specific mechanism** the threat actually requires.
 Ask what the attacker needs, and block that — not the nearest available switch.
+
+---
+
+## 26 · A boolean default lives in TWO places
+
+```js
+if (theme?.bg_video_mobile === false)   // default ON  — unset means play
+if (theme?.bg_video_mobile !== true)    // default OFF — unset means poster
+```
+
+The constant in `DEFAULT_THEME` and every comparison that reads it must agree.
+Flip one without the other and the answer depends on whether the user has ever
+opened the editor and saved — which is close to unreproducible from a bug
+report. **Flip both, or neither.** (Note 192 addendum 2.)
+
+---
+
+## 27 · Once the switch exists, stop arguing about its position
+
+`bg_video_mobile` went hardcoded-off → setting-on → setting-off → setting-on in
+about two hours, each flip with a paragraph defending the new direction.
+
+Two different sizes of decision were being treated as one:
+
+- **whether the control exists** is architecture — get it wrong and a feature is
+  unreachable; fixing it later touches every consumer
+- **which way it points** is a preference — one line, and the product owner is
+  already looking at the toggle
+
+The first earns reasoning. The second earns a question, or just doing it.
+Defending a default costs more than flipping it.
+
+**The exception:** conditions the END USER set are not preferences and are not
+overridable — `prefers-reduced-motion`, Save-Data. Check those before any theme
+setting, unconditionally.

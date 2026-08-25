@@ -74,7 +74,9 @@ function shouldPlayBgVideo(theme) {
   // never finishes loading, so the poster is strictly better than a stall.
   if (c?.effectiveType && ['slow-2g', '2g'].includes(c.effectiveType)) return false;
 
-  // Creator's choice: phones, off only if they turned it off.
+  // Creator's choice: phones play it unless they explicitly turned it off.
+  // `=== false` rather than `!== true` so an unset key means ON — a theme saved
+  // before this key existed must land on the same answer as a fresh one.
   if (theme?.bg_video_mobile === false) {
     const narrow = window.matchMedia?.('(max-width: 820px)')?.matches;
     const coarse = window.matchMedia?.('(pointer: coarse)')?.matches;
