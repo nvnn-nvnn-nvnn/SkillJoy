@@ -466,3 +466,53 @@ call site.
 Found by reading a smoke-test row, not by reading the code. **When an upsert
 carries data you care about, verify the row afterwards** — and backfill only
 when the field is empty, so you never overwrite something the user set later.
+
+---
+
+## 21 · A colour set on a container is undone by any child that re-sets it
+
+`.sf-card` correctly read `--sf-item-fg`; `.sf-card-title` and `.sf-price` then
+hardcoded `var(--text)`. So the product text-colour control painted nothing but
+the card border, and had done since it shipped.
+
+**When a colour control does nothing, check the LEAF, not the root.** The
+variable, the emitter and the container were all correct — the two elements that
+actually show text were not listening. (Note 192 A.)
+
+Do not reach for `!important`: it fixes the symptom and hides the disagreement,
+so the next colour control fails the same way.
+
+---
+
+## 22 · Splitting one option into two is a data migration
+
+`glow_targets` had one `links` entry covering profile AND featured links.
+Splitting it meant every theme saved beforehand listed `links` but not
+`featured` — read naively, every existing storefront silently loses its featured
+glow, something no creator switched off.
+
+```js
+if (id === 'featured') return t.includes('featured') || t.includes('links');
+```
+
+**The old value has to keep meaning what it meant.** Same class of problem as a
+nullable column default: the rows that already exist are the hard part, not the
+ones you are about to write. (Note 192 D.)
+
+---
+
+## 23 · When you move JSX, count what renders
+
+Restructuring the storefront sections into an order-driven lookup left the
+ORIGINAL inline JSX in place underneath, so every section rendered twice. A
+glance at the page would have shown something plausible.
+
+Caught by counting class occurrences per renderer instead:
+
+```
+featured  live=1  preview=1
+videos    live=1  preview=1
+```
+
+**After any move-don't-rewrite refactor, grep for the moved markers and assert
+the count.** Duplicate renders look fine and clash on React keys.

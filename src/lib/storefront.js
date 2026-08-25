@@ -22,6 +22,37 @@ export const SITE_AUDIO_VOLUME = 0.85;
 // a better page. Enforced in the editor (StorefrontEditor) — the theme is a JSON
 // blob the client writes, so this is a guardrail on the creator's own page
 // rather than a security boundary.
+export const MAX_PROFILE_VIDEOS = 2;
+
+// The movable sections, in their default order.
+export const PAGE_SECTIONS = [
+  { id: 'featured', label: 'Featured links', blurb: 'The links you promoted out of your profile card.' },
+  { id: 'videos',   label: 'Videos',         blurb: 'Your embedded YouTube, Shorts, Vimeo or TikTok.' },
+  { id: 'products', label: 'Products',       blurb: 'Everything you sell, in its groups.' },
+  { id: 'email',    label: 'Email signup',   blurb: 'The subscribe box. Higher up converts better.' },
+];
+
+/**
+ * The saved order, repaired.
+ *
+ * Two failure modes this exists to prevent, both silent:
+ *
+ *   · a section added to PAGE_SECTIONS after someone saved their order would be
+ *     missing from their array and would simply never render for them
+ *   · a stale id left in a saved array (a section we removed) would be rendered
+ *     as nothing, or crash a lookup
+ *
+ * So: keep the saved ids that still exist, then append anything new. New
+ * sections land at the bottom, which is the safe default — they appear rather
+ * than vanish, and they do not displace what someone deliberately put on top.
+ */
+export function resolveSectionOrder(theme) {
+  const known = PAGE_SECTIONS.map(s => s.id);
+  const saved = Array.isArray(theme?.section_order) ? theme.section_order : [];
+  const kept = [...new Set(saved.filter(id => known.includes(id)))];
+  return [...kept, ...known.filter(id => !kept.includes(id))];
+}
+
 export const MAX_AUDIO_TRACKS = 4;
 
 export const DEFAULT_THEME = {
@@ -102,6 +133,19 @@ export const DEFAULT_THEME = {
   bg_color2: '#FDEBE6',     // gradient end
   bg_image: '',             // full-page background image url
   bg_video: '',             // full-page background video url (bg === 'video')
+  // Play the background video on phones too.
+  //
+  // This was hardcoded OFF, which was the wrong call to make on a creator's
+  // behalf: plenty of phones play it fine, and turning it off for all of them
+  // meant the feature simply did not exist for most visitors. The reasons for
+  // caution are real — iOS Low Power Mode blocks autoplay outright, and a
+  // multi-megabyte file over cellular is expensive — but they are a tradeoff
+  // the person who owns the page should be making, not a rule.
+  //
+  // What is NOT a setting: prefers-reduced-motion and Save-Data. Those are the
+  // VISITOR's own explicit choices about their own device, and a creator does
+  // not get to override them.
+  bg_video_mobile: true,
   button_style: 'rounded',  // 'rounded' | 'pill' | 'sharp'
   // ── Studio: glass + effects ──
   text_color: '',           // '' = palette default; else overrides body text
@@ -135,6 +179,20 @@ export const DEFAULT_THEME = {
   overlay: 'none',          // 'none'|'rain'|'snow'|'vhs'|'stars'|'particles'|'matrix' — full-page overlay
   audio_url: '',            // DEPRECATED single site-audio url — kept in sync w/ audio_tracks[0] for back-compat
   audio_tracks: [],         // [{ url, name }] — site music playlist; play/mute pill plays through it
+  // Embedded videos on the profile — YouTube, Shorts, Vimeo, TikTok.
+  // [{ url }], capped at MAX_PROFILE_VIDEOS. The cap is a product decision, not
+  // a technical one: each embed is a third-party iframe that loads its own
+  // scripts, and a page of them stops being a link-in-bio and starts being a
+  // feed nobody scrolls to the bottom of.
+  videos: [],
+  // Order of the movable page sections, top to bottom. The profile card is not
+  // in this list on purpose: it carries the avatar, name, bio and profile
+  // links, so it is the page's identity header rather than a section, and a
+  // page whose header is not first is a different product.
+  //
+  // Read through resolveSectionOrder, never directly — a saved array from
+  // before a new section existed must not make that section disappear.
+  section_order: ['featured', 'videos', 'products', 'email'],
   cursor_fx: 'none',        // 'none' | 'trail' | 'sparkle' — pointer particle effect
   cursor_fx_color: '',      // '' = follow accent; else a hex for the particles
   profile_fx: 'none',       // 'none' | 'glow' | 'float' — profile panel animation

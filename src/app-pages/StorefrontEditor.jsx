@@ -10,7 +10,8 @@ import {
 } from '@/lib/storefront';
 import { uploadBanner, uploadBgVideo, uploadAudio } from '@/lib/storage';
 import { validateUpload, LIMITS, formatBytes } from '@/lib/uploadLimits';
-import { MAX_AUDIO_TRACKS, GLOW_TARGETS, glowVars } from '@/lib/storefront';
+import { MAX_AUDIO_TRACKS, MAX_PROFILE_VIDEOS, GLOW_TARGETS, glowVars, PAGE_SECTIONS, resolveSectionOrder } from '@/lib/storefront';
+import { describeEmbed } from '@/lib/embed';
 import {
   Palette, Link2, Eye, ImagePlus, X, Plus, ChevronUp, ChevronDown,
   ExternalLink, Check, MousePointer2, Type, Video, Music, Wand2, SlidersHorizontal,
@@ -34,6 +35,43 @@ const SUBTAB_HEADS = { customize: 'Site Customization', themes: 'Templates', lin
 
 // ── Theme-card helpers ───────────────────────────────────────────────────────
 // Paint a preset's ACTUAL background so the card previews the look, not an emoji.
+// Two colour rows for a CTA button — fill and text. Extracted because the same
+// pair now appears in both the Profile links and Featured links panels, and a
+// fifth copy of the same twelve lines is how they drift.
+function CtaColors({ theme, set, prefix, fallbackFill }) {
+  const fillKey = prefix + 'cta_color';
+  const textKey = prefix + 'cta_text_color';
+  return (
+    <>
+      <Field label="Button fill">
+        <div className="std-colorrow">
+          <input type="color" value={theme[fillKey] || fallbackFill}
+            onChange={e => set({ [fillKey]: e.target.value })} />
+          <span>{theme[fillKey] || 'From link text colour'}</span>
+          {theme[fillKey] && (
+            <button className="std-removebtn" onClick={() => set({ [fillKey]: '' })}><X size={13} /> Reset</button>
+          )}
+        </div>
+      </Field>
+      <Field label="Button label">
+        <div className="std-colorrow">
+          <input type="color" value={theme[textKey] || '#ffffff'}
+            onChange={e => set({ [textKey]: e.target.value })} />
+          <span>{theme[textKey] || 'White'}</span>
+          {theme[textKey] && (
+            <button className="std-removebtn" onClick={() => set({ [textKey]: '' })}><X size={13} /> Reset</button>
+          )}
+        </div>
+        <p className="std-note">
+          The call-to-action button on a link — the one that says &ldquo;Book now&rdquo; or
+          &ldquo;Claim&rdquo;. It used to be derived from the link text colour, so changing
+          one repainted the other. A single block can still override this in Links &rarr; Layouts.
+        </p>
+      </Field>
+    </>
+  );
+}
+
 function swatchStyle(t) {
   // Scenic presets ARE their background, so a swatch that painted a flat colour
   // would show every one of them as the same grey tile.
@@ -236,6 +274,11 @@ function LivePreview({ theme, name, handle, avatar, bio, location, socials, skil
   const featuredGroups = groupsFor('featured');
   // Links predating blocks still render, as plain profile buttons.
   const orphanLinks = withUrl.filter(l => !l.block_id);
+  // Shape and count only — see the note at the render site.
+  const previewVideos = (Array.isArray(theme.videos) ? theme.videos : [])
+    .slice(0, MAX_PROFILE_VIDEOS)
+    .map(v => describeEmbed(v?.url))
+    .filter(Boolean);
   if (orphanLinks.length) profileGroups.push({ block: { id: '__none__', layout: {} }, items: orphanLinks });
   // Same static approximation as the editor swatch. The preview frame is small
   // and always on screen while you scrub sliders; eight animated layers there
@@ -326,23 +369,41 @@ function LivePreview({ theme, name, handle, avatar, bio, location, socials, skil
       </div>
       {/* FEATURED links — outside the card, above products, matching the live
           page's ordering so the preview doesn't imply a different layout. */}
-      {featuredGroups.length > 0 && (
-        <div className="lp-featured" style={lpFeaturedVars(theme)}>
-          {featuredGroups.map(g => (
-            <PreviewLinkGroup key={g.block.id} block={g.block} items={g.items} featured />
-          ))}
-        </div>
-      )}
+      {resolveSectionOrder(theme).map(id => ({
+        featured: featuredGroups.length > 0 && (
+          <div key="featured" className="lp-featured" style={lpFeaturedVars(theme)}>
+            {featuredGroups.map(g => (
+              <PreviewLinkGroup key={g.block.id} block={g.block} items={g.items} featured />
+            ))}
+          </div>
+        ),
+        videos: previewVideos.length > 0 && (
+          <div key="videos" className="lp-videos">
+            {previewVideos.map((v, i) => (
+              <div key={i} className={`lp-video${v.vertical ? ' lp-video-tall' : ''}`}>
+                <Video size={16} />
+                <span>{v.kind}</span>
+              </div>
+            ))}
+          </div>
+        ),
+        products: (
+          <div key="products" className={`lp-list${theme.layout === 'grid' ? ' lp-grid' : ''}`}>
+            {shown.length === 0 && <div className="lp-card lp-empty">Your products appear here</div>}
+            {shown.map(s => (
+              <div key={s.id} className="lp-card">
+                <div className="lp-cover" style={s.cover_url ? { backgroundImage: `url(${s.cover_url})` } : {}} />
+                <div className="lp-card-body">
+                  <div className="lp-card-title">{s.title || 'Untitled'}</div>
+                  <div className="lp-price">{s.price_cents ? `${(s.price_cents / 100).toFixed(2)}` : 'Free'}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ),
+        email: <div key="email" className="lp-email">Email signup</div>,
+      }[id] || null))}
 
-      <div className={`lp-list${theme.layout === 'grid' ? ' lp-grid' : ''}`}>
-          {shown.length === 0 && <div className="lp-card lp-empty">Your products appear here</div>}
-          {shown.map(s => (
-            <div key={s.id} className="lp-card">
-              <div className="lp-cover" style={s.cover_url ? { backgroundImage: `url(${s.cover_url})` } : {}} />
-              <div className="lp-card-body"><div className="lp-card-title">{s.title || 'Untitled'}</div><div className="lp-price">{s.price_cents ? `$${(s.price_cents / 100).toFixed(2)}` : 'Free'}</div></div>
-            </div>
-          ))}
-        </div>
     </div>
   );
 }
@@ -513,6 +574,19 @@ export default function StorefrontEditor() {
   function applyPreset(p) { setTheme(t => ({ ...t, ...p.theme })); setErr(''); }
 
   const isAdmin = user?.email === ADMIN_EMAIL;
+
+  // Move one section up or down. Writes the FULL resolved order rather than
+  // patching the saved array, so a theme that was missing a section (saved
+  // before it existed) is repaired the first time anything is moved.
+  function moveSection(id, dir) {
+    const order = resolveSectionOrder(theme);
+    const i = order.indexOf(id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= order.length) return;
+    const next = [...order];
+    [next[i], next[j]] = [next[j], next[i]];
+    set({ section_order: next });
+  }
 
   // Blocks whose own layout.shape shadows the page-level link_shape. '' means
   // inherit — what a block should carry unless someone deliberately overrode it.
@@ -808,12 +882,17 @@ export default function StorefrontEditor() {
                       <span>{savingBgVideo ? 'Uploading…' : <><Video size={15} /> {theme.bg_video ? 'Change video' : 'Upload video'}</>}</span>
                     </label>
                     <p className="std-note">Max {formatBytes(LIMITS.bgVideo.max)} — keep it well under that.</p>
+                    <Toggle on={theme.bg_video_mobile !== false}
+                      onChange={v => set({ bg_video_mobile: v })}
+                      label="Play it on phones too"
+                      hint="Off shows the still image instead on small touch screens" />
                     <p className="std-note std-xref">
-                      <strong>Phones get the still image, not the video.</strong> iOS Low Power Mode
-                      blocks autoplay outright, and a multi-megabyte file over cellular stalls or
-                      eats someone's data — so it's skipped on small touch screens, on
-                      Data&nbsp;Saver, and on slow connections. Set a <em>background image</em> below:
-                      it's the poster, and it's what most of your visitors will actually see.
+                      <strong>Always set a background image below.</strong> It is the poster, and
+                      it is what shows while the video loads — and instead of it on iOS
+                      Low&nbsp;Power&nbsp;Mode, on Data&nbsp;Saver, on 2G, and for anyone using
+                      Reduce&nbsp;Motion. Those are the visitor&rsquo;s own settings and cannot be
+                      overridden, so a video with no poster is a blank background for a real
+                      share of your audience.
                     </p>
                     {theme.bg_video && <button className="std-removebtn" onClick={() => set({ bg_video: '' })}><X size={13} /> Remove video</button>}
                   </>
@@ -844,6 +923,60 @@ export default function StorefrontEditor() {
               </Panel>
 
               {/* ── GENERAL — ambiance: background effects, music, cursor, glow ── */}
+              {/* ── Embedded videos ──
+                  Capped at MAX_PROFILE_VIDEOS. Each embed is a third-party
+                  iframe that loads its own scripts, so this is a page-weight
+                  decision as much as a design one — and past two, a link-in-bio
+                  turns into a feed nobody reaches the end of. */}
+              <Panel icon={Video} title="Videos">
+                <p className="std-panel-lede">
+                  Show a YouTube, Shorts, Vimeo or TikTok video on your page. Up to {MAX_PROFILE_VIDEOS}.
+                </p>
+                {(theme.videos || []).map((v, i) => {
+                  const parsed = describeEmbed(v?.url);
+                  return (
+                    <Field key={i} label={`Video ${i + 1}`}>
+                      <div className="std-vidrow">
+                        <input value={v?.url ?? ''} spellCheck={false}
+                          placeholder="Paste a video link"
+                          onChange={e => {
+                            const next = [...(theme.videos || [])];
+                            next[i] = { url: e.target.value };
+                            set({ videos: next });
+                          }} />
+                        <button className="std-removebtn" title="Remove"
+                          onClick={() => set({ videos: (theme.videos || []).filter((_, j) => j !== i) })}>
+                          <X size={13} />
+                        </button>
+                      </div>
+                      {/* Says what it recognised, immediately. A link that
+                          silently does not embed is the failure mode here, and
+                          it would otherwise only show up on the live page. */}
+                      {v?.url?.trim() && (
+                        parsed
+                          ? <p className="std-note std-vidok">
+                              Recognised: {parsed.kind} · {parsed.vertical ? 'vertical (9:16)' : 'widescreen (16:9)'}
+                            </p>
+                          : <p className="std-note std-viderr">
+                              Not a video link we can embed. Works with youtube.com, youtu.be,
+                              YouTube Shorts, vimeo.com and tiktok.com.
+                            </p>
+                      )}
+                    </Field>
+                  );
+                })}
+                {(theme.videos || []).length < MAX_PROFILE_VIDEOS ? (
+                  <button className="std-addbtn" onClick={() => set({ videos: [...(theme.videos || []), { url: '' }] })}>
+                    <Plus size={15} /> Add a video
+                  </button>
+                ) : (
+                  <p className="std-note">
+                    That is the limit of {MAX_PROFILE_VIDEOS}. Remove one to add another —
+                    every embed loads its own player, so more of them makes your page slower to open.
+                  </p>
+                )}
+              </Panel>
+
               <Panel icon={Sparkles} title="General">
                 <Toggle on={!!theme.splash_enabled} onChange={v => set({ splash_enabled: v })} label="Click-to-enter splash" hint="A gate before your page — also lets your music autoplay" />
                 {theme.splash_enabled && (
@@ -1040,6 +1173,7 @@ export default function StorefrontEditor() {
                   <Slider value={theme.link_blur ?? theme.card_blur ?? 0} min={0} max={24} suffix="px"
                     onChange={v => set({ link_blur: v })} />
                 </Field>
+                <CtaColors theme={theme} set={set} prefix="link_" fallbackFill={theme.link_text_color || theme.accent} />
                 <p className="std-note std-xref">
                   Glow lives in <strong>General &rarr; Glow effects</strong> above.
                   <em>Glow intensity</em> is the halo around the button; <em>Icon glow</em> is the bloom on its icon.
@@ -1095,6 +1229,8 @@ export default function StorefrontEditor() {
                   <Slider value={theme.featured_link_blur ?? theme.link_blur ?? theme.card_blur ?? 0}
                     min={0} max={24} suffix="px" onChange={v => set({ featured_link_blur: v })} />
                 </Field>
+                <CtaColors theme={theme} set={set} prefix="featured_link_"
+                  fallbackFill={theme.featured_link_text_color || theme.link_text_color || theme.accent} />
               </Panel>
 
               <Panel icon={LayoutGrid} title="Products">
@@ -1128,6 +1264,44 @@ export default function StorefrontEditor() {
                 <Field label="Product blur (glass)"><Slider value={theme.product_blur ?? 0} min={0} max={24} suffix="px" onChange={v => set({ product_blur: v })} /></Field>
                 <Toggle on={theme.show_group_headers !== false} onChange={v => set({ show_group_headers: v })} label="Section headers" hint="Titled dividers above each product group" />
                 <Toggle on={theme.show_type_badges !== false} onChange={v => set({ show_type_badges: v })} label="Product-type badges" hint="Course · Download · Coaching chips on cards" />
+              </Panel>
+
+              {/* ── Page order ──
+                  Up/down rather than drag: the same affordance the block list
+                  uses, it works on a phone, and it is keyboard-reachable
+                  without a drag-and-drop implementation behind it. */}
+              <Panel icon={SlidersHorizontal} title="Page order">
+                <p className="std-panel-lede">
+                  The order these appear down your page. Your profile card — picture, name, bio
+                  and profile links — always stays at the top.
+                </p>
+                <div className="std-secorder">
+                  {resolveSectionOrder(theme).map((id, i, arr) => {
+                    const sec = PAGE_SECTIONS.find(x => x.id === id);
+                    if (!sec) return null;
+                    return (
+                      <div key={id} className="std-secrow">
+                        <span className="std-secnum">{i + 1}</span>
+                        <span className="std-sectext">
+                          <span className="std-secname">{sec.label}</span>
+                          <span className="std-secblurb">{sec.blurb}</span>
+                        </span>
+                        <span className="std-secmove">
+                          <button disabled={i === 0} onClick={() => moveSection(id, -1)} aria-label={`Move ${sec.label} up`}>
+                            <ChevronUp size={15} />
+                          </button>
+                          <button disabled={i === arr.length - 1} onClick={() => moveSection(id, 1)} aria-label={`Move ${sec.label} down`}>
+                            <ChevronDown size={15} />
+                          </button>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="std-note">
+                  A section with nothing in it is skipped on your live page, so an empty
+                  one costs no space.
+                </p>
               </Panel>
 
               <Panel icon={SlidersHorizontal} title="Sections &amp; product order">
@@ -1736,6 +1910,27 @@ function Styles() {
     /* Multi-select chips. Checked state is carried by fill + a tick, not by
        fill alone — a colour-only difference at 3:1 is exactly the contrast
        problem this pass is fixing. */
+    .std-secorder { display:flex; flex-direction:column; gap:8px; }
+    .std-secrow { display:flex; align-items:center; gap:11px; padding:11px 12px;
+      border-radius:var(--r); border:1px solid var(--border); background:var(--surface); }
+    .std-secnum { flex-shrink:0; width:22px; height:22px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      background:var(--accent-light); color:var(--accent-hover);
+      font-size:11.5px; font-weight:800; }
+    .std-sectext { display:flex; flex-direction:column; gap:1px; flex:1; min-width:0; }
+    .std-secname { font-size:13.5px; font-weight:700; color:var(--text); }
+    .std-secblurb { font-size:11.5px; line-height:1.4; color:var(--text-secondary); }
+    .std-secmove { display:flex; flex-direction:column; gap:2px; flex-shrink:0; }
+    .std-secmove button { width:26px; height:20px; padding:0; display:flex;
+      align-items:center; justify-content:center; border-radius:5px;
+      border:1px solid var(--border); background:var(--surface-alt);
+      color:var(--text-secondary); cursor:pointer; }
+    .std-secmove button:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+    .std-secmove button:disabled { opacity:.32; cursor:default; }
+    .std-vidrow { display:flex; align-items:center; gap:8px; }
+    .std-vidrow input { flex:1; min-width:0; }
+    .std-vidok { color:var(--green); }
+    .std-viderr { color:var(--danger); }
     .std-chips { display:flex; flex-wrap:wrap; gap:7px; }
     .std-chip { display:inline-flex; align-items:center; gap:6px; padding:7px 13px;
       border-radius:var(--r-full); border:1.5px solid var(--border-strong);
@@ -1974,6 +2169,27 @@ function Styles() {
     /* Featured sits between the profile card and the products, inset to the
        same gutter as both. */
     .lp-featured { position:relative; z-index:2; margin:16px 14px 0; padding-inline:16px; }
+    /* A stand-in, not a live player: two third-party embeds inside a frame that
+       re-renders on every slider drag would be slow, and would start playing
+       audio while someone is picking colours. The SHAPE is what matters here —
+       it shows how much of the page the video will occupy. */
+    .lp-videos { position:relative; z-index:2; margin:14px 14px 0; padding-inline:16px;
+      display:flex; flex-direction:column; gap:9px; }
+    .lp-video { display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:4px; aspect-ratio:16 / 9; border-radius:10px;
+      background:color-mix(in srgb, var(--lp-text, #000) 10%, transparent);
+      border:1px solid color-mix(in srgb, var(--lp-text, #000) 18%, transparent);
+      color:var(--lp-text, inherit); opacity:.7; font-size:9.5px; font-weight:700;
+      text-transform:uppercase; letter-spacing:.05em; }
+    .lp-video-tall { aspect-ratio:9 / 16; max-height:190px; width:auto; margin-inline:auto; }
+    /* Stand-in for SubscribeForm — the preview needs its POSITION and rough
+       height, not a working form. */
+    .lp-email { position:relative; z-index:2; margin:14px 14px 0; padding:14px 16px;
+      border-radius:12px; text-align:center;
+      background:color-mix(in srgb, var(--accent) 12%, transparent);
+      border:1px dashed color-mix(in srgb, var(--accent) 40%, transparent);
+      color:var(--lp-text, inherit); font-size:10.5px; font-weight:700;
+      text-transform:uppercase; letter-spacing:.05em; opacity:.8; }
     .lp-featured .lpb:first-child { margin-top:0; }
     .lp-list { position:relative; z-index:2; display:flex; flex-direction:column; gap:11px; margin:14px 14px 20px; padding-inline:16px; }
     .lp-glow-soft .lp-card { box-shadow:0 0 18px color-mix(in srgb, var(--accent) 45%, transparent); }

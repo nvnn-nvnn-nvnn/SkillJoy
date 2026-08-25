@@ -16,7 +16,8 @@ import Seo from '@/components/Seo';
 import { injectPixels } from '@/lib/pixels';
 import { listBlocks } from '@/lib/blocks';
 import LinkBlock from '@/components/LinkBlock';
-import { GLOW_TARGETS, glowVars } from '@/lib/storefront';
+import { describeEmbed } from '@/lib/embed';
+import { GLOW_TARGETS, glowVars, MAX_PROFILE_VIDEOS, resolveSectionOrder } from '@/lib/storefront';
 
 // Phase 3/7 — public, mobile-first link-in-bio storefront at /@username, themed.
 // Page-level link shape as a raw radius, so it can reach LinkBlock through a
@@ -48,27 +49,37 @@ function featuredVars(theme) {
   return v;
 }
 
-// Should this device get the background video at all?
+// Should this device get the background video?
 //
-// Deliberately conservative — it answers "is video a good idea here", not "is
-// video technically possible here". A false negative costs a still image; a
-// false positive costs someone's data plan and shows a black rectangle.
+// Two kinds of "no" here, and the distinction is the whole design:
 //
-// Evaluated once at module scope, not per render: none of these inputs change
-// without a reload, and reading them in a render would run on every state
-// change for no benefit.
-function shouldPlayBgVideo() {
+//   THE CREATOR'S CALL — whether phones get video at all. Some pages are worth
+//   the bytes and some are not, and that is not a judgement this function
+//   should be making for them. Hence bg_video_mobile, default true.
+//
+//   THE VISITOR'S CALL — prefers-reduced-motion and Save-Data are explicit
+//   settings someone chose on their own device. No creator preference
+//   overrides those, so they are checked unconditionally.
+//
+// Either way the poster still paints (bgStyle covers bg === 'video'), so a
+// refusal costs a still image rather than a blank page.
+function shouldPlayBgVideo(theme) {
   if (typeof window === 'undefined') return false;
-  // Coarse pointer + narrow viewport is the honest definition of "phone" here.
-  // A tablet in landscape is fine; a phone is not.
-  const narrow = window.matchMedia?.('(max-width: 820px)')?.matches;
-  const coarse = window.matchMedia?.('(pointer: coarse)')?.matches;
-  if (narrow && coarse) return false;
-  // Respect the user's own settings before anything else.
+
+  // Visitor's explicit choices — never overridable.
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return false;
   const c = navigator.connection;
   if (c?.saveData) return false;
-  if (c?.effectiveType && ['slow-2g', '2g', '3g'].includes(c.effectiveType)) return false;
+  // 2g/3g is not a preference, but it is the case where the video reliably
+  // never finishes loading, so the poster is strictly better than a stall.
+  if (c?.effectiveType && ['slow-2g', '2g'].includes(c.effectiveType)) return false;
+
+  // Creator's choice: phones, off only if they turned it off.
+  if (theme?.bg_video_mobile === false) {
+    const narrow = window.matchMedia?.('(max-width: 820px)')?.matches;
+    const coarse = window.matchMedia?.('(pointer: coarse)')?.matches;
+    if (narrow && coarse) return false;
+  }
   return true;
 }
 
@@ -207,9 +218,15 @@ export default function Storefront() {
       ? { backgroundImage: `url(${theme.bg_image})`, backgroundSize: 'cover', backgroundPosition: 'center' } :
     undefined;
   const isAnimatedBg = theme.bg === 'animated';
+  // Unrecognised URLs resolve to null and are dropped rather than rendered as
+  // an empty frame — a broken embed looks like a broken page.
+  const videoEmbeds = (Array.isArray(theme.videos) ? theme.videos : [])
+    .slice(0, MAX_PROFILE_VIDEOS)
+    .map(v => describeEmbed(v?.url))
+    .filter(Boolean);
   // The poster (bg_image) is painted by bgStyle either way, so a device that
   // is refused the video still gets the intended look — just still.
-  const hasBgVideo = theme.bg === 'video' && !!theme.bg_video && shouldPlayBgVideo();
+  const hasBgVideo = theme.bg === 'video' && !!theme.bg_video && shouldPlayBgVideo(theme);
   const wrapClass = [
     'sf-wrap', `sf-mode-${theme.mode}`, `sf-btn-${theme.button_style}`,
     `sf-glow-${theme.product_glow || 'none'}`,
@@ -412,45 +429,85 @@ export default function Storefront() {
       </div>
       </div>
 
-      {/* FEATURED links — outside the profile card, ABOVE products, each still
-          rendered by its own block so it keeps that block's layout, colours and
-          title. This is the whole point of splitting them from products: a
-          featured link is a promoted LINK, not a product, and featuring one
-          shouldn't change how it looks. */}
-      {featuredBlocks.map(({ block, items }) => (
-        <div key={block.id} className="sf-featured" style={featuredVars(theme)}>
-          <LinkBlock block={block} links={items} />
-        </div>
-      ))}
+      {/* ── Page sections, in the creator's order ──
+          Each of these used to be inline in a fixed sequence. They are now a
+          lookup keyed by section id, rendered in the order resolveSectionOrder
+          returns — so "email signup above products" is a setting rather than a
+          code change.
 
-      {itemGroups.length > 0 && itemGroups.map((g, gi) => (
-        <div key={gi} className="sf-group">
-          {g.label && theme.show_group_headers !== false && (
-            <div className="sf-grouphead">
-              <h2 className="sf-grouptitle">{g.label}</h2>
-              <span className="sf-groupline" aria-hidden="true" />
-              {/* Counts products AND links — it describes the section, and a
-                  count that ignored links would under-report what's visible. */}
-              <span className="sf-groupcount">{g.items.length}</span>
+          The profile card above is deliberately NOT in here: it carries the
+          avatar, name, bio and profile links, so it is the page's identity
+          header rather than a section. */}
+      {resolveSectionOrder(theme).map(id => {
+        const section = {
+          // FEATURED links — outside the profile card, each rendered by its own
+          // block so it keeps that block's layout, colours and title.
+          featured: featuredBlocks.length > 0 && (
+            <div key="featured">
+              {featuredBlocks.map(({ block, items }) => (
+                <div key={block.id} className="sf-featured" style={featuredVars(theme)}>
+                  <LinkBlock block={block} links={items} />
+                </div>
+              ))}
             </div>
-          )}
-          <div className={`sf-list${theme.layout === 'grid' ? ' sf-grid' : ''}`}>
-            {/* The one branch. Everything above this line is source-agnostic —
-                grouping, ordering and counting never learn there are two tables.
-                Only the leaf knows. */}
-            {g.items.map(item => item.type === 'link'
-              ? <LinkCard key={`l:${item.data.id}`} link={item.data} theme={theme} />
-              : <ProductCard key={`s:${item.data.id}`} skill={item.data} handle={profile.username} theme={theme} />
-            )}
-          </div>
-        </div>
-      ))}
+          ),
 
-      {skills.length === 0 && links.length === 0 && (
-        <p className="sf-muted sf-center">Nothing here yet — check back soon.</p>
-      )}
+          // Embedded videos. Capped and shape-aware — see describeEmbed.
+          videos: videoEmbeds.length > 0 && (
+            <div key="videos" className="sf-videos">
+              {videoEmbeds.map((v, i) => (
+                <div key={i} className={`sf-video${v.vertical ? ' sf-video-tall' : ''}`}>
+                  <iframe
+                    src={v.src}
+                    title={`Video ${i + 1}`}
+                    loading="lazy"
+                    sandbox="allow-scripts allow-popups allow-presentation"
+                    allow="accelerometer; encrypted-media; picture-in-picture; fullscreen"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allowFullScreen
+                  />
+                </div>
+              ))}
+            </div>
+          ),
 
-      <SubscribeForm creatorId={profile.id} name={profile.full_name || `@${profile.username}`} />
+          products: (
+            <div key="products">
+              {itemGroups.length > 0 && itemGroups.map((g, gi) => (
+                <div key={gi} className="sf-group">
+                  {g.label && theme.show_group_headers !== false && (
+                    <div className="sf-grouphead">
+                      <h2 className="sf-grouptitle">{g.label}</h2>
+                      <span className="sf-groupline" aria-hidden="true" />
+                      {/* Counts products AND links — it describes the section, and a
+                          count that ignored links would under-report what's visible. */}
+                      <span className="sf-groupcount">{g.items.length}</span>
+                    </div>
+                  )}
+                  <div className={`sf-list${theme.layout === 'grid' ? ' sf-grid' : ''}`}>
+                    {/* The one branch. Everything above this line is source-agnostic —
+                        grouping, ordering and counting never learn there are two tables.
+                        Only the leaf knows. */}
+                    {g.items.map(item => item.type === 'link'
+                      ? <LinkCard key={`l:${item.data.id}`} link={item.data} theme={theme} />
+                      : <ProductCard key={`s:${item.data.id}`} skill={item.data} handle={profile.username} theme={theme} />
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {skills.length === 0 && links.length === 0 && (
+                <p className="sf-muted sf-center">Nothing here yet — check back soon.</p>
+              )}
+            </div>
+          ),
+
+          email: (
+            <SubscribeForm key="email" creatorId={profile.id} name={profile.full_name || `@${profile.username}`} />
+          ),
+        }[id];
+        return section || null;
+      })}
 
       <footer className="sf-foot">
         <Link to="/"><Sparkles size={12} /> Built on SkillJoy</Link>
@@ -1184,6 +1241,23 @@ function StoreStyles() {
        source for that number and the panel reads it too, so the two cannot drift
        apart again (they already had: note 186 addendum). */
     .sf-featured { margin-top:22px; padding-inline:var(--sf-panel-pad, 26px); }
+
+    /* ── Embedded videos ──
+       aspect-ratio rather than the padding-top hack: it is the whole reason
+       describeEmbed reports orientation, and it means a vertical TikTok is not
+       letterboxed into a wide black box. */
+    .sf-videos { margin-top:22px; padding-inline:var(--sf-panel-pad, 26px);
+      display:flex; flex-direction:column; gap:14px; }
+    .sf-video { position:relative; width:100%; aspect-ratio:16 / 9;
+      border-radius:var(--r-lg); overflow:hidden;
+      background:color-mix(in srgb, var(--text) 8%, transparent);
+      border:1px solid color-mix(in srgb, var(--border-strong) 45%, transparent);
+      box-shadow:0 0 var(--sf-glow-card, 0px) color-mix(in srgb, var(--accent) 40%, transparent); }
+    /* Vertical formats get a capped height so one TikTok cannot occupy an
+       entire phone screen and hide everything below it. */
+    .sf-video-tall { aspect-ratio:9 / 16; max-height:min(72vh, 620px);
+      margin-inline:auto; width:auto; max-width:100%; aspect-ratio:9 / 16; }
+    .sf-video iframe { position:absolute; inset:0; width:100%; height:100%; border:0; }
     .sf-group { margin-top:22px; }
     /* Section header: title + accent-fading rule + item-count pill. */
     .sf-grouphead { display:flex; align-items:center; gap:12px; margin:0 4px 2px; }
