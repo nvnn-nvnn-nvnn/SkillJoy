@@ -82,7 +82,16 @@ export const DEFAULT_THEME = {
   socials: [],
   // ── Deeper theming (guns.lol-style) ──
   mode: 'light',            // 'light' | 'dark' — drives surface/text palette
-  bg: 'canvas',             // 'canvas' | 'solid' | 'gradient' | 'image' | 'video'
+  // 'animated' is a MOVING background with no asset at all — CSS gradient
+  // layers on a slow loop. It exists because "video background" is usually a
+  // request for MOTION, not for footage: this delivers the motion at zero
+  // bytes, no decode cost, and no bandwidth per visitor. Real video is still
+  // there for when the footage itself is the point.
+  bg: 'canvas',             // 'canvas' | 'solid' | 'gradient' | 'image' | 'video' | 'animated'
+  // Which motion, when bg === 'animated'. Two colours drive every one of them,
+  // so a creator picks a palette and a movement rather than 20 fixed looks.
+  bg_motion: 'aurora',      // 'aurora' | 'drift' | 'pulse' | 'nebula' | 'sweep'
+  bg_speed: 100,            // 40-200 % — scales every motion's duration
   bg_color: '#FBF8F2',      // solid fill / gradient start
   bg_color2: '#FDEBE6',     // gradient end
   bg_image: '',             // full-page background image url
@@ -129,41 +138,11 @@ export const DEFAULT_THEME = {
   tilt_max: 10,             // 0–20 — max tilt in degrees
 };
 
-// ── One-tap theme templates ──────────────────────────────────────────────────
-// Each preset is a PARTIAL theme: applying it merges over the current theme, so
-// a creator's name/bio/avatar/socials/links/products are never touched.
-export const THEME_PRESETS = [
-  { id: 'midnight', name: 'Midnight Glow', emoji: '🌌', theme: {
-    mode: 'dark', bg: 'gradient', bg_color: '#0B0B14', bg_color2: '#1B1636', accent: '#7A5CFF',
-    glow_intensity: 34, name_fx: 'shimmer', product_glow: 'strong', overlay: 'stars',
-    card_opacity: 70, card_blur: 14, product_opacity: 70, product_blur: 10,
-    profile_fx: 'glow', button_style: 'pill', tilt_enabled: true, text_color: '', title_color: '' } },
-  { id: 'clean', name: 'Clean Light', emoji: '🤍', theme: {
-    mode: 'light', bg: 'canvas', accent: '#F5634A', glow_intensity: 0, name_fx: 'none',
-    product_glow: 'none', overlay: 'none', card_opacity: 100, card_blur: 0,
-    product_opacity: 100, product_blur: 0, profile_fx: 'none', button_style: 'rounded',
-    tilt_enabled: false, text_color: '', title_color: '' } },
-  { id: 'vapor', name: 'Vaporwave', emoji: '🌴', theme: {
-    mode: 'dark', bg: 'gradient', bg_color: '#2B1055', bg_color2: '#7597DE', accent: '#FF2D75',
-    glow_intensity: 28, name_fx: 'rainbow', overlay: 'vhs', product_glow: 'strong',
-    card_opacity: 65, card_blur: 12, product_opacity: 68, product_blur: 8,
-    button_style: 'sharp', tilt_enabled: true, text_color: '', title_color: '' } },
-  { id: 'frost', name: 'Frosted', emoji: '❄️', theme: {
-    mode: 'light', bg: 'gradient', bg_color: '#E8F4FF', bg_color2: '#F7FBFF', accent: '#2563EB',
-    glow_intensity: 10, name_fx: 'none', overlay: 'snow', product_glow: 'soft',
-    card_opacity: 55, card_blur: 20, product_opacity: 60, product_blur: 14,
-    button_style: 'pill', tilt_enabled: false, text_color: '', title_color: '' } },
-  { id: 'terminal', name: 'Terminal', emoji: '🟩', theme: {
-    mode: 'dark', bg: 'solid', bg_color: '#05080A', accent: '#00FF88', glow_intensity: 24,
-    name_fx: 'glitch', overlay: 'matrix', product_glow: 'soft', mono_icons: true,
-    card_opacity: 75, card_blur: 6, product_opacity: 75, product_blur: 4,
-    button_style: 'sharp', tilt_enabled: false, text_color: '', title_color: '' } },
-  { id: 'sunset', name: 'Sunset', emoji: '🌅', theme: {
-    mode: 'dark', bg: 'gradient', bg_color: '#2A1020', bg_color2: '#6B2D3C', accent: '#FF8C00',
-    glow_intensity: 22, name_fx: 'gradient', overlay: 'particles', product_glow: 'soft',
-    card_opacity: 72, card_blur: 10, product_opacity: 72, product_blur: 8,
-    profile_fx: 'float', button_style: 'rounded', tilt_enabled: true, text_color: '', title_color: '' } },
-];
+// One-tap theme templates live in their own module (presets.js) because it has
+// NO imports — that is what lets scripts/check-presets.cjs load and validate the
+// real objects instead of regexing the source. Re-exported here so every
+// existing `from '@/lib/storefront'` import keeps working.
+export { THEME_PRESETS, PRESET_CATEGORIES, presetsByCategory } from './presets';
 
 // A theme file carries LOOK, never content or assets:
 //  - socials/audio_tracks are someone's own links & music, not styling.
@@ -174,11 +153,27 @@ const THEME_PORTABLE_EXCLUDE = new Set([
   'banner_url', 'bg_image', 'bg_video', 'cursor_url',
 ]);
 
+// …except when the asset is one WE ship. The exclusion exists because an
+// uploaded URL points at the exporter's storage — importing it would hotlink
+// their file and bill their bandwidth. A path under /templates/ is served by
+// this app, has no owner, and is the whole point of a scenic template: strip it
+// and an exported Aurora theme arrives with a blank background.
+export const TEMPLATE_ASSET_PREFIX = '/templates/';
+const isShippedAsset = (v) => {
+  if (typeof v === 'string') return v.startsWith(TEMPLATE_ASSET_PREFIX);
+  // audio_tracks is [{ url, name }]. Every track must be shipped — one uploaded
+  // URL in the array would smuggle the whole playlist past the check.
+  if (Array.isArray(v)) {
+    return v.length > 0 && v.every(t => typeof t?.url === 'string' && t.url.startsWith(TEMPLATE_ASSET_PREFIX));
+  }
+  return false;
+};
+
 /** Strip a theme down to the shareable/stylistic keys (for export). */
 export function portableTheme(theme) {
   const out = {};
   for (const [k, v] of Object.entries(theme || {})) {
-    if (!THEME_PORTABLE_EXCLUDE.has(k)) out[k] = v;
+    if (!THEME_PORTABLE_EXCLUDE.has(k) || isShippedAsset(v)) out[k] = v;
   }
   return out;
 }
@@ -193,7 +188,10 @@ export function sanitizeThemeImport(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const out = {};
   for (const key of Object.keys(DEFAULT_THEME)) {
-    if (THEME_PORTABLE_EXCLUDE.has(key)) continue;              // never import content/assets
+    // Shipped assets are the one safe exception — see isShippedAsset. The
+    // prefix check is also the security boundary: it is a same-origin path, so
+    // a hand-edited file cannot smuggle in an external URL here.
+    if (THEME_PORTABLE_EXCLUDE.has(key) && !isShippedAsset(raw[key])) continue;
     if (!Object.prototype.hasOwnProperty.call(raw, key)) continue;
     const val = raw[key];
     const def = DEFAULT_THEME[key];

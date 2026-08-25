@@ -168,8 +168,14 @@ export default function Storefront() {
   const bgStyle =
     theme.bg === 'solid'    ? { background: theme.bg_color } :
     theme.bg === 'gradient' ? { background: `linear-gradient(160deg, ${theme.bg_color}, ${theme.bg_color2})` } :
-    (theme.bg === 'image' && theme.bg_image) ? { backgroundImage: `url(${theme.bg_image})`, backgroundSize: 'cover', backgroundPosition: 'center' } :
+    // 'animated' paints its base colour here; the moving layers are separate
+    // elements below, so the motion composites over a known ground instead of
+    // over whatever the palette happened to be.
+    theme.bg === 'animated' ? { background: theme.bg_color } :
+    ((theme.bg === 'image' || theme.bg === 'video') && theme.bg_image)
+      ? { backgroundImage: `url(${theme.bg_image})`, backgroundSize: 'cover', backgroundPosition: 'center' } :
     undefined;
+  const isAnimatedBg = theme.bg === 'animated';
   const hasBgVideo = theme.bg === 'video' && !!theme.bg_video;
   const wrapClass = [
     'sf-wrap', `sf-mode-${theme.mode}`, `sf-btn-${theme.button_style}`,
@@ -234,10 +240,29 @@ export default function Storefront() {
   return (
     <div className={wrapClass} style={wrapStyle}>
       <div className="sf-bg" style={bgStyle} aria-hidden="true" />
+      {/* Animated background: three blurred colour fields on long, offset loops.
+          Separate elements rather than one multi-layer background-image because
+          each needs its own animation timing — a single element can only run
+          one background-position animation. */}
+      {isAnimatedBg && (
+        <div
+          className={`sf-animbg sf-anim-${theme.bg_motion || 'aurora'}`}
+          aria-hidden="true"
+          style={{
+            '--abg-1': theme.bg_color2 || theme.accent,
+            '--abg-2': theme.accent,
+            '--abg-speed': `${Math.max(40, Math.min(200, theme.bg_speed ?? 100)) / 100}`,
+          }}
+        >
+          <span /><span /><span />
+        </div>
+      )}
       {hasBgVideo && (
         <video
           className="sf-bgvideo"
           src={theme.bg_video}
+          poster={theme.bg_image || undefined}
+          preload="metadata"
           autoPlay muted loop playsInline
           aria-hidden="true"
           style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: -1 }}
@@ -698,8 +723,74 @@ function StoreStyles() {
     /* ── Deeper theming: background layer, light/dark palette, button styles ── */
     .sf-bg { position:fixed; inset:0; z-index:-1; background:var(--bg); }
 
+    /* ── Animated background ──
+       Three blurred colour fields drifting on long, deliberately non-matching
+       loops (19s / 23s / 31s). Prime-ish durations mean the composite never
+       visibly repeats — a shared period is what makes cheap loops look cheap.
+       Cost: no network, no decode, GPU-composited transforms only. */
+    .sf-animbg { position:fixed; inset:0; z-index:-1; overflow:hidden; pointer-events:none; }
+    .sf-animbg span { position:absolute; display:block; border-radius:50%;
+      filter:blur(90px); will-change:transform; }
+    .sf-animbg span:nth-child(1) { width:65vmax; height:65vmax; top:-18vmax; left:-12vmax;
+      background:var(--abg-1); opacity:.55; }
+    .sf-animbg span:nth-child(2) { width:55vmax; height:55vmax; top:22vmax; right:-14vmax;
+      background:var(--abg-2); opacity:.45; }
+    .sf-animbg span:nth-child(3) { width:48vmax; height:48vmax; bottom:-16vmax; left:18vmax;
+      background:var(--abg-1); opacity:.38; }
+
+    /* Aurora — slow diagonal drift with a little scale breathing. */
+    .sf-anim-aurora span:nth-child(1) { animation:abgDrift1 calc(19s / var(--abg-speed, 1)) ease-in-out infinite alternate; }
+    .sf-anim-aurora span:nth-child(2) { animation:abgDrift2 calc(23s / var(--abg-speed, 1)) ease-in-out infinite alternate; }
+    .sf-anim-aurora span:nth-child(3) { animation:abgDrift3 calc(31s / var(--abg-speed, 1)) ease-in-out infinite alternate; }
+    @keyframes abgDrift1 { to { transform:translate3d(14vmax, 9vmax, 0) scale(1.18); } }
+    @keyframes abgDrift2 { to { transform:translate3d(-16vmax, -7vmax, 0) scale(.86); } }
+    @keyframes abgDrift3 { to { transform:translate3d(9vmax, -13vmax, 0) scale(1.12); } }
+
+    /* Drift — horizontal only. Calmer; reads as weather rather than lava. */
+    .sf-anim-drift span { filter:blur(110px); }
+    .sf-anim-drift span:nth-child(1) { animation:abgPanA calc(26s / var(--abg-speed, 1)) linear infinite alternate; }
+    .sf-anim-drift span:nth-child(2) { animation:abgPanB calc(34s / var(--abg-speed, 1)) linear infinite alternate; }
+    .sf-anim-drift span:nth-child(3) { animation:abgPanA calc(43s / var(--abg-speed, 1)) linear infinite alternate reverse; }
+    @keyframes abgPanA { to { transform:translate3d(22vmax, 0, 0); } }
+    @keyframes abgPanB { to { transform:translate3d(-25vmax, 4vmax, 0); } }
+
+    /* Pulse — stationary, breathing opacity. The subtlest of the five. */
+    .sf-anim-pulse span:nth-child(1) { animation:abgPulse calc(11s / var(--abg-speed, 1)) ease-in-out infinite alternate; }
+    .sf-anim-pulse span:nth-child(2) { animation:abgPulse calc(15s / var(--abg-speed, 1)) ease-in-out infinite alternate -4s; }
+    .sf-anim-pulse span:nth-child(3) { animation:abgPulse calc(19s / var(--abg-speed, 1)) ease-in-out infinite alternate -8s; }
+    @keyframes abgPulse { from { transform:scale(.9); opacity:.28; } to { transform:scale(1.15); opacity:.6; } }
+
+    /* Nebula — rotation, so the colour edges sweep rather than slide. */
+    .sf-anim-nebula { filter:saturate(1.25); }
+    .sf-anim-nebula span { border-radius:44% 56% 61% 39% / 47% 42% 58% 53%; }
+    .sf-anim-nebula span:nth-child(1) { animation:abgSpin calc(48s / var(--abg-speed, 1)) linear infinite; }
+    .sf-anim-nebula span:nth-child(2) { animation:abgSpin calc(67s / var(--abg-speed, 1)) linear infinite reverse; }
+    .sf-anim-nebula span:nth-child(3) { animation:abgSpin calc(89s / var(--abg-speed, 1)) linear infinite; }
+    @keyframes abgSpin { to { transform:rotate(360deg); } }
+
+    /* Sweep — a bright band crossing the page. The most "video-like". */
+    .sf-anim-sweep span:nth-child(1) { width:140vmax; height:34vmax; border-radius:50%;
+      top:8vmax; left:-70vmax; filter:blur(80px); opacity:.5;
+      animation:abgSweep calc(14s / var(--abg-speed, 1)) ease-in-out infinite alternate; }
+    .sf-anim-sweep span:nth-child(2) { width:120vmax; height:26vmax; border-radius:50%;
+      bottom:10vmax; right:-70vmax; filter:blur(80px); opacity:.42;
+      animation:abgSweepBack calc(21s / var(--abg-speed, 1)) ease-in-out infinite alternate; }
+    .sf-anim-sweep span:nth-child(3) { animation:abgPulse calc(17s / var(--abg-speed, 1)) ease-in-out infinite alternate; }
+    @keyframes abgSweep { to { transform:translate3d(60vmax, 6vmax, 0) rotate(8deg); } }
+    @keyframes abgSweepBack { to { transform:translate3d(-58vmax, -5vmax, 0) rotate(-6deg); } }
+
+    /* Motion is the whole feature, so honouring this setting means stopping it —
+       not hiding it. The blobs stay as a static gradient, which is a perfectly
+       good background; only the movement goes. */
+    @media (prefers-reduced-motion: reduce) {
+      .sf-animbg span { animation:none !important; }
+    }
+
     /* ── Overlay effects (rain / snow / vhs) — fixed, non-interactive, above bg,
        below content (content is in normal flow above the z-indexed layers). */
+    @media (prefers-reduced-motion: reduce) {
+      .sf-bgvideo { display:none; }
+    }
     .sf-overlay { position:fixed; inset:0; z-index:0; pointer-events:none; }
     /* Rain: a single slanted streak in a 9x64 tile, scrolled by exactly one tile
        (−9px, 64px) each cycle → perfectly seamless, thin, crisp streaks. */

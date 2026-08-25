@@ -6,7 +6,7 @@ import { initials } from '@/lib/stores';
 import {
   resolveTheme, updateStorefront, SOCIAL_TYPES,
   listLinks,
-  THEME_PRESETS, sanitizeThemeImport, portableTheme, SITE_AUDIO_VOLUME,
+  THEME_PRESETS, PRESET_CATEGORIES, presetsByCategory, sanitizeThemeImport, portableTheme, SITE_AUDIO_VOLUME,
 } from '@/lib/storefront';
 import { uploadBanner, uploadBgVideo, uploadAudio } from '@/lib/storage';
 import { validateUpload, LIMITS, formatBytes } from '@/lib/uploadLimits';
@@ -20,6 +20,13 @@ import {
 import { BrandIcon } from '@/lib/brandIcons';
 import LinkBlockEditor from '@/components/LinkBlockEditor';
 import { listBlocks, resolveBlockLayout, LINK_SHAPES } from '@/lib/blocks';
+import { listTemplates, saveTemplate, deleteTemplate } from '@/lib/templates';
+import { useDialog } from '@/components/Dialog';
+
+// Same constant the Admin page uses. Gating the SAVE UI here is convenience,
+// not security — the backend re-checks ADMIN_EMAIL, which is the check that
+// actually matters. A client-side constant is a hint, never a boundary.
+const ADMIN_EMAIL = 'techkage@proton.me';
 
 const ACCENT_PRESETS = ['#F5634A', '#2563EB', '#7C3AED', '#DB2777', '#F59E0B', '#EF4444', '#0D9488', '#F8FAFC'];
 
@@ -28,6 +35,18 @@ const SUBTAB_HEADS = { customize: 'Site Customization', themes: 'Templates', lin
 // ── Theme-card helpers ───────────────────────────────────────────────────────
 // Paint a preset's ACTUAL background so the card previews the look, not an emoji.
 function swatchStyle(t) {
+  // Scenic presets ARE their background, so a swatch that painted a flat colour
+  // would show every one of them as the same grey tile.
+  if ((t.bg === 'image' || t.bg === 'video') && t.bg_image) {
+    return { backgroundImage: `url(${t.bg_image})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+  }
+  // Motion presets: a static approximation of the composite — the ground with
+  // both moving colours bloomed over it. Not animated at swatch size (eight
+  // looping tiles in a grid is noise, not information), but it shows the palette.
+  if (t.bg === 'animated') {
+    return { background: `radial-gradient(60% 70% at 22% 24%, ${t.bg_color2 || t.accent} 0%, transparent 62%),`
+      + ` radial-gradient(58% 66% at 78% 74%, ${t.accent} 0%, transparent 60%), ${t.bg_color}` };
+  }
   if (t.bg === 'gradient') return { background: `linear-gradient(160deg, ${t.bg_color}, ${t.bg_color2})` };
   if (t.bg === 'solid') return { background: t.bg_color };
   return { background: t.mode === 'dark' ? '#121316' : '#FBF8F2' };
@@ -207,7 +226,14 @@ function LivePreview({ theme, name, handle, avatar, bio, location, socials, skil
   // Links predating blocks still render, as plain profile buttons.
   const orphanLinks = withUrl.filter(l => !l.block_id);
   if (orphanLinks.length) profileGroups.push({ block: { id: '__none__', layout: {} }, items: orphanLinks });
-  const bgStyle =
+  // Same static approximation as the editor swatch. The preview frame is small
+  // and always on screen while you scrub sliders; eight animated layers there
+  // would fight the thing you are actually adjusting.
+  const animatedBg = theme.bg === 'animated'
+    ? { background: `radial-gradient(60% 70% at 22% 24%, ${theme.bg_color2 || theme.accent} 0%, transparent 62%),`
+        + ` radial-gradient(58% 66% at 78% 74%, ${theme.accent} 0%, transparent 60%), ${theme.bg_color}` }
+    : null;
+  const bgStyle = animatedBg ??
     theme.bg === 'solid' ? { background: theme.bg_color } :
     theme.bg === 'gradient' ? { background: `linear-gradient(160deg, ${theme.bg_color}, ${theme.bg_color2})` } :
     (theme.bg === 'image' && theme.bg_image) ? { backgroundImage: `url(${theme.bg_image})`, backgroundSize: 'cover', backgroundPosition: 'center' } :
@@ -309,6 +335,7 @@ function LivePreview({ theme, name, handle, avatar, bio, location, socials, skil
 // ── Studio ────────────────────────────────────────────────────────────────────
 export default function StorefrontEditor() {
   const user = useUser();
+  const { confirm } = useDialog();
   const profile = useProfile();
   const { setProfile } = useAuth();
 
@@ -323,6 +350,12 @@ export default function StorefrontEditor() {
   const [skills, setSkills] = useState([]);
   const [links, setLinks] = useState([]);
   const [blocks, setBlocks] = useState([]);
+  // Templates saved from real pages (migration 034), merged into the same
+  // picker as the hand-authored presets.
+  const [savedTpls, setSavedTpls] = useState([]);
+  const [tplForm, setTplForm] = useState({ name: '', blurb: '', category: 'showcase', emoji: '🎨', includeAudio: true });
+  const [tplBusy, setTplBusy] = useState(false);
+  const [tplMsg, setTplMsg] = useState(null);
   const [savingBanner, setSavingBanner] = useState(false);
   const [savingBg, setSavingBg] = useState(false);
   const [savingBgVideo, setSavingBgVideo] = useState(false);
@@ -358,6 +391,7 @@ export default function StorefrontEditor() {
     listMySkills(user.id).then(s => setSkills(s.filter(x => x.status === 'published'))).catch(() => {});
     listLinks(user.id).then(setLinks).catch(() => {});
     listBlocks(user.id).then(setBlocks).catch(() => {});
+    listTemplates().then(setSavedTpls);
   }, [user]);
 
   if (!user || !profile) return <div className="std-loading">Loading…<Styles /></div>;
@@ -446,6 +480,42 @@ export default function StorefrontEditor() {
   // Presets MERGE over the current theme, so name/bio/avatar/socials/links and
   // uploaded assets survive — a preset only restyles.
   function applyPreset(p) { setTheme(t => ({ ...t, ...p.theme })); setErr(''); }
+
+  const isAdmin = user?.email === ADMIN_EMAIL;
+
+  // Saves the theme AS ALREADY PERSISTED, not the unsaved draft — the backend
+  // reads storefront_theme from the profile row. So an unsaved tweak would be
+  // silently left out, which is worse than refusing.
+  async function onSaveTemplate() {
+    if (!tplForm.name.trim()) { setTplMsg({ bad: true, text: 'Give it a name first.' }); return; }
+    setTplBusy(true); setTplMsg(null);
+    try {
+      // Persist first. The backend cuts the template from storefront_theme in
+      // the profile row, so an unsaved tweak would be silently missing from the
+      // template — the kind of gap you would not notice until someone applied it.
+      await save();
+      const { assetCount, bytes } = await saveTemplate(tplForm);
+      setSavedTpls(await listTemplates());
+      setTplForm(f => ({ ...f, name: '', blurb: '' }));
+      setTplMsg({ text: assetCount
+        ? `Saved — ${assetCount} asset${assetCount === 1 ? '' : 's'} copied (${(bytes / 1048576).toFixed(1)}MB).`
+        : 'Saved. No uploaded assets on this look, so nothing to copy.' });
+    } catch (e) {
+      setTplMsg({ bad: true, text: e.message });
+    } finally { setTplBusy(false); }
+  }
+
+  async function onDeleteTemplate(t) {
+    if (!(await confirm({
+      title: `Delete "${t.name}"?`,
+      message: 'Removes the template and its copied files. Pages already using this look keep it — they hold their own copy of the theme.',
+      confirmLabel: 'Delete', danger: true,
+    }))) return;
+    try {
+      await deleteTemplate(t.dbId);
+      setSavedTpls(await listTemplates());
+    } catch (e) { setTplMsg({ bad: true, text: e.message }); }
+  }
 
   function exportTheme() {
     // portableTheme() drops socials/music/uploads — look only, so the file is
@@ -1079,9 +1149,16 @@ export default function StorefrontEditor() {
             <>
               <Panel icon={Layers} title="One-tap themes">
                 <p className="std-panel-lede">Pick a look and it applies instantly — watch the preview. Your name, bio, socials, links, products and uploads all stay exactly as they are.</p>
+                {PRESET_CATEGORIES.map(cat => (
+                <div key={cat.id} className="std-tplcat">
+                <div className="std-tplcathead">
+                  <span className="std-tplcatname">{cat.label}</span>
+                  <span className="std-tplcatblurb">{cat.blurb}</span>
+                </div>
                 <div className="std-themegrid">
-                  {THEME_PRESETS.map(p => (
-                    <button key={p.id} className="std-theme" onClick={() => applyPreset(p)} title={`Apply ${p.name}`}>
+                  {[...presetsByCategory(cat.id), ...savedTpls.filter(t => t.category === cat.id)].map(p => (
+                    <div key={p.id} className="std-themewrap">
+                    <button className="std-theme" onClick={() => applyPreset(p)} title={`Apply ${p.name}`}>
                       {/* color: drives the muted line via currentColor so it stays
                           legible on the preset's own light/dark background. */}
                       <span className="std-theme-swatch" style={{ ...swatchStyle(p.theme), color: p.theme.mode === 'dark' ? '#f2f0ea' : '#1a1916' }}>
@@ -1093,12 +1170,77 @@ export default function StorefrontEditor() {
                       </span>
                       <span className="std-theme-meta">
                         <span className="std-theme-name">{p.emoji} {p.name}</span>
-                        <span className="std-theme-tags">{presetTags(p.theme)}</span>
+                        <span className="std-theme-blurb">{p.blurb}</span>
+                        <span className="std-theme-tags">
+                          {presetTags(p.theme)}
+                          {p.saved && <span className="std-theme-saved">Saved</span>}
+                        </span>
                       </span>
+                      {/* Nested inside the tile's <button> would be invalid HTML
+                          and would break the tile's own click, so it is a sibling
+                          positioned over it. */}
                     </button>
+                    {p.saved && isAdmin && (
+                      <button className="std-theme-del" title={`Delete ${p.name}`}
+                        onClick={() => onDeleteTemplate(p)}><X size={13} /></button>
+                    )}
+                    </div>
                   ))}
                 </div>
+                </div>
+                ))}
               </Panel>
+
+              {/* ── Save this page as a template — admin only ──
+                  A preset with a video cannot be hand-written in presets.js,
+                  because the asset has to be uploaded first. So the only way to
+                  author one is to build a real page and cut the look from it.
+
+                  The gate here is convenience; the backend re-checks
+                  ADMIN_EMAIL, which is the check that actually matters. */}
+              {isAdmin && (
+              <Panel icon={Layers} title="Save this page as a template">
+                <p className="std-panel-lede">
+                  Publishes your current look — background, video, music and every effect —
+                  as a template anyone can pick. Your name, bio, links, products and socials
+                  are never included.
+                </p>
+                <Field label="Name">
+                  <input value={tplForm.name} maxLength={60} placeholder="e.g. Midnight Studio"
+                    onChange={e => setTplForm(f => ({ ...f, name: e.target.value }))} />
+                </Field>
+                <Field label="Blurb">
+                  <input value={tplForm.blurb} maxLength={160} placeholder="One line: who is this for?"
+                    onChange={e => setTplForm(f => ({ ...f, blurb: e.target.value }))} />
+                </Field>
+                <div className="std-tplmeta">
+                  <Field label="Category">
+                    <select value={tplForm.category}
+                      onChange={e => setTplForm(f => ({ ...f, category: e.target.value }))}>
+                      {PRESET_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Emoji">
+                    <input value={tplForm.emoji} maxLength={8} className="std-tplemoji"
+                      onChange={e => setTplForm(f => ({ ...f, emoji: e.target.value }))} />
+                  </Field>
+                </div>
+                <Toggle on={tplForm.includeAudio}
+                  onChange={v => setTplForm(f => ({ ...f, includeAudio: v }))}
+                  label="Include my music"
+                  hint="Your tracks get copied onto every page that uses this template — only include music you have the right to share" />
+                <button className="std-tplsave" onClick={onSaveTemplate} disabled={tplBusy}>
+                  {tplBusy ? 'Saving…' : 'Save as template'}
+                </button>
+                {tplMsg && (
+                  <p className={`std-tplmsg${tplMsg.bad ? ' bad' : ''}`}>{tplMsg.text}</p>
+                )}
+                <p className="std-note">
+                  Saving publishes your page first, then cuts the template from the saved
+                  version — so what you see is exactly what gets captured.
+                </p>
+              </Panel>
+              )}
 
               <Panel icon={Upload} title="Import &amp; export">
                 <div className="std-tplrow">
@@ -1523,6 +1665,38 @@ function Styles() {
        a bad paste — the file carried a stray "r-lg); background:..." fragment
        with no selector, plus a duplicated socials block and an orphaned tail of
        .std-platlabel. Reconstructed from its surviving children + :hover. */
+    /* Category headings. The blurb answers "is this section for me?" before
+       any swatch has to be interpreted — 20 unlabelled tiles is a wall. */
+    .std-themewrap { position:relative; display:flex; }
+    .std-themewrap > .std-theme { flex:1; }
+    /* Over the tile, not inside it — a <button> inside a <button> is invalid
+       HTML and swallows the parent's click. */
+    .std-theme-del { position:absolute; top:6px; right:6px; width:22px; height:22px; padding:0;
+      display:flex; align-items:center; justify-content:center; border-radius:999px;
+      border:1px solid rgba(255,255,255,.3); background:rgba(0,0,0,.62); color:#fff;
+      cursor:pointer; opacity:0; transition:opacity .14s ease; }
+    .std-themewrap:hover .std-theme-del { opacity:1; }
+    .std-theme-del:hover { background:var(--danger); border-color:var(--danger); }
+    .std-theme-saved { display:inline-block; margin-left:6px; padding:1px 7px; border-radius:999px;
+      background:var(--accent); color:#fff; font-size:9.5px; font-weight:800;
+      text-transform:uppercase; letter-spacing:.05em; }
+    .std-tplmeta { display:grid; grid-template-columns:1fr 90px; gap:12px; }
+    .std-tplemoji { text-align:center; font-size:17px; }
+    .std-tplsave { width:100%; margin-top:14px; padding:14px 18px; border-radius:var(--r-full);
+      border:none; background:var(--accent); color:#fff; font-size:14px; font-weight:800;
+      cursor:pointer; }
+    .std-tplsave:disabled { opacity:.6; cursor:default; }
+    .std-tplmsg { margin-top:10px; font-size:12.5px; line-height:1.45; color:var(--green); }
+    .std-tplmsg.bad { color:var(--danger); }
+    .std-tplcat { margin-top:22px; }
+    .std-tplcat:first-of-type { margin-top:10px; }
+    .std-tplcathead { display:flex; flex-direction:column; gap:2px; margin-bottom:10px;
+      padding-left:11px; border-left:3px solid var(--accent); }
+    .std-tplcatname { font-size:14.5px; font-weight:800; color:var(--text); }
+    .std-tplcatblurb { font-size:12.5px; line-height:1.4; color:var(--text-secondary); }
+    .std-theme-blurb { font-size:11.5px; line-height:1.4; color:var(--text-secondary);
+      display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden;
+      -webkit-line-clamp:2; line-clamp:2; }
     .std-themegrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:12px; }
     .std-theme { display:flex; flex-direction:column; align-items:stretch; text-align:left; padding:0; overflow:hidden;
       border:1.5px solid var(--border); border-radius:var(--r-lg); background:var(--surface); cursor:pointer;
@@ -1713,20 +1887,20 @@ function Styles() {
     .lpb-outline .lpb-item { border-color:var(--lpb-fg, color-mix(in srgb, var(--lp-text, #000) 45%, transparent)); }
     .lpb-shadow .lpb-item { box-shadow:0 2px 6px color-mix(in srgb, #000 22%, transparent),
       0 0 var(--lp-glow-links, 0px) color-mix(in srgb, var(--accent) 78%, transparent); }
-    .lpb-size-small { --lpb-thumb:52px; }
-    .lpb-size-small .lpb-item { padding:9px 11px; }
-    .lpb-size-small .lpb-label { font-size:11px; }
-    .lpb-size-large { --lpb-thumb:78px; }
-    .lpb-size-large .lpb-item { padding:15px 15px; }
-    .lpb-size-large .lpb-label { font-size:14px; }
+    .lpb-size-small { --lpb-thumb:30px; }
+    .lpb-size-small .lpb-item { padding:7px 9px; }
+    .lpb-size-small .lpb-label { font-size:10px; }
+    .lpb-size-large { --lpb-thumb:42px; }
+    .lpb-size-large .lpb-item { padding:11px 11px; }
+    .lpb-size-large .lpb-label { font-size:11.5px; }
     .lpb-classic .lpb-cta { padding:6px 9px; }
     .lpb-featured { margin-top:14px; }
-    .lpb-title { display:block; font-size:15px; font-weight:800; text-align:left;
+    .lpb-title { display:block; font-size:12.5px; font-weight:800; text-align:left;
       color:var(--lpb-head, var(--lp-text, inherit)); margin-bottom:2px; }
     .lpb-sub { display:block; font-size:11px; text-align:left; opacity:.75;
       color:var(--lpb-head, var(--lp-text, inherit)); margin-bottom:6px; }
     .lpb-items { display:flex; flex-direction:column; gap:8px; }
-    .lpb-item { display:flex; flex-direction:column; align-items:stretch; gap:0; padding:13px 13px;
+    .lpb-item { display:flex; flex-direction:column; align-items:stretch; gap:0; padding:9px 10px;
       border-radius:var(--lpb-shape, var(--lp-link-radius, 999px));
       font-size:11.5px; font-weight:700; overflow:hidden;
       background:var(--lpb-bg, var(--lp-link-bg, color-mix(in srgb, var(--accent) 12%, var(--lp-item-bg, transparent))));
@@ -1734,33 +1908,33 @@ function Styles() {
       border:1px solid color-mix(in srgb, var(--accent) 30%, transparent);
       /* Mirrors .lkb-item — the Glow slider has to move something here too. */
       box-shadow:0 0 var(--lp-glow-links, 0px) color-mix(in srgb, var(--accent) 78%, transparent); }
-    .lpb-main { display:flex; align-items:center; gap:10px; width:100%; min-width:0; }
+    .lpb-main { display:flex; align-items:center; gap:8px; width:100%; min-width:0; }
     .lpb-txt { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
-    .lpb-label { font-size:12.5px; font-weight:800; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .lpb-label { font-size:11px; font-weight:800; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .lpb-desc { font-size:10.5px; line-height:1.45; opacity:.72; font-weight:500;
       display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden;
       -webkit-line-clamp:2; line-clamp:2; }
-    .lpb-cta { display:block; width:100%; margin-top:8px; padding:9px 10px;
+    .lpb-cta { display:block; width:100%; margin-top:6px; padding:7px 9px;
       border-radius:calc(var(--lpb-shape, var(--lp-link-radius, 999px)) * 0.6);
       font-size:10px; font-weight:800; letter-spacing:.05em; text-transform:uppercase;
       text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
       background:color-mix(in srgb, var(--lpb-fg, var(--lp-link-fg, var(--accent))) 88%, black);
       color:#fff; }
-    .lpb-thumb { flex-shrink:0; width:var(--lpb-thumb, 62px); height:var(--lpb-thumb, 62px); border-radius:5px;
+    .lpb-thumb { flex-shrink:0; width:var(--lpb-thumb, 35px); height:var(--lpb-thumb, 35px); border-radius:5px;
       background:var(--lp-surface) center/cover no-repeat; }
     /* Style variants — the same four shapes the Layouts tab offers. */
-    .lpb-classic .lpb-thumb { width:calc(var(--lpb-thumb, 62px) * 0.9); height:calc(var(--lpb-thumb, 62px) * 0.9); border-radius:50%; }
+    .lpb-classic .lpb-thumb { width:calc(var(--lpb-thumb, 35px) * 0.9); height:calc(var(--lpb-thumb, 35px) * 0.9); border-radius:50%; }
     .lpb-grid .lpb-items { display:grid; grid-template-columns:repeat(var(--lpb-cols, 2), minmax(0,1fr)); gap:6px; }
     .lpb-grid .lpb-item, .lpb-carousel .lpb-item { text-align:center; border-radius:10px; padding:8px; }
     .lpb-grid .lpb-main, .lpb-carousel .lpb-main { flex-direction:column; align-items:stretch; gap:6px; }
-    .lpb-grid .lpb-thumb, .lpb-carousel .lpb-thumb { width:100%; height:110px; border-radius:7px; }
+    .lpb-grid .lpb-thumb, .lpb-carousel .lpb-thumb { width:100%; height:66px; border-radius:6px; }
     .lpb-carousel .lpb-items { display:flex; flex-direction:row; overflow-x:auto;
       scrollbar-width:none; }
     .lpb-carousel .lpb-items::-webkit-scrollbar { display:none; }
-    .lpb-carousel .lpb-item { flex:0 0 136px; }
+    .lpb-carousel .lpb-item { flex:0 0 96px; }
     .lpb-cards .lpb-item { border-radius:10px; padding:9px; }
     .lpb-cards .lpb-main { align-items:flex-start; }
-    .lpb-cards .lpb-thumb { width:var(--lpb-thumb, 62px); height:var(--lpb-thumb, 62px); border-radius:7px; }
+    .lpb-cards .lpb-thumb { width:var(--lpb-thumb, 35px); height:var(--lpb-thumb, 35px); border-radius:7px; }
     .lp-btn-pill .lp-card, .lp-btn-pill .lp-cover { border-radius:999px; }
     .lp-btn-sharp .lp-card, .lp-btn-sharp .lp-cover { border-radius:5px; }
 

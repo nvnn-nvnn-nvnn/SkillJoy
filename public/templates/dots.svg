@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+<defs>
+<filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="150"/></filter>
+<pattern id="d" width="30" height="30" patternUnits="userSpaceOnUse">
+  <circle cx="15" cy="15" r="2" fill="#D8CFC0"/>
+</pattern>
+<radialGradient id="warm" cx="50%" cy="30%" r="80%">
+  <stop offset="0%" stop-color="#FFE6CC" stop-opacity="0.55"/>
+  <stop offset="100%" stop-color="#FAF8F4" stop-opacity="0.15"/>
+</radialGradient>
+</defs>
+<rect width="1600" height="1000" fill="#FAF8F4"/>
+<rect width="1600" height="1000" fill="url(#d)"/>
+<rect width="1600" height="1000" fill="url(#warm)"/>
+</svg>

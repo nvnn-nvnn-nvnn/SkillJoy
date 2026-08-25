@@ -14,6 +14,7 @@ const contactRoutes = require('./routes/contact.js');
 const verifyCollegeRoutes = require('./routes/verify-college.js');
 const reportRoutes = require('./routes/reports.js');
 const blockRoutes = require('./routes/blocks.js');
+const templateRoutes = require('./routes/templates.js');
 const checkoutRoutes = require('./routes/checkout.js');
 const guestRoutes = require('./routes/guest.js');
 const googleRoutes = require('./routes/google.js');
@@ -82,6 +83,9 @@ app.use('/api/locker', authMiddleware, lockerRoutes);
 // Native bookings — writes only. Reads still go browser→Supabase under RLS.
 app.use('/api/bookings', authMiddleware, bookingRoutes);
 app.use('/api/skills', authMiddleware, skillRoutes);
+// Storefront templates. Reads are public; writes check ADMIN_EMAIL inside the
+// route, so auth cannot be middleware on the mount.
+app.use('/api/templates', templateRoutes);
 app.use('/api/marketing', strictLimiter, authMiddleware, marketingRoutes);
 // Platform billing — the creator's subscription TO SkillJoy (paywall). Direct
 // charges on SkillJoy's own Stripe account; never touches Connect.

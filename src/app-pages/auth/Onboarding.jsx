@@ -7,10 +7,12 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useUser, useProfile, useAuth } from '@/lib/stores';
 import { TOS_VERSION } from '@/lib/config';
+import { DEFAULT_THEME, PRESET_CATEGORIES, presetsByCategory } from '@/lib/storefront';
+import { listTemplates } from '@/lib/templates';
 import Logo from '@/components/Logo';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ONBOARDING — 5 screens, one decision each.
+// ONBOARDING — 6 screens, one decision each.
 //
 // Shape of the flow and why it is this shape:
 //
@@ -18,7 +20,14 @@ import Logo from '@/components/Logo';
 //  2 Discovery     where did you hear about us      (skippable)
 //  3 Use case      what are you here to do          (skippable)
 //  4 Plan          free vs paid                     (intent only)
-//  5 Success       your link, copy it, go
+//  5 Look          pick a template                  (skippable)
+//  6 Success       your link, copy it, go
+//
+// Screen 5 exists because the templates were unfindable. They lived three
+// clicks deep (Customize → Templates) behind a tab most people never opened,
+// so new pages sat on the default theme forever — the app looked like it had
+// one design. Putting the picker in the flow costs one tap and is the single
+// highest-leverage screen for how a new storefront looks.
 //
 // Two principles run through the whole thing:
 //
@@ -38,8 +47,8 @@ import Logo from '@/components/Logo';
 // handle and page. Later screens patch that row. See `saveFoundations`.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const TOTAL_STEPS = 5;
-const STEP_LABELS = ['Your page', 'Discovery', 'Your goals', 'Your plan', 'All set'];
+const TOTAL_STEPS = 6;
+const STEP_LABELS = ['Your page', 'Discovery', 'Your goals', 'Your plan', 'Your look', 'All set'];
 
 // Handles that collide with app routes — can't be claimed as a @username.
 const RESERVED_USERNAMES = new Set([
@@ -90,6 +99,12 @@ export default function OnboardingPage() {
     const navigate = useNavigate();
 
     const [step, setStep] = useState(1);
+    const [pickedTemplate, setPickedTemplate] = useState(null); // the chosen template's NAME, not its id
+    const [tplCat, setTplCat] = useState('clean');
+    // Templates saved from real pages (migration 034). Without this, an admin's
+    // showcase looks would exist in the editor and be invisible to exactly the
+    // people the showcase is for.
+    const [savedTpls, setSavedTpls] = useState([]);
 
     // Screen 1
     const [fullName, setFullName] = useState('');
@@ -205,6 +220,10 @@ export default function OnboardingPage() {
     // Survey patches are FIRE-AND-FORGET by design: this is optional research,
     // and a failed analytics write must never block someone from finishing
     // signup. Logged, not surfaced.
+    useEffect(() => {
+        if (step === 5 && savedTpls.length === 0) listTemplates().then(setSavedTpls);
+    }, [step, savedTpls.length]);
+
     const patchProfile = useCallback(async (patch) => {
         const { error: e } = await supabase.from('profiles').update(patch).eq('id', user.id);
         if (e) console.warn('[onboarding] survey patch failed:', e.message);
@@ -230,6 +249,20 @@ export default function OnboardingPage() {
         setPlanIntent(intent);
         patchProfile({ plan_intent: intent, onboarding_completed_at: new Date().toISOString() });
         setStep(5);
+    }
+
+    // Templates are a PARTIAL theme merged over the default, exactly as the
+    // editor's one-tap panel does it — same code path, so a look picked here
+    // and a look picked there cannot drift.
+    //
+    // Written straight to storefront_theme rather than held in state: someone
+    // who closes the tab on the success screen still keeps the look they chose.
+    // Fire-and-forget like the other survey patches, because a failed theme
+    // write must not block finishing signup.
+    function chooseTemplate(preset) {
+        setPickedTemplate(preset?.name ?? null);
+        if (preset) patchProfile({ storefront_theme: { ...DEFAULT_THEME, ...preset.theme } });
+        setStep(6);
     }
 
     async function finish(dest) {
@@ -275,10 +308,10 @@ export default function OnboardingPage() {
                         <div>
                             <Logo height={30} className="onb-logo-img" />
                             <h2 className="onb-brand-h">
-                                {step === 5 ? <>Your page is<br />ready to share.</> : <>Your link in bio,<br />built to sell.</>}
+                                {step === 6 ? <>Your page is<br />ready to share.</> : <>Your link in bio,<br />built to sell.</>}
                             </h2>
                             <p className="onb-brand-sub">
-                                {step === 5
+                                {step === 6
                                     ? 'Everything you make and sell, behind one link.'
                                     : 'A customizable page for all your links, socials & everything you sell — one link in your bio.'}
                             </p>
@@ -499,15 +532,83 @@ export default function OnboardingPage() {
                                 </>
                             )}
 
-                            {/* ══ 5 · Success ══ */}
+                            {/* ══ 5 · Your look ══
+                                Tap-only, skippable, and it commits immediately —
+                                the same contract as screens 2 and 3. The swatch
+                                IS the choice: a template is a visual question,
+                                and a list of names would make people guess. */}
                             {step === 5 && (
+                                <>
+                                    <h1 className="onb-h1" tabIndex={-1} ref={headingRef}>Pick a look</h1>
+                                    <p className="onb-p">
+                                        A starting point, not a commitment — every colour, effect and
+                                        shape stays editable afterwards. You can change or clear this
+                                        any time from <strong>Customize → Templates</strong>.
+                                    </p>
+
+                                    <div className="onb-tplcats" role="tablist" aria-label="Template categories">
+                                        {PRESET_CATEGORIES.map(c => (
+                                            <button key={c.id} type="button" role="tab"
+                                                aria-selected={tplCat === c.id}
+                                                className={`onb-tplcat${tplCat === c.id ? ' on' : ''}`}
+                                                onClick={() => setTplCat(c.id)}>
+                                                {c.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="onb-tplcatblurb">
+                                        {PRESET_CATEGORIES.find(c => c.id === tplCat)?.blurb}
+                                    </p>
+
+                                    <div className="onb-tplgrid">
+                                        {[...presetsByCategory(tplCat), ...savedTpls.filter(t => t.category === tplCat)].map(t => (
+                                            <button key={t.id} type="button" className="onb-tpl"
+                                                onClick={() => chooseTemplate(t)} title={t.blurb}>
+                                                <span className="onb-tplart" style={
+                                                    t.theme.bg === 'animated'
+                                                        ? { background: `radial-gradient(60% 70% at 22% 24%, ${t.theme.bg_color2 || t.theme.accent} 0%, transparent 62%), radial-gradient(58% 66% at 78% 74%, ${t.theme.accent} 0%, transparent 60%), ${t.theme.bg_color}` }
+                                                        : (t.theme.bg === 'image' || t.theme.bg === 'video') && t.theme.bg_image
+                                                        ? { backgroundImage: `url(${t.theme.bg_image})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                                                        : t.theme.bg === 'gradient'
+                                                            ? { background: `linear-gradient(160deg, ${t.theme.bg_color}, ${t.theme.bg_color2})` }
+                                                            : t.theme.bg === 'solid'
+                                                                ? { background: t.theme.bg_color }
+                                                                : { background: t.theme.mode === 'dark' ? '#121316' : '#FBF8F2' }
+                                                }>
+                                                    <span className="onb-tpldot" style={{
+                                                        background: t.theme.accent,
+                                                        boxShadow: `0 0 14px ${t.theme.accent}`,
+                                                    }} />
+                                                    <span className="onb-tplbar" style={{ background: t.theme.accent }} />
+                                                    <span className="onb-tplbar short" style={{
+                                                        background: t.theme.mode === 'dark' ? '#ffffff44' : '#0000002e',
+                                                    }} />
+                                                </span>
+                                                <span className="onb-tplname">{t.emoji} {t.name}</span>
+                                                <span className="onb-tplblurb">{t.blurb}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    <button type="button" className="onb-skip" onClick={() => chooseTemplate(null)}>
+                                        Skip — use the default look
+                                    </button>
+                                </>
+                            )}
+
+                            {/* ══ 6 · Success ══ */}
+                            {step === 6 && (
                                 <>
                                     <div className="onb-celebrate" aria-hidden="true">
                                         <span className="onb-celebrate-ring"><Check size={26} strokeWidth={3} /></span>
                                     </div>
 
                                     <h1 className="onb-h1 onb-h1-center" tabIndex={-1} ref={headingRef}>You’re live, {fullName.split(' ')[0] || 'friend'} 🎉</h1>
-                                    <p className="onb-p onb-p-center">Your page exists. Share the link, then make it yours.</p>
+                                    <p className="onb-p onb-p-center">
+                                        {pickedTemplate
+                                            ? <>Your page is live with the <strong>{pickedTemplate}</strong> look. Share the link, then make it yours.</>
+                                            : <>Your page exists. Share the link, then make it yours.</>}
+                                    </p>
 
                                     <div className="onb-urlbox">
                                         <span className="onb-urltext">{pageUrl}</span>
@@ -650,6 +751,39 @@ function Styles() {
     .onb-cta-inline { flex:1; margin-top:0; }
     /* Skip is a visible peer of Continue, never hidden — a skip people can't
        find turns into an abandon. Quiet, but present and full height. */
+    /* ── Template picker (screen 5) ──
+       The swatch IS the control: a template is a visual question, so the tile
+       shows the actual background, the actual accent, and a stand-in for the
+       name and a link. Names alone would make people guess. */
+    .onb-tplcats { display:flex; flex-wrap:wrap; gap:7px; margin-top:6px; }
+    .onb-tplcat { width:auto; padding:8px 14px; border-radius:var(--r-full);
+      border:1.5px solid var(--border-strong); background:var(--surface);
+      font-size:12.5px; font-weight:700; color:var(--text-secondary); cursor:pointer;
+      transition:background .14s ease, border-color .14s ease, color .14s ease; }
+    .onb-tplcat:hover { border-color:var(--accent); color:var(--text); }
+    .onb-tplcat.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .onb-tplcatblurb { margin:9px 2px 2px; font-size:12.5px; line-height:1.45;
+      color:var(--text-secondary); }
+    .onb-tplgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(146px, 1fr));
+      gap:11px; margin-top:12px; }
+    .onb-tpl { display:flex; flex-direction:column; gap:6px; padding:9px; text-align:left;
+      border-radius:var(--r-lg); border:1.5px solid var(--border); background:var(--surface);
+      cursor:pointer; transition:border-color .14s ease, transform .14s ease; }
+    .onb-tpl:hover { border-color:var(--accent); transform:translateY(-2px); }
+    .onb-tplart { position:relative; height:74px; border-radius:var(--r); overflow:hidden;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; }
+    .onb-tpldot { width:19px; height:19px; border-radius:50%; }
+    .onb-tplbar { width:56%; height:7px; border-radius:999px; }
+    .onb-tplbar.short { width:38%; }
+    .onb-tplname { font-size:12.5px; font-weight:800; color:var(--text); }
+    .onb-tplblurb { font-size:11px; line-height:1.4; color:var(--text-secondary);
+      display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden;
+      -webkit-line-clamp:2; line-clamp:2; }
+    /* Full width here, unlike the inline Skip on screens 2 and 3 — this one is
+       the only action on its row, and a right-hugging button would read as
+       secondary to nothing. */
+    .onb-tplgrid + .onb-skip { width:100%; margin-top:16px; }
+
     .onb-skip { padding:14px 20px; width:auto; flex-shrink:0; border:1.5px solid var(--border-strong);
       border-radius:var(--r-full); background:var(--surface); color:var(--text-secondary);
       font-size:14px; font-weight:700; font-family:inherit; cursor:pointer; }

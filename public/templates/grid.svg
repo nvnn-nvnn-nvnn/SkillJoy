@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+<defs>
+<filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="150"/></filter>
+<pattern id="g" width="48" height="48" patternUnits="userSpaceOnUse">
+  <path d="M48 0H0V48" fill="none" stroke="#1E3A5F" stroke-width="1"/>
+</pattern>
+<radialGradient id="fade" cx="50%" cy="35%" r="75%">
+  <stop offset="0%" stop-color="#0EA5E9" stop-opacity="0.22"/>
+  <stop offset="100%" stop-color="#080D14" stop-opacity="0.92"/>
+</radialGradient>
+</defs>
+<rect width="1600" height="1000" fill="#080D14"/>
+<rect width="1600" height="1000" fill="url(#g)"/>
+<rect width="1600" height="1000" fill="url(#fade)"/>
+</svg>

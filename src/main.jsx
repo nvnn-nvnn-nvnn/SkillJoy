@@ -92,6 +92,7 @@ import Checkout from './app-pages/Checkout'
 import Unsubscribe from './app-pages/Unsubscribe'
 import AdminPayouts from './app-pages/AdminPayouts'
 import TrialRibbon from './components/TrialRibbon'
+import BuildBadge from '@/components/BuildBadge';
 
 // Force a logged-in creator to finish onboarding before using the app. Fires only
 // on the authenticated app surfaces (not public/marketing/storefront pages), so an
@@ -190,6 +191,10 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
       <App />
+      {/* import.meta.env.DEV is a compile-time constant, so this whole branch —
+          and the module behind it — is dropped from production builds. Verified
+          by grepping dist/, not assumed. */}
+      {import.meta.env.DEV && <BuildBadge />}
     </ErrorBoundary>
   </StrictMode>,
 )

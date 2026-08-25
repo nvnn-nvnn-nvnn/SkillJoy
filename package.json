@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/check-style-backticks.cjs && vite build",
+    "build": "node scripts/check-style-backticks.cjs && node scripts/check-presets.cjs && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "check:styles": "node scripts/check-style-backticks.cjs"
+    "check:styles": "node scripts/check-style-backticks.cjs",
+    "check:presets": "node scripts/check-presets.cjs"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^6.0.0",

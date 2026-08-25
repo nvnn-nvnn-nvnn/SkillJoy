@@ -129,10 +129,22 @@ codebase is the central risk of this plan.
 **Triggers**
 - [ ] Which events wake it? (order placed, delivery overdue, buyer silent N days,
       dispute opened, auto-release approaching)
-- [ ] Where does it run? There is **no job scheduler** in this codebase — every
-      backend action today is request- or webhook-triggered. Time-based nudges
-      need infrastructure that does not exist yet. **This is likely the largest
-      hidden cost in the whole plan.**
+- [ ] Where does it run? ✅ **CORRECTION (2026-08-21):** an earlier version of
+      this plan claimed there was no job scheduler. That was **wrong**.
+      `backend/index.js` runs four `node-cron` jobs already:
+      | Schedule | Job |
+      |---|---|
+      | `0 0 * * *` | auto-release escrowed funds 3 days after delivery |
+      | `0 1 * * *` | clearance — transfer to Connect after the 14-day window |
+      | `0 * * * *` | archive completed gig chats 24h after completion |
+      | `0 * * * *` | booking reminders for sessions within 24h |
+      So time-based triggers are **not** a missing capability — the pattern,
+      the dependency, and a `withTimeout` wrapper all exist to copy.
+      The real open questions are narrower: does an agent tick belong as a fifth
+      cron or a queue? And note these run **in-process**, so multiple app
+      instances would each fire them (duplicate sends), and a restart silently
+      skips a missed window rather than backfilling. Both are fine at one
+      instance and both need solving before scaling out.
 
 **Channel**
 - [ ] Email (Resend, exists) or in-app messages? v1 has a `messages` table and

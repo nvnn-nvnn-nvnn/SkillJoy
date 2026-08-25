@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+<defs>
+<filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="150"/></filter>
+</defs>
+<rect width="1600" height="1000" fill="#0A0A0C"/>
+<circle cx="400" cy="300" r="400" fill="#1F1F26" opacity="0.95" filter="url(#blur)"/>
+<circle cx="1200" cy="700" r="460" fill="#2A2A33" opacity="0.9" filter="url(#blur)"/>
+<circle cx="900" cy="150" r="320" fill="#15151A" opacity="0.9" filter="url(#blur)"/>
+</svg>
